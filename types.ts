@@ -1,0 +1,69 @@
+
+// PHASE 1: THE DATA ONTOLOGY
+
+export enum TagType {
+    CATEGORICAL = 'CATEGORICAL', // Subject, Location
+    QUALITATIVE = 'QUALITATIVE', // Mood, Texture, Abstract
+    TECHNICAL = 'TECHNICAL',     // Camera, Lens (Auto-generated)
+    SEASONAL = 'SEASONAL'        // Auto-generated
+}
+
+export interface Tag {
+    id: string;
+    label: string;
+    type: TagType;
+}
+
+// Define SimulationNodeDatum manually to avoid d3 module resolution issues
+export interface SimulationNodeDatum {
+    index?: number;
+    x?: number;
+    y?: number;
+    vx?: number;
+    vy?: number;
+    fx?: number | null;
+    fy?: number | null;
+}
+
+// D3 SimulationNodeDatum extension for physics
+export interface SimulationNode extends SimulationNodeDatum {
+    id: string; // Required by D3
+    r?: number; // Radius
+}
+
+export interface ImageNode extends SimulationNode {
+    id: string; // UUID
+    fileUrl: string; // Placeholder URL
+    
+    // Temporal Data
+    captureTimestamp: number; // Unix timestamp
+    inferredSeason: string;
+    shootDayClusterId: string; // YYYY-MM-DD
+
+    // Technical Data
+    cameraModel: string;
+    lensModel: string;
+    aperture: string;
+    shutterSpeed: string;
+    iso: number;
+
+    // Relational
+    tagIds: string[];
+    
+    // Visual Data
+    palette: string[]; // 5-color Hex Palette
+    
+    // UI State
+    selected?: boolean;
+}
+
+export interface InsightSnapshot {
+    id: string;
+    timestamp: number;
+    description: string;
+    activeFilterTags: string[];
+    zoomLevel: number;
+    centerPoint: { x: number, y: number };
+}
+
+export type ViewMode = 'WORKBENCH' | 'EXPERIENCE';
