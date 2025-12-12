@@ -243,6 +243,8 @@ const Workbench: React.FC<WorkbenchProps> = ({
         const newImages: ImageNode[] = [];
         
         // Ensure system tags (Season, etc) exist in DB
+        // Fix: Use a local copy of tags to ensure we don't lose updates within this loop's execution
+        let currentTags = [...tags];
         const processedTags = new Set<string>(tags.map(t => t.id));
 
         const ensureTag = (label: string, type: TagType): string => {
@@ -251,8 +253,9 @@ const Workbench: React.FC<WorkbenchProps> = ({
                 const newTag: Tag = { id, label, type };
                 onAddTag(newTag);
                 processedTags.add(id);
+                currentTags.push(newTag);
                 // Persistence
-                saveTagDefinitions([...tags, newTag]); 
+                saveTagDefinitions(currentTags); 
             }
             return id;
         };
@@ -276,7 +279,14 @@ const Workbench: React.FC<WorkbenchProps> = ({
                 const timestamp = new Date(captureDate).getTime();
                 const dateStr = new Date(captureDate).toISOString().split('T')[0];
                 let camera = exifData?.Model || exifData?.Make || 'Unknown Camera';
-                const lens = exifData?.LensModel || 'Unknown Lens';
+                let lens = exifData?.LensModel || 'Unknown Lens';
+
+                // CLEAN UP LENS DATA
+                if (lens !== 'Unknown Lens') {
+                     // Remove "Fujifilm Fujinon" prefix to unclutter tags
+                     lens = lens.replace(/^Fujifilm\s+Fujinon\s+/i, '').trim();
+                }
+
                 const season = getSeason(new Date(captureDate));
                 if (lens === '18.5 mm f/2.8') camera = 'X70';
 
