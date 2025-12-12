@@ -1,0 +1,264 @@
+{
+  "definitions": [
+    {
+      "id": "1365263c-3062-4721-af42-90f598590941",
+      "label": "Light Trail",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "label": "Travel",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "18-5-mm-f-2-8",
+      "label": "18.5 mm f/2.8",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "label": "Studio",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "93b2ceda-7e01-48bd-b89c-743ee08ef13a",
+      "label": "Creative Portrait",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "autumn",
+      "label": "Autumn",
+      "type": "SEASONAL"
+    },
+    {
+      "id": "berlin",
+      "label": "Berlin",
+      "type": "CATEGORICAL"
+    },
+    {
+      "id": "blur",
+      "label": "Blur",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "chaotic",
+      "label": "Chaotic",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "ethereal",
+      "label": "Ethereal",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "fujifilm-fujinon-xf35mmf1-4-r",
+      "label": "Fujifilm Fujinon XF35mmF1.4 R",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "fujifilm-gfx-100s",
+      "label": "Fujifilm GFX 100S",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "fujifilm-x-pro3",
+      "label": "Fujifilm X-Pro3",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "fujifilm-x-t5",
+      "label": "Fujifilm X-T5",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "gf-80mm-f-1-7",
+      "label": "GF 80mm f/1.7",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "grain",
+      "label": "Grain",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "gritty",
+      "label": "Gritty",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "high-contrast",
+      "label": "High Contrast",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "iceland",
+      "label": "Iceland",
+      "type": "CATEGORICAL"
+    },
+    {
+      "id": "kyoto",
+      "label": "Kyoto",
+      "type": "CATEGORICAL"
+    },
+    {
+      "id": "melancholy",
+      "label": "Melancholy",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "nostalgia",
+      "label": "Nostalgia",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "serene",
+      "label": "Serene",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "soft-light",
+      "label": "Soft Light",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "spring",
+      "label": "Spring",
+      "type": "SEASONAL"
+    },
+    {
+      "id": "studio-a",
+      "label": "Studio A",
+      "type": "CATEGORICAL"
+    },
+    {
+      "id": "summer",
+      "label": "Summer",
+      "type": "SEASONAL"
+    },
+    {
+      "id": "tokyo",
+      "label": "Tokyo",
+      "type": "CATEGORICAL"
+    },
+    {
+      "id": "winter",
+      "label": "Winter",
+      "type": "SEASONAL"
+    },
+    {
+      "id": "x-h1",
+      "label": "X-H1",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "x-hf1",
+      "label": "X-HF1",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "x-t5",
+      "label": "X-T5",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "x70",
+      "label": "X70",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "xf-23mm-f-2",
+      "label": "XF 23mm f/2",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "xf-35mm-f-1-4",
+      "label": "XF 35mm f/1.4",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "xf35mmf1-4-r",
+      "label": "XF35mmF1.4 R",
+      "type": "TECHNICAL"
+    },
+    {
+      "id": "xf56mmf1-2-r",
+      "label": "XF56mmF1.2 R",
+      "type": "TECHNICAL"
+    }
+  ],
+  "mappings": {
+    "53BB2F2D-BB7D-4950-9872-DE4C12472EAB.JPG": [
+      "summer",
+      "x-h1",
+      "fujifilm-fujinon-xf35mmf1-4-r",
+      "1365263c-3062-4721-af42-90f598590941",
+      "93b2ceda-7e01-48bd-b89c-743ee08ef13a",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+    ],
+    "DSCF1236.JPG.JPG": [
+      "summer",
+      "x-hf1",
+      "140b2127-11c1-45ea-b171-6c692e4309c1"
+    ],
+    "DSCF1346.JPG.JPG": [
+      "summer",
+      "x-hf1",
+      "140b2127-11c1-45ea-b171-6c692e4309c1"
+    ],
+    "DSCF9237 Edited.JPG": [
+      "summer",
+      "x70",
+      "140b2127-11c1-45ea-b171-6c692e4309c1"
+    ],
+    "IMG_0047.JPG": [
+      "summer",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "1365263c-3062-4721-af42-90f598590941",
+      "93b2ceda-7e01-48bd-b89c-743ee08ef13a",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+    ],
+    "IMG_0107 Edited.JPG": [
+      "autumn",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+    ],
+    "IMG_1015 Edited.JPG": [
+      "autumn",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+    ],
+    "IMG_1030 Edited.JPG": [
+      "autumn",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+    ],
+    "IMG_1043 Edited.JPG": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+    ],
+    "IMG_1058 Edited.JPG": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+    ],
+    "IMG_1086 Edited.JPG": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+    ],
+    "x70_26.JPG": [
+      "summer",
+      "x70",
+      "18-5-mm-f-2-8",
+      "1365263c-3062-4721-af42-90f598590941"
+    ]
+  }
+}

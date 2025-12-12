@@ -1,18 +1,16 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ImageNode, Tag, TagType } from '../types';
 import { 
-    Camera, Aperture, Plus, Tag as TagIcon, Loader2, HardDrive, 
-    CheckCircle2, Search, Filter, X, Trash2, Copy, Check, MoreHorizontal, Eraser
+    Camera, Plus, Loader2, HardDrive, 
+    Search, X, Trash2, Check, Eraser, AlertCircle, DownloadCloud
 } from 'lucide-react';
 import { getSeason, generateUUID } from '../services/dataService';
 import { 
     getSavedTagsForFile, 
     saveTagsForFile, 
-    connectResourceLibrary, 
-    getIsConnected,
-    getSavedTagDefinitions,
-    saveTagDefinitions 
+    saveTagDefinitions,
+    exportDatabase
 } from '../services/resourceService';
 import exifr from 'exifr';
 
@@ -21,8 +19,7 @@ interface WorkbenchProps {
     tags: Tag[];
     onUpdateImages: (images: ImageNode[]) => void;
     onAddTag: (newTag: Tag) => void;
-    isStorageConnected: boolean;
-    onConnectStorage: () => Promise<boolean>;
+    onResetDatabase: () => void;
 }
 
 // --- UTILS ---
@@ -101,8 +98,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
     tags, 
     onUpdateImages, 
     onAddTag,
-    isStorageConnected,
-    onConnectStorage 
+    onResetDatabase
 }) => {
     // --- STATE ---
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -153,7 +149,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
         const newSelected = new Set(selectedIds);
         
         if (event.shiftKey && lastSelectedId) {
-            // Find index in FILTERED list to match visual order
             const lastIndex = filteredImages.findIndex(img => img.id === lastSelectedId);
             const currentIndex = filteredImages.findIndex(img => img.id === id);
             
@@ -169,9 +164,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
             else newSelected.add(id);
             setLastSelectedId(id);
         } else {
-            // Standard Click: Select Only This (unless clicking on already selected, then maybe deselect others? No, keep standard)
-            // Enterprise standard: Click selects only this. Ctrl+Click toggles.
-            // If strictly following file explorer:
             newSelected.clear();
             newSelected.add(id);
             setLastSelectedId(id);
@@ -237,7 +229,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
             return img;
         });
         onUpdateImages(updatedImages);
-        setIsRemoveMenuOpen(false); // Close menu after action
+        setIsRemoveMenuOpen(false); 
     };
 
     // --- HANDLERS: UPLOAD ---
@@ -249,6 +241,8 @@ const Workbench: React.FC<WorkbenchProps> = ({
         setIsProcessing(true);
         const files = Array.from(e.target.files);
         const newImages: ImageNode[] = [];
+        
+        // Ensure system tags (Season, etc) exist in DB
         const processedTags = new Set<string>(tags.map(t => t.id));
 
         const ensureTag = (label: string, type: TagType): string => {
@@ -257,6 +251,8 @@ const Workbench: React.FC<WorkbenchProps> = ({
                 const newTag: Tag = { id, label, type };
                 onAddTag(newTag);
                 processedTags.add(id);
+                // Persistence
+                saveTagDefinitions([...tags, newTag]); 
             }
             return id;
         };
@@ -289,8 +285,16 @@ const Workbench: React.FC<WorkbenchProps> = ({
                 if (camera !== 'Unknown Camera') tagIds.push(ensureTag(camera, TagType.TECHNICAL));
                 if (lens !== 'Unknown Lens') tagIds.push(ensureTag(lens, TagType.TECHNICAL));
 
+                // --- PERSISTENCE: Check DB ---
                 const savedTags = getSavedTagsForFile(file.name);
-                if (savedTags.length > 0) savedTags.forEach(tId => !tagIds.includes(tId) && tagIds.push(tId));
+                if (savedTags.length > 0) {
+                    savedTags.forEach(tId => {
+                        if (!tagIds.includes(tId)) tagIds.push(tId);
+                    });
+                } else {
+                    // New file? Save the system generated tags to DB immediately
+                    saveTagsForFile(file.name, tagIds);
+                }
 
                 newImages.push({
                     id: generateUUID(),
@@ -322,9 +326,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
 
     const commonTagsInSelection = useMemo(() => {
         if (selectedIds.size === 0) return [];
-        // Find tags present in at least one selected image? Or all?
-        // "Batch Remove" usually implies removing tags that exist.
-        // Let's show all unique tags present across the selection.
         const tagsInSelection = new Set<string>();
         images.forEach(img => {
             if (selectedIds.has(img.id)) {
@@ -352,19 +353,25 @@ const Workbench: React.FC<WorkbenchProps> = ({
                     </div>
 
                     <div className="flex items-center gap-3">
-                         <button
-                            onClick={onConnectStorage}
-                            className={`
-                                flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-medium transition-all
-                                ${isStorageConnected 
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm' 
-                                    : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400'
-                                }
-                            `}
+                        <button
+                            onClick={exportDatabase}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 transition-colors text-xs font-medium"
+                            title="Download Current DB as JSON (Save to Project)"
                         >
-                            {isStorageConnected ? <CheckCircle2 size={14} /> : <HardDrive size={14} />}
-                            {isStorageConnected ? 'LIBRARY SYNCED' : 'CONNECT STORAGE'}
+                            <DownloadCloud size={14} />
+                            EXPORT DB
                         </button>
+
+                         <button
+                            onClick={onResetDatabase}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-red-100 bg-red-50 text-red-600 hover:bg-red-100 transition-colors text-xs font-medium"
+                            title="Reset System Database from Factory JSON"
+                        >
+                            <Trash2 size={14} />
+                            RESET DB
+                        </button>
+
+                        <div className="w-px h-6 bg-zinc-200 mx-2" />
 
                         <label className={`cursor-pointer bg-zinc-900 hover:bg-zinc-800 text-white px-4 py-1.5 rounded-md font-medium transition-colors text-xs tracking-wider flex items-center gap-2 shadow-sm ${isProcessing ? 'opacity-50' : ''}`}>
                              {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
@@ -428,7 +435,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                 <div className="grid grid-cols-[40px_60px_140px_1fr_200px] gap-4 px-6 py-2 border-b border-zinc-200 text-[10px] text-zinc-400 uppercase tracking-wider font-bold bg-zinc-50">
                     <div className="flex justify-center items-center">
                         <button onClick={handleSelectAll} className="hover:text-zinc-600">
-                             {selectedIds.size > 0 && selectedIds.size === filteredImages.length ? <CheckCircle2 size={14} /> : <div className="w-3.5 h-3.5 border border-zinc-300 rounded-sm" />}
+                             {selectedIds.size > 0 && selectedIds.size === filteredImages.length ? <AlertCircle size={14} /> : <div className="w-3.5 h-3.5 border border-zinc-300 rounded-sm" />}
                         </button>
                     </div>
                     <div>Preview</div>
@@ -496,17 +503,15 @@ const Workbench: React.FC<WorkbenchProps> = ({
                             <div className="flex flex-wrap gap-1.5 items-center">
                                 {img.tagIds.map(tid => {
                                     const tag = getTagById(tid);
-                                    if (!tag) return null; // Should ideally show ID if missing def
+                                    if (!tag) return null; 
                                     return (
                                         <button 
                                             key={tid} 
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 if(e.altKey) {
-                                                    // "Copy" / Quick fill feature
                                                     setBatchTagInput(tag.label);
                                                 } else {
-                                                    // Filter feature
                                                     const newSet = new Set(activeTagFilters);
                                                     newSet.add(tid);
                                                     setActiveTagFilters(newSet);
@@ -523,10 +528,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                         </button>
                                     );
                                 })}
-                                {/* Add Tag Button on Hover */}
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                     {/* Could add a mini + button here for single row editing */}
-                                </div>
                             </div>
 
                             {/* Technical */}
@@ -564,12 +565,10 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                 placeholder="Add tag to selection..."
                                 className="w-full bg-zinc-800/50 border border-transparent focus:border-indigo-500/50 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-500 outline-none transition-all focus:bg-zinc-800"
                             />
-                            {/* Autocomplete dropdown could go here in future */}
                         </div>
 
                         {/* 3. Batch Actions */}
                         <div className="flex items-center gap-1 pr-1">
-                            {/* Add Button */}
                             <button 
                                 onClick={handleBatchAddTag}
                                 disabled={!batchTagInput.trim()}
@@ -579,7 +578,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                 <Check size={16} />
                             </button>
 
-                            {/* Remove Tags Dropdown */}
                             <div className="relative">
                                 <button 
                                     onClick={() => setIsRemoveMenuOpen(!isRemoveMenuOpen)}
@@ -613,12 +611,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                     </div>
                                 )}
                             </div>
-
-                            <div className="w-px h-6 bg-zinc-700/50 mx-1" />
-
-                            <button className="p-2 rounded-lg bg-zinc-800 hover:bg-red-900/50 text-zinc-400 hover:text-red-400 transition-colors">
-                                <Trash2 size={16} />
-                            </button>
                         </div>
                     </div>
                 </div>
