@@ -21,12 +21,8 @@ export const getSeason = (date: Date): string => {
 };
 
 // --- Mock Data Generators ---
-
 const CAMERAS = ['Fujifilm X-T5', 'Fujifilm GFX 100S', 'Fujifilm X-Pro3'];
 const LENSES = ['XF 35mm f/1.4', 'GF 80mm f/1.7', 'XF 23mm f/2'];
-const LOCATIONS = ['Tokyo', 'Kyoto', 'Iceland', 'Berlin', 'Studio A'];
-const MOODS = ['Melancholy', 'Ethereal', 'Gritty', 'Serene', 'Chaotic', 'Nostalgia'];
-const TEXTURES = ['Grain', 'Blur', 'High Contrast', 'Soft Light'];
 
 const getRandomHexColor = () => {
     const letters = '0123456789ABCDEF';
@@ -36,32 +32,6 @@ const getRandomHexColor = () => {
     }
     return color;
 }
-
-export const createMockTags = (): Tag[] => {
-    const tags: Tag[] = [];
-    
-    // Add Season tags
-    ['Spring', 'Summer', 'Autumn', 'Winter'].forEach(s => 
-        tags.push({ id: s.toLowerCase(), label: s, type: TagType.SEASONAL })
-    );
-
-    // Add Tech tags
-    [...CAMERAS, ...LENSES].forEach(t => 
-        tags.push({ id: t.replace(/\s/g, '-').toLowerCase(), label: t, type: TagType.TECHNICAL })
-    );
-
-    // Add Qualitative
-    [...MOODS, ...TEXTURES].forEach(t => 
-        tags.push({ id: t.replace(/\s/g, '-').toLowerCase(), label: t, type: TagType.QUALITATIVE })
-    );
-
-    // Add Categorical
-    LOCATIONS.forEach(t => 
-        tags.push({ id: t.replace(/\s/g, '-').toLowerCase(), label: t, type: TagType.CATEGORICAL })
-    );
-
-    return tags;
-};
 
 export const generateMockImages = (count: number, availableTags: Tag[]): ImageNode[] => {
     const images: ImageNode[] = [];
@@ -85,10 +55,12 @@ export const generateMockImages = (count: number, availableTags: Tag[]): ImageNo
         assignedTags.add(camera.replace(/\s/g, '-').toLowerCase()); // Auto-tag camera
         
         // Add 1-3 random qualitative/categorical tags
-        const numRandom = Math.floor(Math.random() * 3) + 1;
-        for(let j=0; j<numRandom; j++) {
-            const randomTag = availableTags[Math.floor(Math.random() * availableTags.length)];
-            assignedTags.add(randomTag.id);
+        if (availableTags.length > 0) {
+            const numRandom = Math.floor(Math.random() * 3) + 1;
+            for(let j=0; j<numRandom; j++) {
+                const randomTag = availableTags[Math.floor(Math.random() * availableTags.length)];
+                assignedTags.add(randomTag.id);
+            }
         }
 
         // --- PERSISTENCE CHECK ---

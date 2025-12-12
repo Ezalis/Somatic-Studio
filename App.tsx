@@ -1,12 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { ViewMode, ImageNode, Tag } from './types';
-import { createMockTags } from './services/dataService';
 import { 
-    restoreConnection, 
-    connectResourceLibrary, 
-    getSavedTagDefinitions, 
-    getSavedTagsForFile 
+    initDatabase,
+    getSavedTagsForFile,
+    clearDatabase
 } from './services/resourceService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
@@ -17,69 +15,17 @@ const App: React.FC = () => {
     const [images, setImages] = useState<ImageNode[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
-    const [isStorageConnected, setIsStorageConnected] = useState(false);
 
-    const syncWithStorage = () => {
-        // 1. Sync Definitions
-        const savedDefs = getSavedTagDefinitions();
-        setTags(prevTags => {
-            const newTags = [...prevTags];
-            savedDefs.forEach(d => {
-                if (!newTags.some(t => t.id === d.id)) newTags.push(d);
-            });
-            return newTags;
-        });
-
-        // 2. Sync Images (If any exist)
-        setImages(prevImages => {
-             const updated = prevImages.map(img => {
-                const savedTags = getSavedTagsForFile(img.fileName);
-                if (savedTags.length > 0) {
-                    const mergedTags = Array.from(new Set([...img.tagIds, ...savedTags]));
-                    return { ...img, tagIds: mergedTags };
-                }
-                return img;
-            });
-            return updated;
-        });
-    };
-
-    // Initial Data Load & Auto-Connect
+    // Initial Data Load
     useEffect(() => {
         const init = async () => {
-            // Load system tags
-            const initialTags = createMockTags();
-            setTags(initialTags);
-
-            // Attempt Auto-Connect
-            const restored = await restoreConnection();
-            setIsStorageConnected(restored);
-            
-            if (restored) {
-                // If we restored, we need to sync the just-loaded definitions immediately
-                // We can't call syncWithStorage here easily because of closure over 'tags', 
-                // but we can manually merge initialTags with saved definitions
-                const savedDefs = getSavedTagDefinitions();
-                const mergedTags = [...initialTags];
-                savedDefs.forEach(d => {
-                    if (!mergedTags.some(t => t.id === d.id)) mergedTags.push(d);
-                });
-                setTags(mergedTags);
-            }
-
+            // Initialize DB and load persisted tags (or seed if empty)
+            const loadedTags = await initDatabase();
+            setTags(loadedTags);
             setIsLoaded(true);
         };
         init();
     }, []);
-
-    const handleConnectStorage = async () => {
-        const success = await connectResourceLibrary();
-        setIsStorageConnected(success);
-        if (success) {
-            syncWithStorage();
-        }
-        return success;
-    };
 
     const handleUpdateImages = (updatedImages: ImageNode[]) => {
         setImages(updatedImages);
@@ -91,6 +37,16 @@ const App: React.FC = () => {
             if (prev.some(t => t.id === newTag.id)) return prev;
             return [...prev, newTag];
         });
+    };
+
+    const handleResetDatabase = async () => {
+        if(window.confirm("Are you sure you want to wipe the database? This will remove all tags and associations. Images in memory will remain until reload.")) {
+            await clearDatabase();
+            setTags([]);
+            // Optionally clear image tags in memory too, but keeping them allows re-saving if user changes mind. 
+            // The prompt implies a reset. Let's clear tags from current images too.
+            setImages(prev => prev.map(img => ({ ...img, tagIds: [] })));
+        }
     };
 
     if (!isLoaded) return <div className="h-screen w-full bg-[#faf9f6] flex items-center justify-center text-zinc-400 font-light tracking-widest">SOMATIC STUDIO</div>;
@@ -131,8 +87,7 @@ const App: React.FC = () => {
                         tags={tags} 
                         onUpdateImages={handleUpdateImages}
                         onAddTag={handleAddTag}
-                        isStorageConnected={isStorageConnected}
-                        onConnectStorage={handleConnectStorage}
+                        onResetDatabase={handleResetDatabase}
                     />
                 ) : (
                     <Experience 
