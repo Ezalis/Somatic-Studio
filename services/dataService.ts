@@ -1,4 +1,6 @@
+
 import { ImageNode, Tag, TagType } from '../types';
+import { getSavedTagsForFile } from './resourceService';
 
 // --- Utilities ---
 
@@ -66,6 +68,8 @@ export const generateMockImages = (count: number, availableTags: Tag[]): ImageNo
     const now = Date.now();
 
     for (let i = 0; i < count; i++) {
+        const fileName = `mock_img_${i}_${Math.floor(Math.random() * 1000)}.jpg`;
+
         // Random date within last 2 years
         const timestamp = now - Math.floor(Math.random() * 63072000000);
         const date = new Date(timestamp);
@@ -87,11 +91,17 @@ export const generateMockImages = (count: number, availableTags: Tag[]): ImageNo
             assignedTags.add(randomTag.id);
         }
 
+        // --- PERSISTENCE CHECK ---
+        // Check if we have saved tags for this filename in our "resources" folder
+        const savedTags = getSavedTagsForFile(fileName);
+        savedTags.forEach(t => assignedTags.add(t));
+
         // Generate mock palette
         const mockPalette = Array(5).fill(0).map(() => getRandomHexColor());
 
         images.push({
             id: generateUUID(),
+            fileName: fileName,
             fileUrl: `https://picsum.photos/seed/${i + 123}/400/600`, // Portrait aspect
             captureTimestamp: timestamp,
             inferredSeason: season,
