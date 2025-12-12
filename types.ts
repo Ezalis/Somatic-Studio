@@ -34,6 +34,7 @@ export interface SimulationNode extends SimulationNodeDatum {
 export interface ImageNode extends SimulationNode {
     id: string; // UUID
     fileUrl: string; // Placeholder URL
+    fileName: string; // Original filename for persistence logic
     
     // Temporal Data
     captureTimestamp: number; // Unix timestamp

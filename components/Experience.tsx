@@ -331,13 +331,18 @@ const Experience: React.FC<ExperienceProps> = ({ images, tags }) => {
         // Create nodes if not exist, preserving positions
         const existingMap = new Map(simNodes.map(n => [n.id, n]));
         
+        // Use window center for initialization
+        const centerX = window.innerWidth / 2;
+        const centerY = window.innerHeight / 2;
+
         const newSimNodes: SimNode[] = images.map(img => {
             const existing = existingMap.get(img.id);
             return {
                 id: img.id,
                 original: img,
-                x: existing ? existing.x : Math.random() * 500,
-                y: existing ? existing.y : Math.random() * 500,
+                // Initialize near center instead of random 0-500
+                x: existing ? existing.x : centerX + (Math.random() - 0.5) * 200,
+                y: existing ? existing.y : centerY + (Math.random() - 0.5) * 200,
                 vx: existing?.vx || 0,
                 vy: existing?.vy || 0,
                 currentScale: existing ? existing.currentScale : 0,
@@ -393,10 +398,16 @@ const Experience: React.FC<ExperienceProps> = ({ images, tags }) => {
             // Forces
             .force("charge", d3ForceManyBody<SimNode>().strength((d) => {
                 // Active set repels more to create space
-                return activeSet.has(d.id) ? -300 : -50;
+                if (activeSet.has(d.id)) return -300;
+                // Idle state: Increase repulsion to prevent overlapping clumps
+                if (anchor.mode === 'NONE') return -150; 
+                return -30;
             }))
             .force("collide", d3ForceCollide<SimNode>().radius((d) => {
-                 return activeSet.has(d.id) ? 60 : 10;
+                 if (activeSet.has(d.id)) return 60;
+                 // Idle state: Increase radius to match visual size (approx 40-50px)
+                 if (anchor.mode === 'NONE') return 45;
+                 return 10;
             }).strength(0.7));
 
         // THE TICK LOOP
@@ -411,8 +422,9 @@ const Experience: React.FC<ExperienceProps> = ({ images, tags }) => {
                     // IDLE: Slight drift, center gravity
                     node.targetScale = 0.4;
                     node.targetOpacity = 0.6;
-                    node.vx = (node.vx || 0) + (width/2 - node.x) * 0.0005;
-                    node.vy = (node.vy || 0) + (height/2 - node.y) * 0.0005;
+                    // Gravity
+                    node.vx = (node.vx || 0) + (width/2 - node.x) * 0.008;
+                    node.vy = (node.vy || 0) + (height/2 - node.y) * 0.008;
                 }
                 else if (anchor.mode === 'IMAGE') {
                     if (isAnchor) {
@@ -425,8 +437,9 @@ const Experience: React.FC<ExperienceProps> = ({ images, tags }) => {
                         node.targetOpacity = 1;
                     } else if (isActive) {
                         // Related: Orbit center
-                        node.vx = (node.vx || 0) + (width/2 - node.x) * 0.005;
-                        node.vy = (node.vy || 0) + (height/2 - node.y) * 0.005;
+                        // PULL FASTER: Increased factor from 0.005 to 0.04
+                        node.vx = (node.vx || 0) + (width/2 - node.x) * 0.04;
+                        node.vy = (node.vy || 0) + (height/2 - node.y) * 0.04;
                         node.targetScale = 0.7;
                         node.targetOpacity = 0.9;
                     } else {
