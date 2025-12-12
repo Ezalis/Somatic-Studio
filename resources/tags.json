@@ -1,6 +1,11 @@
 {
   "definitions": [
     {
+      "id": "0503e7ff-2f6e-4efe-a580-4bfd43bca62d",
+      "label": "Protest",
+      "type": "QUALITATIVE"
+    },
+    {
       "id": "1365263c-3062-4721-af42-90f598590941",
       "label": "Light Trail",
       "type": "QUALITATIVE"
@@ -16,8 +21,88 @@
       "type": "TECHNICAL"
     },
     {
+      "id": "180a7de1-414f-4dc7-a3ba-d5fed44cb827",
+      "label": "Vivian",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "label": "Sierra",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "22dec867-d55a-47a7-906d-156502d4e592",
+      "label": "Beach",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "2903b577-269d-4a63-a825-ba2c81dc8e9a",
+      "label": "Show",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "29b0bf29-6487-478b-892f-c086056a22c3",
+      "label": "Landscape",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "2c3802c8-1e4c-46e1-a7d3-7e16bb623057",
+      "label": "Argentina",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "label": "Light Paint",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "3ecc5683-fa4d-4d25-a185-7d7c51825800",
+      "label": "Grayson",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "label": "Intimate",
+      "type": "QUALITATIVE"
+    },
+    {
       "id": "5b37cd16-945a-451c-a06f-f71dc8a661d6",
       "label": "Studio",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "5e7590f9-8600-43c3-ab66-04124ea86572",
+      "label": "Emily",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "6eff3f11-4ce1-4df8-99b8-1e014eaba76b",
+      "label": "Japan",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "7993376e-50c8-4c8c-9eed-3083d1132ee8",
+      "label": "Annika",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "8319229e-6ffe-40da-a30a-1663612abb9d",
+      "label": "Celeste",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "837c847e-4209-4ec9-bb78-c97d42544fb8",
+      "label": "Dreww",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "8b438e53-6165-4c87-a5ce-f7f9fb8e51af",
+      "label": "Jess",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "90e73503-e33e-443b-824f-2be7080fb410",
+      "label": "Candid",
       "type": "QUALITATIVE"
     },
     {
@@ -26,9 +111,24 @@
       "type": "QUALITATIVE"
     },
     {
+      "id": "ac37e908-3838-490e-b960-b7290d00b132",
+      "label": "Juan",
+      "type": "QUALITATIVE"
+    },
+    {
       "id": "autumn",
       "label": "Autumn",
       "type": "SEASONAL"
+    },
+    {
+      "id": "b58c5676-f3bc-406f-8978-37911d160027",
+      "label": "Art",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "b5c0360b-dd17-42a8-a85b-17a26e568771",
+      "label": "Abstract",
+      "type": "QUALITATIVE"
     },
     {
       "id": "berlin",
@@ -41,13 +141,28 @@
       "type": "QUALITATIVE"
     },
     {
+      "id": "c09f8b3a-2303-4688-8708-7adacd459472",
+      "label": "b&w",
+      "type": "QUALITATIVE"
+    },
+    {
       "id": "chaotic",
       "label": "Chaotic",
       "type": "QUALITATIVE"
     },
     {
+      "id": "d243a487-a94e-46a1-ad46-6f002dc66245",
+      "label": "Rachel",
+      "type": "QUALITATIVE"
+    },
+    {
       "id": "ethereal",
       "label": "Ethereal",
+      "type": "QUALITATIVE"
+    },
+    {
+      "id": "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "label": "Outside",
       "type": "QUALITATIVE"
     },
     {
@@ -176,6 +291,11 @@
       "type": "TECHNICAL"
     },
     {
+      "id": "xf16mmf1-4-r-wr",
+      "label": "XF16mmF1.4 R WR",
+      "type": "TECHNICAL"
+    },
+    {
       "id": "xf35mmf1-4-r",
       "label": "XF35mmF1.4 R",
       "type": "TECHNICAL"
@@ -187,78 +307,670 @@
     }
   ],
   "mappings": {
-    "53BB2F2D-BB7D-4950-9872-DE4C12472EAB.JPG": [
-      "summer",
-      "x-h1",
-      "fujifilm-fujinon-xf35mmf1-4-r",
-      "1365263c-3062-4721-af42-90f598590941",
-      "93b2ceda-7e01-48bd-b89c-743ee08ef13a",
-      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+    "06EB67D5-C8AB-4AED-847B-863A46D922F2-27376-000010DC9DB04BB9.jpg": [
+      "autumn",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "29b0bf29-6487-478b-892f-c086056a22c3"
     ],
-    "DSCF1236.JPG.JPG": [
-      "summer",
-      "x-hf1",
-      "140b2127-11c1-45ea-b171-6c692e4309c1"
-    ],
-    "DSCF1346.JPG.JPG": [
+    "DSCF1321.JPG.jpeg": [
       "summer",
       "x-hf1",
-      "140b2127-11c1-45ea-b171-6c692e4309c1"
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "180a7de1-414f-4dc7-a3ba-d5fed44cb827"
     ],
-    "DSCF9237 Edited.JPG": [
+    "DSCF1975 Edited.jpg": [
+      "spring",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "DSCF2284 Edited.jpg": [
+      "spring",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "ac37e908-3838-490e-b960-b7290d00b132"
+    ],
+    "DSCF4847.jpg": [
+      "summer",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771"
+    ],
+    "DSCF9237 Edited.jpg": [
       "summer",
       "x70",
-      "140b2127-11c1-45ea-b171-6c692e4309c1"
+      "90e73503-e33e-443b-824f-2be7080fb410",
+      "b58c5676-f3bc-406f-8978-37911d160027"
     ],
-    "IMG_0047.JPG": [
+    "DownstairsApt075.jpg": [
+      "summer",
+      "x-h1",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "7993376e-50c8-4c8c-9eed-3083d1132ee8"
+    ],
+    "DownstairsApt078.jpg": [
+      "summer",
+      "x-h1",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "DownstairsApt083.jpg": [
+      "summer",
+      "x-h1",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "DownstairsApt102.jpg": [
+      "summer",
+      "x-h1",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "d243a487-a94e-46a1-ad46-6f002dc66245"
+    ],
+    "DownstairsApt119.jpg": [
+      "summer",
+      "x-h1",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "d243a487-a94e-46a1-ad46-6f002dc66245"
+    ],
+    "Equinox1229_Original.JPG": [
+      "spring",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "5e7590f9-8600-43c3-ab66-04124ea86572"
+    ],
+    "F5FDB82E-D201-41DD-B0B7-37ADB00F886D-27376-000010DCA99BC6DC.jpg": [
+      "autumn",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "29b0bf29-6487-478b-892f-c086056a22c3"
+    ],
+    "FebruaryPortrait1088 Edited.jpg": [
+      "winter",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "FebruaryPortrait1161 Edited.jpg": [
+      "winter",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "FebruaryPortrait1214 Edited.jpg": [
+      "winter",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "GrandmasHat012.jpg": [
+      "autumn",
+      "x-h1",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "GrandmasHat034.jpg": [
+      "autumn",
+      "x-h1",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_0015.jpg": [
+      "spring",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "IMG_0028.jpg": [
+      "spring",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "IMG_0049.jpg": [
+      "spring",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "IMG_0057.jpg": [
+      "spring",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "IMG_0060.jpg": [
+      "spring",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "IMG_0061.jpg": [
+      "spring",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "IMG_0066.jpg": [
+      "spring",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "IMG_0067.jpg": [
       "summer",
       "x-t5",
       "xf35mmf1-4-r",
-      "1365263c-3062-4721-af42-90f598590941",
-      "93b2ceda-7e01-48bd-b89c-743ee08ef13a",
-      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
     ],
-    "IMG_0107 Edited.JPG": [
+    "IMG_0090.jpg": [
+      "summer",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "8b438e53-6165-4c87-a5ce-f7f9fb8e51af"
+    ],
+    "IMG_0091.jpg": [
+      "summer",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_0107.JPG": [
       "autumn",
       "x-t5",
       "xf56mmf1-2-r",
-      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
     ],
-    "IMG_1015 Edited.JPG": [
+    "IMG_0126.JPG": [
+      "summer",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_0175.JPG": [
+      "summer",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_0196.JPG": [
+      "summer",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_0215.JPG": [
+      "summer",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "837c847e-4209-4ec9-bb78-c97d42544fb8"
+    ],
+    "IMG_0310.JPG": [
+      "summer",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_0313.JPG": [
+      "summer",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "d243a487-a94e-46a1-ad46-6f002dc66245"
+    ],
+    "IMG_0320.JPG": [
+      "summer",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771"
+    ],
+    "IMG_0329.JPG": [
+      "summer",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "180a7de1-414f-4dc7-a3ba-d5fed44cb827"
+    ],
+    "IMG_0424.JPG": [
+      "spring",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "29b0bf29-6487-478b-892f-c086056a22c3"
+    ],
+    "IMG_0506.JPG": [
+      "spring",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "8319229e-6ffe-40da-a30a-1663612abb9d"
+    ],
+    "IMG_0568.JPG": [
+      "spring",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_0648.JPG": [
+      "summer",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "8319229e-6ffe-40da-a30a-1663612abb9d"
+    ],
+    "IMG_0767.JPG": [
+      "spring",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_0789.JPG": [
+      "summer",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "5e7590f9-8600-43c3-ab66-04124ea86572",
+      "b58c5676-f3bc-406f-8978-37911d160027"
+    ],
+    "IMG_1026.JPG": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "7993376e-50c8-4c8c-9eed-3083d1132ee8"
+    ],
+    "IMG_1030.JPG": [
       "autumn",
       "x-t5",
       "xf56mmf1-2-r",
-      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "7993376e-50c8-4c8c-9eed-3083d1132ee8"
     ],
-    "IMG_1030 Edited.JPG": [
+    "IMG_1043.JPG": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "ac37e908-3838-490e-b960-b7290d00b132"
+    ],
+    "IMG_1051.JPG": [
       "autumn",
       "x-t5",
       "xf56mmf1-2-r",
-      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "7993376e-50c8-4c8c-9eed-3083d1132ee8"
     ],
-    "IMG_1043 Edited.JPG": [
+    "IMG_1058.JPG": [
       "autumn",
       "x-t5",
       "xf35mmf1-4-r",
-      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "ac37e908-3838-490e-b960-b7290d00b132"
     ],
-    "IMG_1058 Edited.JPG": [
+    "IMG_1088.JPG": [
+      "autumn",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "180a7de1-414f-4dc7-a3ba-d5fed44cb827"
+    ],
+    "IMG_1090.JPG": [
+      "autumn",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "ac37e908-3838-490e-b960-b7290d00b132"
+    ],
+    "IMG_1194.JPG": [
+      "winter",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013"
+    ],
+    "IMG_1204.JPG": [
+      "winter",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013"
+    ],
+    "IMG_1234.JPG": [
+      "spring",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "IMG_1238.JPG": [
+      "spring",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771",
+      "6eff3f11-4ce1-4df8-99b8-1e014eaba76b"
+    ],
+    "IMG_1384.JPG": [
+      "spring",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_1415.JPG": [
+      "spring",
+      "x-t5",
+      "xf16mmf1-4-r-wr",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "ac37e908-3838-490e-b960-b7290d00b132"
+    ],
+    "IMG_1504.JPG": [
+      "summer",
+      "x-hf1",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "22dec867-d55a-47a7-906d-156502d4e592",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_1512.JPG": [
+      "summer",
+      "x-hf1",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "22dec867-d55a-47a7-906d-156502d4e592",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "IMG_1514.JPG": [
+      "summer",
+      "x-hf1",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "29b0bf29-6487-478b-892f-c086056a22c3"
+    ],
+    "OrangePeel009_Original.jpg": [
+      "winter",
+      "x-h1",
+      "xf35mmf1-4-r",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "7993376e-50c8-4c8c-9eed-3083d1132ee8"
+    ],
+    "OrangePeel069_Original.jpg": [
+      "winter",
+      "x-h1",
+      "xf16mmf1-4-r-wr",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "7993376e-50c8-4c8c-9eed-3083d1132ee8"
+    ],
+    "RV_12.jpg": [
       "autumn",
       "x-t5",
       "xf35mmf1-4-r",
-      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "d243a487-a94e-46a1-ad46-6f002dc66245"
     ],
-    "IMG_1086 Edited.JPG": [
+    "RV_15.jpg": [
       "autumn",
       "x-t5",
       "xf35mmf1-4-r",
-      "5b37cd16-945a-451c-a06f-f71dc8a661d6"
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "180a7de1-414f-4dc7-a3ba-d5fed44cb827"
     ],
-    "x70_26.JPG": [
+    "RV_35.jpg": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "d243a487-a94e-46a1-ad46-6f002dc66245"
+    ],
+    "RV_41.jpg": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "d243a487-a94e-46a1-ad46-6f002dc66245"
+    ],
+    "RV_48.jpg": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "d243a487-a94e-46a1-ad46-6f002dc66245",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "RV_54.jpg": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "RV_61.jpg": [
+      "autumn",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "d243a487-a94e-46a1-ad46-6f002dc66245"
+    ],
+    "Recipe-2(1).jpg": [
+      "summer",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "Stairs Export-7(7).jpg": [
+      "summer",
+      "x-t5",
+      "xf56mmf1-2-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "d243a487-a94e-46a1-ad46-6f002dc66245"
+    ],
+    "Winter Solstace 24-36.jpg": [
+      "winter",
+      "x-t5",
+      "xf35mmf1-4-r",
+      "5b37cd16-945a-451c-a06f-f71dc8a661d6",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013"
+    ],
+    "X70_103.jpg": [
+      "autumn",
+      "x70",
+      "18-5-mm-f-2-8",
+      "c09f8b3a-2303-4688-8708-7adacd459472",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "0503e7ff-2f6e-4efe-a580-4bfd43bca62d"
+    ],
+    "X70_117.jpg": [
+      "autumn",
+      "x70",
+      "18-5-mm-f-2-8",
+      "140b2127-11c1-45ea-b171-6c692e4309c1",
+      "2903b577-269d-4a63-a825-ba2c81dc8e9a"
+    ],
+    "X70_86.jpg": [
+      "autumn",
+      "x70",
+      "18-5-mm-f-2-8",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "50ec44d1-16e4-4712-b87e-e140c9c8d013",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "8b438e53-6165-4c87-a5ce-f7f9fb8e51af"
+    ],
+    "X70_95.jpg": [
+      "autumn",
+      "x70",
+      "18-5-mm-f-2-8",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "0503e7ff-2f6e-4efe-a580-4bfd43bca62d"
+    ],
+    "X70_99.jpg": [
+      "autumn",
+      "x70",
+      "18-5-mm-f-2-8",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "0503e7ff-2f6e-4efe-a580-4bfd43bca62d"
+    ],
+    "montfordskatin-0022_Original.jpg": [
+      "spring",
+      "x-h1",
+      "xf16mmf1-4-r-wr",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "3ecc5683-fa4d-4d25-a185-7d7c51825800"
+    ],
+    "montfordskatin-0026_Original.jpg": [
+      "spring",
+      "x-h1",
+      "xf16mmf1-4-r-wr",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "x70_27.jpg": [
       "summer",
       "x70",
       "18-5-mm-f-2-8",
-      "1365263c-3062-4721-af42-90f598590941"
+      "38b7c0c8-a9fd-47f9-b213-1cb114fc282f",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "x70_3.jpg": [
+      "summer",
+      "x70",
+      "18-5-mm-f-2-8",
+      "90e73503-e33e-443b-824f-2be7080fb410",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
+    ],
+    "x70_38.jpg": [
+      "summer",
+      "x70",
+      "18-5-mm-f-2-8",
+      "90e73503-e33e-443b-824f-2be7080fb410",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "b58c5676-f3bc-406f-8978-37911d160027"
+    ],
+    "x70_42.jpg": [
+      "summer",
+      "x70",
+      "18-5-mm-f-2-8",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "29b0bf29-6487-478b-892f-c086056a22c3",
+      "b5c0360b-dd17-42a8-a85b-17a26e568771"
+    ],
+    "x70_45.jpg": [
+      "summer",
+      "x70",
+      "18-5-mm-f-2-8",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "29b0bf29-6487-478b-892f-c086056a22c3"
+    ],
+    "x70_46.jpg": [
+      "summer",
+      "x70",
+      "18-5-mm-f-2-8",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "90e73503-e33e-443b-824f-2be7080fb410",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80",
+      "8b438e53-6165-4c87-a5ce-f7f9fb8e51af"
+    ],
+    "x70_65.jpg": [
+      "autumn",
+      "x70",
+      "18-5-mm-f-2-8",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "90e73503-e33e-443b-824f-2be7080fb410",
+      "8b438e53-6165-4c87-a5ce-f7f9fb8e51af"
+    ],
+    "x70_67.jpg": [
+      "autumn",
+      "x70",
+      "18-5-mm-f-2-8",
+      "f0337a74-d111-4f38-bb61-ffdfda284e0a",
+      "90e73503-e33e-443b-824f-2be7080fb410",
+      "20386e5b-7b30-43e6-8d48-c3f65f687f80"
     ]
   }
 }
