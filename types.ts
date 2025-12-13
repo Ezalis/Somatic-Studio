@@ -68,3 +68,16 @@ export interface InsightSnapshot {
 }
 
 export type ViewMode = 'WORKBENCH' | 'EXPERIENCE';
+
+export type AnchorMode = 'NONE' | 'IMAGE' | 'TAG' | 'COLOR';
+
+export interface AnchorState {
+    mode: AnchorMode;
+    id: string; // UUID, TagID, or Hex Color
+    meta?: any; // Tag object, Color string, etc.
+}
+
+export interface ExperienceContext {
+    commonTags: Tag[];
+    activePalette: string[];
+}

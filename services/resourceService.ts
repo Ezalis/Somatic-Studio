@@ -111,6 +111,10 @@ export const getSavedTagDefinitions = (): Tag[] => {
     return definitionsCache;
 };
 
+export const getAllMappings = (): Record<string, string[]> => {
+    return mappingsCache;
+};
+
 export const saveTagDefinitions = async (tags: Tag[]) => {
     definitionsCache = tags;
     
