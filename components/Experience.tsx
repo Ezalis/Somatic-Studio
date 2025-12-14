@@ -35,13 +35,18 @@ interface SimNode extends SimulationNodeDatum {
 
 // --- Utilities ---
 
-const hexToRgb = (hex: string) => {
+const hexToRgbVals = (hex: string): [number, number, number] => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16)
-    } : { r: 250, g: 249, b: 246 };
+    return result ? [
+        parseInt(result[1], 16),
+        parseInt(result[2], 16),
+        parseInt(result[3], 16)
+    ] : [220, 220, 220];
+}
+
+const hexToRgb = (hex: string) => {
+    const [r, g, b] = hexToRgbVals(hex);
+    return { r, g, b };
 }
 
 const getColorDistSq = (hex1: string, hex2: string) => {
@@ -70,7 +75,7 @@ const getDominantColorsFromNodes = (nodes: SimNode[], count: number = 5, exclude
         });
     });
     return Object.entries(colorCounts)
-        .sort((a, b) => b[1] - a[1]) // Sort by frequency
+        .sort((a, b) => b[1] - a[1]) 
         .slice(0, count)
         .map(entry => entry[0]);
 };
@@ -90,6 +95,8 @@ const getRelatedTagsFromNodes = (nodes: SimNode[], tags: Tag[], count: number = 
         .map(([id]) => tags.find(t => t.id === id))
         .filter((t): t is Tag => !!t);
 };
+
+// --- MAIN COMPONENT ---
 
 const Experience: React.FC<ExperienceProps> = ({ 
     images, 
@@ -350,15 +357,19 @@ const Experience: React.FC<ExperienceProps> = ({
                 if (!d.isVisible) return 0;
                 if (anchor.mode === 'NONE') return -50; // Moderate repulsion for spacing
                 if (d.id === anchor.id) return -1500; // Stronger repulsion from Hero to create space
-                return -200; // Increased repulsion between neighbors for better cloud distribution
+                // IN GRID MODE (TAG/COLOR), reduce repulsion so grid force wins
+                if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return -30;
+                return -200; 
             }))
             .force("collide", d3.forceCollide<SimNode>().radius((d) => {
                  if (!d.isVisible) return 0;
                  if (anchor.mode === 'IMAGE') {
-                     if (d.id === anchor.id) return heroRadius * 0.95; // Slightly larger for cleaner separation
+                     if (d.id === anchor.id) return heroRadius * 0.95; 
                      return 65; 
                  }
-                 return 55; // Slightly larger collision radius for home view spacing
+                 // Smaller collision in Grid mode so they don't jitter against each other
+                 if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return 30;
+                 return 55; 
             }).strength(0.8)); 
 
         const goldenAngle = Math.PI * (3 - Math.sqrt(5));
@@ -368,13 +379,13 @@ const Experience: React.FC<ExperienceProps> = ({
             const cx = width / 2;
             const cy = height / 2;
             const time = Date.now() / 1000;
-            const lerpFactor = 0.1; // Smoother, slightly faster scale transition (was 0.08)
+            const lerpFactor = 0.1; 
 
             simNodes.forEach((node, i) => {
                 const isAnchor = anchor.mode === 'IMAGE' && node.id === anchor.id;
 
-                // --- GLOBAL ORGANIC MOVEMENT (Only if NOT in Home/NONE mode) ---
-                if (node.isVisible && !isAnchor && anchor.mode !== 'NONE') {
+                // --- GLOBAL ORGANIC MOVEMENT (Only if NOT in Home/NONE mode or Grid Mode) ---
+                if (node.isVisible && !isAnchor && anchor.mode !== 'NONE' && anchor.mode !== 'TAG' && anchor.mode !== 'COLOR') {
                      const floatSpeed = 0.5;
                      const floatAmp = 0.05; 
                      node.vx = (node.vx || 0) + Math.sin(time * floatSpeed + i) * floatAmp;
@@ -457,26 +468,42 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
                 else if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') {
                     if (node.isVisible) {
+                        // GRID FORMATION LOGIC
                         const idx = activeNodes.indexOf(node);
-                        // Spiral layout with slow rotation
-                        const r = 100 + (idx * 15);
-                        const theta = idx * 0.8 + (time * 0.1); 
+                        const total = activeNodes.length;
                         
-                        const tx = cx + r * Math.cos(theta);
-                        const ty = cy + r * Math.sin(theta);
+                        // Grid Dimensions
+                        const COLS = Math.ceil(Math.sqrt(total));
+                        const ROWS = Math.ceil(total / COLS);
+                        const CELL_W = 220; // Width + Gap
+                        const CELL_H = 220; // Height + Gap
                         
-                        node.vx = (node.vx || 0) + (tx - node.x) * 0.06;
-                        node.vy = (node.vy || 0) + (ty - node.y) * 0.06;
-                        node.targetScale = 0.8;
+                        const col = idx % COLS;
+                        const row = Math.floor(idx / COLS);
+                        
+                        // Calculate center offset to keep grid in middle of viewport
+                        const gridW = (COLS - 1) * CELL_W;
+                        const gridH = (ROWS - 1) * CELL_H;
+                        
+                        const tx = cx + (col * CELL_W) - (gridW / 2);
+                        const ty = cy + (row * CELL_H) - (gridH / 2);
+                        
+                        // Direct Homing Force (Structured)
+                        const structureStrength = 0.15;
+                        node.vx = (node.vx || 0) + (tx - node.x) * structureStrength;
+                        node.vy = (node.vy || 0) + (ty - node.y) * structureStrength;
+                        
+                        node.targetScale = 0.85; // Slightly larger for clarity in grid
                         node.targetOpacity = 1;
                     } else {
+                        // Exit logic
                         node.targetScale = 0;
                         node.targetOpacity = 0;
                         const dx = node.x - cx;
                         const dy = node.y - cy;
                         const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-                        node.vx = (node.vx || 0) + (dx/dist) * 2;
-                        node.vy = (node.vy || 0) + (dy/dist) * 2;
+                        node.vx = (node.vx || 0) + (dx/dist) * 3;
+                        node.vy = (node.vy || 0) + (dy/dist) * 3;
                     }
                 }
 
@@ -560,13 +587,23 @@ const Experience: React.FC<ExperienceProps> = ({
     return (
         <div className="relative w-full h-full bg-[#faf9f6] overflow-hidden font-mono select-none">
             
-            {/* Background Gradient */}
+            {/* Ambient Background Layer - CSS Only for Max Performance */}
             <div 
-                className="absolute inset-0 transition-colors duration-1000 ease-in-out pointer-events-none"
+                className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-in-out"
                 style={{
-                    background: anchor.mode === 'IMAGE' && activePalette.length > 0 
-                        ? `radial-gradient(circle at center, ${activePalette[0]}15 0%, transparent 70%)` 
-                        : 'transparent'
+                    background: anchor.mode !== 'NONE' && activePalette.length > 0
+                        ? `radial-gradient(circle at 50% 30%, ${activePalette[0]}1A, transparent 70%), 
+                           radial-gradient(circle at 85% 85%, ${activePalette[1] || activePalette[0]}15, transparent 60%),
+                           radial-gradient(circle at 15% 75%, ${activePalette[2] || activePalette[0]}10, transparent 60%)`
+                        : '#faf9f6'
+                }}
+            />
+
+            {/* Film Grain Texture - Static SVG pattern is extremely performant */}
+            <div 
+                className="absolute inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-multiply"
+                style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`
                 }}
             />
 
