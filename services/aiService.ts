@@ -4,7 +4,6 @@ import { ImageNode, Tag, TagType } from '../types';
 import { generateUUID } from './dataService';
 
 // Initialize Gemini
-// Note: In a production app, handle API key security more robustly.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Helper: Resize image to a smaller dimension (e.g. 512px) to optimize AI analysis speed
@@ -39,8 +38,6 @@ const resizeImageToBase64 = (url: string, maxDim: number = 512): Promise<string>
             }
             ctx.drawImage(img, 0, 0, width, height);
             
-            // Convert to JPEG base64 string at reasonable quality
-            // This massively reduces payload size compared to raw uploads
             const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
             const base64 = dataUrl.split(',')[1];
             resolve(base64);
@@ -54,7 +51,6 @@ export const generateAITagsForImage = async (
     imageNode: ImageNode
 ): Promise<{ tags: Tag[], tagIds: string[] }> => {
     try {
-        // Optimization: Use resized image for analysis
         const base64Data = await resizeImageToBase64(imageNode.fileUrl);
 
         const responseSchema: Schema = {
@@ -138,9 +134,6 @@ export const processBatchAIAnalysis = async (
     
     const results: { imageId: string, tags: Tag[], tagIds: string[] }[] = [];
     let completed = 0;
-
-    // Optimization: Process in concurrent batches to improve speed
-    // Batch size of 3 balances speed with rate limits for the Flash model
     const BATCH_SIZE = 3;
 
     for (let i = 0; i < images.length; i += BATCH_SIZE) {
@@ -161,7 +154,129 @@ export const processBatchAIAnalysis = async (
         completed += batch.length;
         onProgress(Math.min(completed, images.length), images.length);
         
-        // Small delay to maintain stability and avoid burst rate limits
+        await new Promise(resolve => setTimeout(resolve, 200)); 
+    }
+
+    return results;
+};
+
+// --- HARMONIZATION FEATURE (v1.0) ---
+
+export const harmonizeTagsBatch = async (
+    images: ImageNode[],
+    allTags: Tag[], // Full list of definitions
+    preferredCommonTags: string[], // Labels of top 100 most frequent tags
+    onProgress: (completed: number, total: number) => void
+): Promise<{ imageId: string, tags: Tag[], tagIds: string[] }[]> => {
+
+    const results: { imageId: string, tags: Tag[], tagIds: string[] }[] = [];
+    let completed = 0;
+    
+    // We can process slightly larger batches since we are sending text metadata mostly, 
+    // but we might send image data if we want visual confirmation. 
+    // For pure tag harmonization, context is key.
+    // Let's stick to small batches to ensure the output JSON doesn't get truncated.
+    const BATCH_SIZE = 5;
+
+    for (let i = 0; i < images.length; i += BATCH_SIZE) {
+        const batch = images.slice(i, i + BATCH_SIZE);
+        
+        // Prepare Payload
+        const batchPayload = batch.map(img => {
+            // Resolve tag IDs to labels
+            const labels = [...img.tagIds, ...(img.aiTagIds || [])].map(tid => {
+                const t = allTags.find(tag => tag.id === tid);
+                return t ? t.label : tid;
+            });
+            return {
+                id: img.id,
+                currentTags: labels
+            };
+        });
+
+        try {
+            const responseSchema: Schema = {
+                type: Type.OBJECT,
+                properties: {
+                    results: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                id: { type: Type.STRING },
+                                tags: { type: Type.ARRAY, items: { type: Type.STRING } }
+                            }
+                        }
+                    }
+                }
+            };
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: {
+                    parts: [
+                        {
+                            text: `You are a Semantic Harmonizer for a photography database.
+                            
+                            Goal: Increase the overlap (collision) of tags between images to create a denser network graph.
+                            Requirement: Less than 25% of tags for any image should be unique to that image.
+                            
+                            Input: A batch of 5 images with their CURRENT tags.
+                            Context: Here is a list of PREFERRED COMMON TAGS found frequently in the wider library:
+                            ${JSON.stringify(preferredCommonTags.slice(0, 150))}
+
+                            Instructions:
+                            1. Rewrite the tags for each image.
+                            2. AGGRESSIVELY use tags from the PREFERRED COMMON TAGS list if they are semantically relevant.
+                            3. Consolidate specific/unique synonyms into these common terms (e.g., change "Scarlet" to "Red", change "Vehicle" to "Car" if "Car" is in the common list).
+                            4. Keep unique tags ONLY if they are critical to the specific image's distinct character.
+                            5. Return exactly 15-20 tags per image.
+
+                            Input Data:
+                            ${JSON.stringify(batchPayload)}
+                            `
+                        }
+                    ]
+                },
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: responseSchema,
+                    temperature: 0.3 // Lower temperature for more consistent classification
+                }
+            });
+
+            const jsonStr = response.text || "{}";
+            const batchResponse = JSON.parse(jsonStr);
+            
+            if (batchResponse.results) {
+                batchResponse.results.forEach((res: any) => {
+                    const newTags: Tag[] = [];
+                    const tagIds: string[] = [];
+                    
+                    if (res.tags && Array.isArray(res.tags)) {
+                        res.tags.forEach((label: string) => {
+                            const cleanLabel = label.trim();
+                            if (cleanLabel) {
+                                const id = cleanLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                                tagIds.push(id);
+                                newTags.push({
+                                    id,
+                                    label: cleanLabel,
+                                    type: TagType.AI_GENERATED // Harmonized tags treated as AI
+                                });
+                            }
+                        });
+                    }
+                    results.push({ imageId: res.id, tags: newTags, tagIds });
+                });
+            }
+
+        } catch (e) {
+            console.error("Harmonization Batch Failed", e);
+        }
+
+        completed += batch.length;
+        onProgress(Math.min(completed, images.length), images.length);
         await new Promise(resolve => setTimeout(resolve, 200)); 
     }
 

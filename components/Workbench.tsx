@@ -2,13 +2,17 @@
 import React, { useState, useMemo } from 'react';
 import { ImageNode, Tag, TagType, ViewMode } from '../types';
 import { 
-    Camera, Plus, Search, X, Check, Eraser, AlertCircle, Sparkles, BrainCircuit, Download
+    Camera, Plus, Search, X, Check, Eraser, AlertCircle, Sparkles, BrainCircuit, Download,
+    Network
 } from 'lucide-react';
 import { generateUUID } from '../services/dataService';
 import { 
     saveTagsForFile, 
-    saveTagDefinitions
+    saveTagDefinitions,
+    saveAITagsForFile,
+    saveImageMetadata
 } from '../services/resourceService';
+import { harmonizeTagsBatch } from '../services/aiService';
 
 interface WorkbenchProps {
     images: ImageNode[];
@@ -55,6 +59,10 @@ const Workbench: React.FC<WorkbenchProps> = ({
     // Batch Action State
     const [batchTagInput, setBatchTagInput] = useState('');
     const [isRemoveMenuOpen, setIsRemoveMenuOpen] = useState(false);
+
+    // Harmonization State
+    const [isHarmonizing, setIsHarmonizing] = useState(false);
+    const [harmonizeProgress, setHarmonizeProgress] = useState(0);
     
     // --- DERIVED DATA ---
     const filteredImages = useMemo(() => {
@@ -85,6 +93,96 @@ const Workbench: React.FC<WorkbenchProps> = ({
     }, [images, activeTagFilters, searchQuery, tags]);
 
     const getTagById = (id: string) => tags.find(t => t.id === id);
+
+    // --- HARMONIZATION LOGIC ---
+    const handleRunHarmonization = async () => {
+        if (images.length === 0) return;
+
+        // 1. Identify un-harmonized images (Resume Logic)
+        const unharmonizedImages = images.filter(img => !img.tagVersion || img.tagVersion < 1);
+        
+        let batchToProcess = unharmonizedImages;
+        if (unharmonizedImages.length === 0) {
+            if (window.confirm("All images are already harmonized (v1.0). Re-process everything?")) {
+                batchToProcess = images;
+            } else {
+                return;
+            }
+        }
+
+        setIsHarmonizing(true);
+        setHarmonizeProgress(0);
+
+        // 2. Calculate Global Context (Preferred Common Tags)
+        // Frequency analysis of current tags
+        const tagCounts: Record<string, number> = {};
+        images.forEach(img => {
+            [...img.tagIds, ...(img.aiTagIds || [])].forEach(tid => {
+                tagCounts[tid] = (tagCounts[tid] || 0) + 1;
+            });
+        });
+        // Sort by frequency
+        const sortedTagIds = Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a]);
+        // Get top 100 labels
+        const preferredLabels = sortedTagIds.slice(0, 100).map(tid => {
+            const t = tags.find(tag => tag.id === tid);
+            return t ? t.label : null;
+        }).filter((l): l is string => !!l);
+
+        try {
+            const results = await harmonizeTagsBatch(
+                batchToProcess, 
+                tags, 
+                preferredLabels, 
+                (completed, total) => {
+                    setHarmonizeProgress(Math.round((completed / total) * 100));
+                }
+            );
+
+            // Update State & DB
+            const newTagsToAdd: Tag[] = [];
+            const updatedImages = images.map(img => {
+                const result = results.find(r => r.imageId === img.id);
+                if (result) {
+                    // Accumulate definitions
+                    result.tags.forEach(t => {
+                        if (!tags.some(existing => existing.id === t.id) && !newTagsToAdd.some(pending => pending.id === t.id)) {
+                            newTagsToAdd.push(t);
+                        }
+                    });
+
+                    // Save AI Tags (Overwriting previous ones with harmonized set)
+                    saveAITagsForFile(img.fileName, result.tagIds);
+                    
+                    // Mark as Version 1.0
+                    saveImageMetadata(img.fileName, { tagVersion: 1 });
+
+                    return { ...img, aiTagIds: result.tagIds, tagVersion: 1 };
+                }
+                return img;
+            });
+
+            if (newTagsToAdd.length > 0) {
+                const mergedTags = [...tags, ...newTagsToAdd];
+                // Note: We don't call onAddTag in loop to avoid rapid re-renders, assuming parent handles updates via onUpdateImages? 
+                // Actually parent manages `tags`. We need to bubble this up. 
+                // For now, we will update the parent `tags` state via `onAddTag` manually or just assume saveTagDefinitions works if we reload. 
+                // But to be safe, let's just save to DB. The parent `App` doesn't expose a bulk add tags.
+                // We'll iterate and add.
+                newTagsToAdd.forEach(t => onAddTag(t));
+                await saveTagDefinitions([...tags, ...newTagsToAdd]); 
+            }
+
+            onUpdateImages(updatedImages);
+
+        } catch (error) {
+            console.error("Harmonization Failed", error);
+            alert("Harmonization interrupted. Check console.");
+        } finally {
+            setIsHarmonizing(false);
+            setHarmonizeProgress(0);
+        }
+    };
 
     // --- HANDLERS: SELECTION ---
     const handleSelect = (id: string, event: React.MouseEvent) => {
@@ -226,26 +324,40 @@ const Workbench: React.FC<WorkbenchProps> = ({
                 <div className="flex items-center gap-3 pl-4 border-l border-zinc-200">
                      <button
                         onClick={onRunAIAnalysis}
-                        disabled={isAnalyzing || images.length === 0}
+                        disabled={isAnalyzing || isHarmonizing || images.length === 0}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors text-xs font-bold ${isAnalyzing ? 'opacity-70 cursor-wait' : ''}`}
-                        title="Generate AI Tags for all images"
+                        title="Generate Initial AI Tags"
                     >
                         {isAnalyzing ? (
                              <div className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
                         ) : (
                             <BrainCircuit size={14} />
                         )}
-                        <span>{isAnalyzing ? `ANALYZING ${analysisProgress}%` : 'GEMINI ANALYSIS'}</span>
+                        <span>{isAnalyzing ? `${analysisProgress}%` : 'AI TAGS'}</span>
+                    </button>
+
+                    <button
+                        onClick={handleRunHarmonization}
+                        disabled={isAnalyzing || isHarmonizing || images.length === 0}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors text-xs font-bold ${isHarmonizing ? 'opacity-70 cursor-wait' : ''}`}
+                        title="Refine tags to increase network density (v1.0)"
+                    >
+                        {isHarmonizing ? (
+                             <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <Network size={14} />
+                        )}
+                        <span>{isHarmonizing ? `${harmonizeProgress}%` : 'HARMONIZE v1.0'}</span>
                     </button>
 
                     <button
                         onClick={onExportAITags}
-                        disabled={isAnalyzing}
+                        disabled={isAnalyzing || isHarmonizing}
                         className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 transition-colors text-xs font-medium"
                         title="Export AI-tags.json"
                     >
                         <Download size={14} />
-                        <span>AI-TAGS.JSON</span>
+                        <span>JSON</span>
                     </button>
                 </div>
             </div>
@@ -294,6 +406,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                 {filteredImages.map((img) => {
                     const isSelected = selectedIds.has(img.id);
                     const dateObj = new Date(img.captureTimestamp);
+                    const isHarmonized = img.tagVersion === 1;
 
                     return (
                         <div 
@@ -313,8 +426,13 @@ const Workbench: React.FC<WorkbenchProps> = ({
                             </div>
 
                             {/* Thumbnail */}
-                            <div className="w-10 h-10 bg-zinc-200 rounded overflow-hidden shadow-sm border border-zinc-200">
+                            <div className="w-10 h-10 bg-zinc-200 rounded overflow-hidden shadow-sm border border-zinc-200 relative">
                                 <img src={img.fileUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                {isHarmonized && (
+                                    <div className="absolute bottom-0 right-0 bg-indigo-500 w-2.5 h-2.5 rounded-tl-sm flex items-center justify-center" title="Tags Harmonized (v1.0)">
+                                        <div className="w-1 h-1 bg-white rounded-full" />
+                                    </div>
+                                )}
                             </div>
 
                             {/* Timestamp */}
@@ -371,7 +489,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                                 }}
                                                 className={`
                                                     text-[10px] px-2 py-0.5 rounded border font-medium transition-all
-                                                    bg-violet-50 text-violet-700 border-violet-100 group-hover:border-violet-200
+                                                    ${isHarmonized ? 'bg-indigo-50 text-indigo-700 border-indigo-100 group-hover:border-indigo-200' : 'bg-violet-50 text-violet-700 border-violet-100 group-hover:border-violet-200'}
                                                     hover:shadow-sm cursor-pointer active:scale-95 flex items-center gap-1
                                                 `}
                                             >

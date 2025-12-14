@@ -2,17 +2,19 @@
 import { Tag, TagType } from '../types';
 
 const DB_NAME = 'SomaticStudioDB';
-const DB_VERSION = 2; // Incremented version for new store
+const DB_VERSION = 3; // Incremented for new store
 const STORES = {
     DEFINITIONS: 'tag_definitions', // Key: tag.id
     MAPPINGS: 'image_mappings',      // Key: fileName, Value: tagIds[]
-    AI_MAPPINGS: 'ai_image_mappings' // Key: fileName, Value: aiTagIds[]
+    AI_MAPPINGS: 'ai_image_mappings', // Key: fileName, Value: aiTagIds[]
+    METADATA: 'image_metadata'       // Key: fileName, Value: { tagVersion: number, ... }
 };
 
 // --- IN-MEMORY CACHE ---
 let definitionsCache: Tag[] = [];
 let mappingsCache: Record<string, string[]> = {};
 let aiMappingsCache: Record<string, string[]> = {};
+let metadataCache: Record<string, any> = {};
 let isInitialized = false;
 
 // --- DATABASE CORE ---
@@ -32,6 +34,9 @@ const openDB = (): Promise<IDBDatabase> => {
             if (!db.objectStoreNames.contains(STORES.AI_MAPPINGS)) {
                 db.createObjectStore(STORES.AI_MAPPINGS);
             }
+            if (!db.objectStoreNames.contains(STORES.METADATA)) {
+                db.createObjectStore(STORES.METADATA);
+            }
         };
 
         request.onsuccess = () => resolve(request.result);
@@ -45,25 +50,19 @@ export const initDatabase = async (): Promise<Tag[]> => {
     try {
         const db = await openDB();
         
-        // 1. Check if DB has definitions
-        const currentTags = await new Promise<Tag[]>((resolve, reject) => {
+        // 1. Hydrate Cache from DB first (Local state takes precedence)
+        const currentTags = await new Promise<Tag[]>((resolve) => {
             const tx = db.transaction(STORES.DEFINITIONS, 'readonly');
-            const req = tx.objectStore(STORES.DEFINITIONS).getAll();
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
+            tx.objectStore(STORES.DEFINITIONS).getAll().onsuccess = (e) => resolve((e.target as IDBRequest).result);
         });
+        
+        if (currentTags) definitionsCache = currentTags;
 
-        // 2. Hydrate Cache if exists
-        if (currentTags.length > 0) {
-            definitionsCache = currentTags;
+        // Hydrate Mappings & Metadata Cache
+        await new Promise<void>((resolve) => {
+            const tx = db.transaction([STORES.MAPPINGS, STORES.AI_MAPPINGS, STORES.METADATA], 'readonly');
             
-            // Hydrate Mappings Cache
-            const tx = db.transaction([STORES.MAPPINGS, STORES.AI_MAPPINGS], 'readonly');
-            
-            // User Mappings
-            const reqCursor = tx.objectStore(STORES.MAPPINGS).openCursor();
-            mappingsCache = {};
-            reqCursor.onsuccess = (e) => {
+            tx.objectStore(STORES.MAPPINGS).openCursor().onsuccess = (e) => {
                 const cursor = (e.target as IDBRequest).result;
                 if (cursor) {
                     mappingsCache[cursor.key as string] = cursor.value;
@@ -71,10 +70,7 @@ export const initDatabase = async (): Promise<Tag[]> => {
                 }
             };
 
-            // AI Mappings
-            const aiReqCursor = tx.objectStore(STORES.AI_MAPPINGS).openCursor();
-            aiMappingsCache = {};
-            aiReqCursor.onsuccess = (e) => {
+            tx.objectStore(STORES.AI_MAPPINGS).openCursor().onsuccess = (e) => {
                 const cursor = (e.target as IDBRequest).result;
                 if (cursor) {
                     aiMappingsCache[cursor.key as string] = cursor.value;
@@ -82,14 +78,19 @@ export const initDatabase = async (): Promise<Tag[]> => {
                 }
             };
 
-            await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); });
-            
-            isInitialized = true;
-            return definitionsCache;
-        }
+            tx.objectStore(STORES.METADATA).openCursor().onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest).result;
+                if (cursor) {
+                    metadataCache[cursor.key as string] = cursor.value;
+                    cursor.continue();
+                }
+            };
 
-        // 3. Seeding Logic (If DB is empty, load from JSONs)
-        console.log("Seeding Database from project configuration...");
+            tx.oncomplete = () => resolve();
+        });
+
+        // 2. ALWAYS Try to Merge from JSONs (Backfill missing data / Update from project config)
+        console.log("Merging project configuration from JSON files...");
         
         // Load User Tags
         try {
@@ -97,23 +98,30 @@ export const initDatabase = async (): Promise<Tag[]> => {
             if (response.ok) {
                 const seedData = await response.json();
                 
-                // Write Definitions
+                const tx = db.transaction([STORES.DEFINITIONS, STORES.MAPPINGS], 'readwrite');
+                
+                // Merge Definitions
                 if (seedData.definitions && Array.isArray(seedData.definitions)) {
-                    await saveTagDefinitions(seedData.definitions);
+                    seedData.definitions.forEach((def: Tag) => {
+                        if (!definitionsCache.some(t => t.id === def.id)) {
+                            definitionsCache.push(def);
+                            tx.objectStore(STORES.DEFINITIONS).put(def);
+                        }
+                    });
                 }
 
-                // Write Mappings
+                // Merge Mappings
                 if (seedData.mappings) {
-                    const tx = db.transaction(STORES.MAPPINGS, 'readwrite');
-                    const store = tx.objectStore(STORES.MAPPINGS);
                     Object.entries(seedData.mappings).forEach(([fileName, tagIds]) => {
-                        store.put(tagIds, fileName);
-                        mappingsCache[fileName] = tagIds as string[];
+                        if (!mappingsCache[fileName]) {
+                            mappingsCache[fileName] = tagIds as string[];
+                            tx.objectStore(STORES.MAPPINGS).put(tagIds, fileName);
+                        }
                     });
                 }
             }
         } catch (err) {
-            console.error("Failed to load tags.json", err);
+            console.warn("Failed to load/merge tags.json", err);
         }
 
         // Load AI Tags
@@ -122,34 +130,34 @@ export const initDatabase = async (): Promise<Tag[]> => {
             if (response.ok) {
                 const seedData = await response.json();
                 
+                const tx = db.transaction([STORES.DEFINITIONS, STORES.AI_MAPPINGS], 'readwrite');
+
                 // Merge AI Definitions
                 if (seedData.definitions && Array.isArray(seedData.definitions)) {
-                    const current = getSavedTagDefinitions();
-                    const merged = [...current];
                     seedData.definitions.forEach((aiTag: Tag) => {
-                         // Force type to AI_GENERATED just in case
-                         aiTag.type = TagType.AI_GENERATED;
-                         if (!merged.some(t => t.id === aiTag.id)) {
-                             merged.push(aiTag);
+                         aiTag.type = TagType.AI_GENERATED; // Force type
+                         if (!definitionsCache.some(t => t.id === aiTag.id)) {
+                             definitionsCache.push(aiTag);
+                             tx.objectStore(STORES.DEFINITIONS).put(aiTag);
                          }
                     });
-                    await saveTagDefinitions(merged);
                 }
 
-                // Write AI Mappings
+                // Merge AI Mappings
                 if (seedData.mappings) {
-                    const tx = db.transaction(STORES.AI_MAPPINGS, 'readwrite');
-                    const store = tx.objectStore(STORES.AI_MAPPINGS);
                     Object.entries(seedData.mappings).forEach(([fileName, tagIds]) => {
-                        store.put(tagIds, fileName);
-                        aiMappingsCache[fileName] = tagIds as string[];
+                        if (!aiMappingsCache[fileName]) {
+                            aiMappingsCache[fileName] = tagIds as string[];
+                            tx.objectStore(STORES.AI_MAPPINGS).put(tagIds, fileName);
+                        }
                     });
                 }
             }
         } catch (err) {
-            console.warn("AI-tags.json not found or failed to load. This is expected if not generated yet.");
+            console.warn("AI-tags.json not found or failed to load.", err);
         }
 
+        isInitialized = true;
         return definitionsCache; 
 
     } catch (e) {
@@ -218,16 +226,37 @@ export const saveAITagsForFile = async (fileName: string, tagIds: string[]) => {
     });
 };
 
+// METADATA (Version Tracking)
+export const getSavedImageMetadata = (fileName: string): { tagVersion?: number } => {
+    return metadataCache[fileName] || {};
+};
+
+export const saveImageMetadata = async (fileName: string, metadata: { tagVersion?: number }) => {
+    const existing = metadataCache[fileName] || {};
+    const updated = { ...existing, ...metadata };
+    metadataCache[fileName] = updated;
+
+    const db = await openDB();
+    const tx = db.transaction(STORES.METADATA, 'readwrite');
+    tx.objectStore(STORES.METADATA).put(updated, fileName);
+
+    return new Promise<void>((resolve) => {
+        tx.oncomplete = () => resolve();
+    });
+};
+
 export const clearDatabase = async () => {
     const db = await openDB();
-    const tx = db.transaction([STORES.DEFINITIONS, STORES.MAPPINGS, STORES.AI_MAPPINGS], 'readwrite');
+    const tx = db.transaction([STORES.DEFINITIONS, STORES.MAPPINGS, STORES.AI_MAPPINGS, STORES.METADATA], 'readwrite');
     tx.objectStore(STORES.DEFINITIONS).clear();
     tx.objectStore(STORES.MAPPINGS).clear();
     tx.objectStore(STORES.AI_MAPPINGS).clear();
+    tx.objectStore(STORES.METADATA).clear();
     
     definitionsCache = [];
     mappingsCache = {};
     aiMappingsCache = {};
+    metadataCache = {};
     
     return new Promise<void>((resolve) => {
         tx.oncomplete = () => resolve();
@@ -242,8 +271,6 @@ export const exportDatabase = async () => {
         db.transaction(STORES.DEFINITIONS, 'readonly').objectStore(STORES.DEFINITIONS).getAll().onsuccess = (e) => resolve((e.target as IDBRequest).result);
     });
 
-    // Filter out AI tags for standard export if desired, or keep all. 
-    // Usually standard export implies User curated tags. Let's filter out AI tags for the main file.
     const userTags = tags.filter(t => t.type !== TagType.AI_GENERATED);
 
     const mappings: Record<string, string[]> = {};

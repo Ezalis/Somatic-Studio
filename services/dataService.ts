@@ -1,6 +1,6 @@
 
 import { ImageNode, Tag, TagType } from '../types';
-import { getSavedTagsForFile, getSavedAITagsForFile } from './resourceService';
+import { getSavedTagsForFile, getSavedAITagsForFile, getSavedImageMetadata } from './resourceService';
 import exifr from 'exifr';
 
 // --- Utilities ---
@@ -143,6 +143,9 @@ export const processImageFile = async (
     const savedAITags = getSavedAITagsForFile(fileName);
     const aiTagIds = savedAITags || [];
 
+    // Load Metadata (Version)
+    const metadata = getSavedImageMetadata(fileName);
+
     return {
         image: {
             id: generateUUID(),
@@ -158,6 +161,7 @@ export const processImageFile = async (
             iso: exifData?.ISO || 0,
             tagIds: tagIds,
             aiTagIds: aiTagIds,
+            tagVersion: metadata.tagVersion,
             palette: palette 
         },
         newTags: newTags
@@ -165,9 +169,7 @@ export const processImageFile = async (
 };
 
 export const generateMockImages = (count: number, availableTags: Tag[]): ImageNode[] => {
-    // Mock data generator kept simple for brevity, adding empty aiTagIds
+    // Mock data generator kept simple for brevity
     const images: ImageNode[] = [];
-    // ... existing logic mock if needed, or leave it. 
-    // Since this is rarely used in the live app based on the prompt flow, I'll ensure type safety.
     return images; 
 };
