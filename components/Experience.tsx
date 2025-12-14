@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { ImageNode, Tag, TagType, SimulationNodeDatum, ViewMode, AnchorState, ExperienceContext } from '../types';
-import { X, Camera, Activity, Maximize2, Calendar, Aperture, Info, Hash, Palette } from 'lucide-react';
+import { X, Camera, Activity, Maximize2, Calendar, Aperture, Info, Hash, Palette, Sparkles } from 'lucide-react';
 
 interface ExperienceProps {
     images: ImageNode[];
@@ -80,10 +80,13 @@ const getDominantColorsFromNodes = (nodes: SimNode[], count: number = 5, exclude
         .map(entry => entry[0]);
 };
 
-const getRelatedTagsFromNodes = (nodes: SimNode[], tags: Tag[], count: number = 5, excludeTagId?: string): Tag[] => {
+const getRelatedTagsFromNodes = (nodes: SimNode[], tags: Tag[], count: number = 6, excludeTagId?: string): Tag[] => {
     const tagCounts: Record<string, number> = {};
+    
     nodes.forEach(node => {
-        node.original.tagIds.forEach(tId => {
+        // Collect BOTH User and AI tags
+        const allTags = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
+        allTags.forEach(tId => {
             if (tId === excludeTagId) return;
             tagCounts[tId] = (tagCounts[tId] || 0) + 1;
         });
@@ -157,26 +160,39 @@ const Experience: React.FC<ExperienceProps> = ({
                  else {
                      const anchorImg = images.find(i => i.id === anchor.id);
                      if (anchorImg) {
-                         const sharedTags = node.original.tagIds.filter(t => anchorImg.tagIds.includes(t));
+                         // Combine User and AI tags for both anchor and target node
+                         const anchorTags = [...anchorImg.tagIds, ...(anchorImg.aiTagIds || [])];
+                         const targetTags = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
+                         
+                         const sharedTags = targetTags.filter(t => anchorTags.includes(t));
+                         
                          sharedTags.forEach(tid => {
                              const t = getTagById(tid);
                              if (t) {
-                                 if (t.type === TagType.QUALITATIVE) score += 25; 
+                                 // Weighting: Treat AI Tags similarly to Qualitative/Categorical tags for strong clustering
+                                 if (t.type === TagType.AI_GENERATED) score += 20;
+                                 else if (t.type === TagType.QUALITATIVE) score += 25; 
                                  else if (t.type === TagType.CATEGORICAL) score += 20;
                                  else if (t.type === TagType.TECHNICAL) score += 5;
                                  else score += 2;
-                                 if (score > 20) newCommonTags.add(tid);
+                                 
+                                 if (score > 15) newCommonTags.add(tid);
                              }
                          });
+                         
+                         // Technical & Meta matches
                          if (node.original.cameraModel === anchorImg.cameraModel && node.original.cameraModel !== 'Unknown Camera') score += 10;
                          if (node.original.lensModel === anchorImg.lensModel && node.original.lensModel !== 'Unknown Lens') score += 15;
                          if (node.original.shootDayClusterId === anchorImg.shootDayClusterId) score += 40; 
+                         
                          const colorDist = getMinPaletteDistance(anchorImg.palette, node.original.palette);
                          if (colorDist < 500) score += 20;
                      }
                  }
              } else if (anchor.mode === 'TAG') {
-                 if (node.original.tagIds.includes(anchor.id)) score = 100;
+                 // Check both tag arrays
+                 const hasTag = node.original.tagIds.includes(anchor.id) || (node.original.aiTagIds && node.original.aiTagIds.includes(anchor.id));
+                 if (hasTag) score = 100;
              } else if (anchor.mode === 'COLOR') {
                  const minD = node.original.palette.reduce((min, c) => Math.min(min, getColorDistSq(c, anchor.id)), Infinity);
                  if (minD < 1500) score = 100;
@@ -216,6 +232,7 @@ const Experience: React.FC<ExperienceProps> = ({
                         n.vx = (cx - n.x) * 0.01; 
                         n.vy = (cy - n.y) * 0.01;
                     }
+                    visibleSubset.push(n);
                 } else {
                     n.isVisible = false;
                 }
@@ -224,9 +241,9 @@ const Experience: React.FC<ExperienceProps> = ({
             // Context for Image Mode
             const anchorImg = images.find(i => i.id === anchor.id);
             calculatedPalette = anchorImg ? anchorImg.palette : [];
-            const tagArray = Array.from(newCommonTags).map(id => getTagById(id)).filter(Boolean) as Tag[];
-            const thematic = tagArray.filter(t => t.type !== TagType.TECHNICAL && t.type !== TagType.SEASONAL);
-            calculatedTags = thematic.length > 0 ? thematic : tagArray;
+            
+            // Refined Context: Get most frequent tags among the visible subset
+            calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 6);
 
         } else if (anchor.mode === 'TAG') {
              // In tag mode, all matching nodes are visible
@@ -236,9 +253,8 @@ const Experience: React.FC<ExperienceProps> = ({
              });
 
              // Context: Selected Tag + Co-occurring Tags
-             // We explicitly exclude the current anchor tag from the suggestions
              calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 5, anchor.id);
-             calculatedPalette = []; // Palette disabled for Tag mode as requested
+             calculatedPalette = []; 
 
         } else if (anchor.mode === 'COLOR') {
              // In color mode, matching nodes are visible
@@ -248,10 +264,9 @@ const Experience: React.FC<ExperienceProps> = ({
              });
 
              // Context: Selected Color + Adjacent Palette
-             // We put the anchor color first, then finding dominant others
              const adjacent = getDominantColorsFromNodes(visibleSubset, 5, anchor.id);
              calculatedPalette = [anchor.id, ...adjacent].slice(0, 5);
-             calculatedTags = []; // No specific tag anchor
+             calculatedTags = []; 
 
         } else {
             // NONE mode
@@ -754,16 +769,20 @@ const Experience: React.FC<ExperienceProps> = ({
 
                                 <div className="h-px w-full bg-zinc-100" />
 
-                                {/* Tags */}
+                                {/* Tags - Unified User & AI */}
                                 <div>
                                     <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                                         <Hash size={12} />
                                         Semantic Tags
                                     </h3>
                                     <div className="flex flex-wrap gap-2">
-                                        {activeNode.original.tagIds.map(tid => {
+                                        {/* Combine both arrays for display */}
+                                        {[...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])].map(tid => {
                                             const tag = tags.find(t => t.id === tid);
                                             if (!tag) return null;
+                                            
+                                            const isAI = tag.type === TagType.AI_GENERATED;
+                                            
                                             return (
                                                 <button 
                                                     key={tid} 
@@ -772,8 +791,14 @@ const Experience: React.FC<ExperienceProps> = ({
                                                         onAnchorChange({ mode: 'TAG', id: tag.id, meta: tag });
                                                         setIsDetailOpen(false);
                                                     }}
-                                                    className="px-3 py-1 bg-zinc-100 text-zinc-600 text-xs rounded-full border border-zinc-200 hover:bg-zinc-200 hover:text-zinc-900 transition-colors"
+                                                    className={`
+                                                        px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5
+                                                        ${isAI 
+                                                            ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100 hover:border-violet-300' 
+                                                            : 'bg-zinc-100 text-zinc-600 border-zinc-200 hover:bg-zinc-200 hover:text-zinc-900'}
+                                                    `}
                                                 >
+                                                    {isAI && <Sparkles size={10} className="opacity-70" />}
                                                     {tag.label}
                                                 </button>
                                             );

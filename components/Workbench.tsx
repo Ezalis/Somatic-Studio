@@ -1,7 +1,8 @@
+
 import React, { useState, useMemo } from 'react';
 import { ImageNode, Tag, TagType, ViewMode } from '../types';
 import { 
-    Camera, Plus, Search, X, Check, Eraser, AlertCircle
+    Camera, Plus, Search, X, Check, Eraser, AlertCircle, Sparkles, BrainCircuit, Download
 } from 'lucide-react';
 import { generateUUID } from '../services/dataService';
 import { 
@@ -16,6 +17,10 @@ interface WorkbenchProps {
     onAddTag: (newTag: Tag) => void;
     onResetDatabase: () => void;
     onViewChange: (mode: ViewMode) => void;
+    onRunAIAnalysis: () => void;
+    onExportAITags: () => void;
+    isAnalyzing: boolean;
+    analysisProgress: number;
 }
 
 const getTagColor = (type: TagType) => {
@@ -24,6 +29,7 @@ const getTagColor = (type: TagType) => {
         case TagType.SEASONAL: return 'bg-emerald-50 text-emerald-700 border-emerald-100 group-hover:border-emerald-200';
         case TagType.CATEGORICAL: return 'bg-sky-50 text-sky-700 border-sky-100 group-hover:border-sky-200';
         case TagType.QUALITATIVE: return 'bg-rose-50 text-rose-700 border-rose-100 group-hover:border-rose-200';
+        case TagType.AI_GENERATED: return 'bg-violet-50 text-violet-700 border-violet-100 group-hover:border-violet-200';
         default: return 'bg-zinc-100 text-zinc-600 border-zinc-200';
     }
 };
@@ -32,7 +38,11 @@ const Workbench: React.FC<WorkbenchProps> = ({
     images, 
     tags, 
     onUpdateImages, 
-    onAddTag
+    onAddTag,
+    onRunAIAnalysis,
+    onExportAITags,
+    isAnalyzing,
+    analysisProgress
 }) => {
     // --- STATE ---
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -51,7 +61,9 @@ const Workbench: React.FC<WorkbenchProps> = ({
         return images.filter(img => {
             // 1. Tag Filters
             if (activeTagFilters.size > 0) {
-                const hasAll = Array.from(activeTagFilters).every(tId => img.tagIds.includes(tId));
+                // Combine manual and AI tags for filtering
+                const allImgTags = [...img.tagIds, ...(img.aiTagIds || [])];
+                const hasAll = Array.from(activeTagFilters).every(tId => allImgTags.includes(tId));
                 if (!hasAll) return false;
             }
             // 2. Text Search
@@ -63,7 +75,8 @@ const Workbench: React.FC<WorkbenchProps> = ({
                     img.lensModel.toLowerCase().includes(q);
                 
                 if (matchesMeta) return true;
-                const imgTagLabels = img.tagIds.map(id => tags.find(t => t.id === id)?.label.toLowerCase());
+                const allImgTagIds = [...img.tagIds, ...(img.aiTagIds || [])];
+                const imgTagLabels = allImgTagIds.map(id => tags.find(t => t.id === id)?.label.toLowerCase());
                 if (imgTagLabels.some(l => l?.includes(q))) return true;
                 return false;
             }
@@ -160,57 +173,86 @@ const Workbench: React.FC<WorkbenchProps> = ({
     return (
         <div className="flex flex-col h-full bg-[#faf9f6] text-zinc-700 font-mono text-sm relative">
             
-            {/* --- FILTER ROW (No Top Header) --- */}
-            <div className="px-6 py-3 flex items-center gap-4 border-b border-zinc-200 bg-white/50 backdrop-blur-sm z-20 shadow-sm">
-                <div className="relative flex-1 max-w-md">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                    <input 
-                        type="text" 
-                        placeholder="Filter by name, camera, lens, or tag..." 
-                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-zinc-200 rounded-md text-xs focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-200 transition-all shadow-sm"
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                    />
-                </div>
-                
-                {/* Active Filters */}
-                <div className="flex items-center gap-2 flex-1 overflow-x-auto no-scrollbar">
-                    {activeTagFilters.size > 0 && (
-                        <span className="text-[10px] uppercase font-bold text-zinc-400 mr-1 flex-shrink-0">Filtered by:</span>
-                    )}
-                    {Array.from(activeTagFilters).map(tId => {
-                        const tag = getTagById(tId);
-                        if (!tag) return null;
-                        return (
+            {/* --- FILTER ROW & AI ACTIONS --- */}
+            <div className="px-6 py-3 flex items-center justify-between gap-4 border-b border-zinc-200 bg-white/50 backdrop-blur-sm z-20 shadow-sm">
+                <div className="flex items-center gap-4 flex-1">
+                    <div className="relative w-64">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input 
+                            type="text" 
+                            placeholder="Filter..." 
+                            className="w-full pl-9 pr-3 py-1.5 bg-white border border-zinc-200 rounded-md text-xs focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-200 transition-all shadow-sm"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                    
+                    {/* Active Filters */}
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[500px]">
+                        {activeTagFilters.size > 0 && (
+                            <span className="text-[10px] uppercase font-bold text-zinc-400 mr-1 flex-shrink-0">Filtered by:</span>
+                        )}
+                        {Array.from(activeTagFilters).map(tId => {
+                            const tag = getTagById(tId);
+                            if (!tag) return null;
+                            return (
+                                <button 
+                                    key={tId}
+                                    onClick={() => {
+                                        const newSet = new Set(activeTagFilters);
+                                        newSet.delete(tId);
+                                        setActiveTagFilters(newSet);
+                                    }}
+                                    className="flex items-center gap-1.5 px-2 py-1 bg-white border border-zinc-200 rounded text-xs text-zinc-700 hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors shadow-sm whitespace-nowrap"
+                                >
+                                    <span className={`w-1.5 h-1.5 rounded-full ${tag.type === TagType.AI_GENERATED ? 'bg-violet-500' : 'bg-teal-500'}`} />
+                                    {tag.label}
+                                    <X size={10} className="ml-1" />
+                                </button>
+                            );
+                        })}
+                        {activeTagFilters.size > 0 && (
                             <button 
-                                key={tId}
-                                onClick={() => {
-                                    const newSet = new Set(activeTagFilters);
-                                    newSet.delete(tId);
-                                    setActiveTagFilters(newSet);
-                                }}
-                                className="flex items-center gap-1.5 px-2 py-1 bg-white border border-zinc-200 rounded text-xs text-zinc-700 hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors shadow-sm whitespace-nowrap"
+                                onClick={() => setActiveTagFilters(new Set())}
+                                className="text-[10px] text-zinc-400 hover:text-zinc-600 underline ml-2"
                             >
-                                <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
-                                {tag.label}
-                                <X size={10} className="ml-1" />
+                                Clear All
                             </button>
-                        );
-                    })}
-                    {activeTagFilters.size > 0 && (
-                        <button 
-                            onClick={() => setActiveTagFilters(new Set())}
-                            className="text-[10px] text-zinc-400 hover:text-zinc-600 underline ml-2"
-                        >
-                            Clear All
-                        </button>
-                    )}
+                        )}
+                    </div>
+                </div>
+
+                {/* AI & Export Actions */}
+                <div className="flex items-center gap-3 pl-4 border-l border-zinc-200">
+                     <button
+                        onClick={onRunAIAnalysis}
+                        disabled={isAnalyzing || images.length === 0}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors text-xs font-bold ${isAnalyzing ? 'opacity-70 cursor-wait' : ''}`}
+                        title="Generate AI Tags for all images"
+                    >
+                        {isAnalyzing ? (
+                             <div className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <BrainCircuit size={14} />
+                        )}
+                        <span>{isAnalyzing ? `ANALYZING ${analysisProgress}%` : 'GEMINI ANALYSIS'}</span>
+                    </button>
+
+                    <button
+                        onClick={onExportAITags}
+                        disabled={isAnalyzing}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 transition-colors text-xs font-medium"
+                        title="Export AI-tags.json"
+                    >
+                        <Download size={14} />
+                        <span>AI-TAGS.JSON</span>
+                    </button>
                 </div>
             </div>
 
             {/* --- LIST HEADER --- */}
             {filteredImages.length > 0 && (
-                <div className="grid grid-cols-[40px_60px_140px_1fr_200px] gap-4 px-6 py-2 border-b border-zinc-200 text-[10px] text-zinc-400 uppercase tracking-wider font-bold bg-zinc-50/50">
+                <div className="grid grid-cols-[40px_60px_140px_1fr_1fr_200px] gap-4 px-6 py-2 border-b border-zinc-200 text-[10px] text-zinc-400 uppercase tracking-wider font-bold bg-zinc-50/50">
                     <div className="flex justify-center items-center">
                         <button onClick={handleSelectAll} className="hover:text-zinc-600">
                              {selectedIds.size > 0 && selectedIds.size === filteredImages.length ? <AlertCircle size={14} /> : <div className="w-3.5 h-3.5 border border-zinc-300 rounded-sm" />}
@@ -219,6 +261,10 @@ const Workbench: React.FC<WorkbenchProps> = ({
                     <div>Preview</div>
                     <div>Captured</div>
                     <div>Metadata & Tags</div>
+                    <div className="flex items-center gap-2 text-violet-400">
+                        <Sparkles size={10} />
+                        AI Insights
+                    </div>
                     <div>Technical</div>
                 </div>
             )}
@@ -254,7 +300,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                             key={img.id}
                             onClick={(e) => { e.stopPropagation(); handleSelect(img.id, e); }}
                             className={`
-                                grid grid-cols-[40px_60px_140px_1fr_200px] gap-4 px-6 py-3 border-b border-zinc-100 
+                                grid grid-cols-[40px_60px_140px_1fr_1fr_200px] gap-4 px-6 py-3 border-b border-zinc-100 
                                 transition-colors cursor-pointer select-none group items-center relative
                                 ${isSelected ? 'bg-indigo-50/40 border-l-4 border-l-indigo-500 pl-[20px]' : 'hover:bg-white border-l-4 border-l-transparent pl-[20px]'}
                             `}
@@ -277,7 +323,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                 <span className="text-[10px] opacity-70">{dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                             </div>
 
-                            {/* Tags */}
+                            {/* Manual Tags */}
                             <div className="flex flex-wrap gap-1.5 items-center">
                                 {img.tagIds.map(tid => {
                                     const tag = getTagById(tid);
@@ -306,6 +352,36 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                         </button>
                                     );
                                 })}
+                            </div>
+
+                            {/* AI Tags (New Column) */}
+                            <div className="flex flex-wrap gap-1.5 items-center relative min-h-[24px]">
+                                {img.aiTagIds && img.aiTagIds.length > 0 ? (
+                                    img.aiTagIds.map(tid => {
+                                        const tag = getTagById(tid);
+                                        if (!tag) return null;
+                                        return (
+                                            <button 
+                                                key={tid}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const newSet = new Set(activeTagFilters);
+                                                    newSet.add(tid);
+                                                    setActiveTagFilters(newSet);
+                                                }}
+                                                className={`
+                                                    text-[10px] px-2 py-0.5 rounded border font-medium transition-all
+                                                    bg-violet-50 text-violet-700 border-violet-100 group-hover:border-violet-200
+                                                    hover:shadow-sm cursor-pointer active:scale-95 flex items-center gap-1
+                                                `}
+                                            >
+                                                {tag.label}
+                                            </button>
+                                        );
+                                    })
+                                ) : (
+                                    <span className="text-[10px] text-zinc-300 italic">No AI data</span>
+                                )}
                             </div>
 
                             {/* Technical */}
