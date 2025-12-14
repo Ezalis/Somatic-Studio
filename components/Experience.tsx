@@ -189,8 +189,26 @@ const Experience: React.FC<ExperienceProps> = ({
             const visibleNeighborIds = new Set(neighbors.slice(0, MAX_NEIGHBORS).map(n => n.id));
             
             scoredNodes.forEach(n => {
-                if (n.id === anchor.id || (visibleNeighborIds.has(n.id) && n.relevanceScore > 10)) {
+                const isNeighbor = visibleNeighborIds.has(n.id) && n.relevanceScore > 10;
+                const isAnchor = n.id === anchor.id;
+                const shouldBeVisible = isAnchor || isNeighbor;
+                const wasVisible = n.isVisible;
+
+                if (shouldBeVisible) {
                     n.isVisible = true;
+                    // IF NODE WAS INVISIBLE, SNAP IT CLOSER TO REDUCE TRAVEL TIME
+                    if (!wasVisible) {
+                        const cx = window.innerWidth / 2;
+                        const cy = window.innerHeight / 2;
+                        const theta = Math.random() * Math.PI * 2;
+                        // Spawn at edge of "immediate" space (500-800px)
+                        const R = 600 + Math.random() * 200; 
+                        n.x = cx + R * Math.cos(theta);
+                        n.y = cy + R * Math.sin(theta);
+                        // Initial inward velocity kick
+                        n.vx = (cx - n.x) * 0.01; 
+                        n.vy = (cy - n.y) * 0.01;
+                    }
                 } else {
                     n.isVisible = false;
                 }
@@ -331,14 +349,14 @@ const Experience: React.FC<ExperienceProps> = ({
             .force("charge", d3.forceManyBody<SimNode>().strength((d) => {
                 if (!d.isVisible) return 0;
                 if (anchor.mode === 'NONE') return -50; // Moderate repulsion for spacing
-                if (d.id === anchor.id) return -1200; 
-                return -100;
+                if (d.id === anchor.id) return -1500; // Stronger repulsion from Hero to create space
+                return -200; // Increased repulsion between neighbors for better cloud distribution
             }))
             .force("collide", d3.forceCollide<SimNode>().radius((d) => {
                  if (!d.isVisible) return 0;
                  if (anchor.mode === 'IMAGE') {
-                     if (d.id === anchor.id) return heroRadius * 0.9; 
-                     return 60; 
+                     if (d.id === anchor.id) return heroRadius * 0.95; // Slightly larger for cleaner separation
+                     return 65; 
                  }
                  return 55; // Slightly larger collision radius for home view spacing
             }).strength(0.8)); 
@@ -350,6 +368,7 @@ const Experience: React.FC<ExperienceProps> = ({
             const cx = width / 2;
             const cy = height / 2;
             const time = Date.now() / 1000;
+            const lerpFactor = 0.1; // Smoother, slightly faster scale transition (was 0.08)
 
             simNodes.forEach((node, i) => {
                 const isAnchor = anchor.mode === 'IMAGE' && node.id === anchor.id;
@@ -380,36 +399,43 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
                 else if (anchor.mode === 'IMAGE') {
                     if (isAnchor) {
-                        // HERO: Locked tight to position
+                        // HERO PHYSICS: Intentional & Graceful
                         const targetY = height * 0.45; 
-                        node.vx = (node.vx || 0) + (cx - node.x) * 0.2; 
-                        node.vy = (node.vy || 0) + (targetY - node.y) * 0.2;
+                        
+                        // Stronger pull for responsive start
+                        const k = 0.12;
+                        node.vx = (node.vx || 0) + (cx - node.x) * k; 
+                        node.vy = (node.vy || 0) + (targetY - node.y) * k;
+                        
+                        // Heavy localized damping for graceful landing (Critically Damped feel)
+                        // Prevents wobble/overshoot when arriving at target
+                        node.vx *= 0.8; 
+                        node.vy *= 0.8;
+
                         node.targetScale = heroScale;
                         node.targetOpacity = 1;
                     } 
                     else if (node.isVisible) {
-                        // ORBITING NEIGHBORS
-                        const orbitCenterY = height * 0.45;
-                        const minOrbitR = heroRadius + 80;
-                        const idx = activeNodes.indexOf(node);
-                        if (idx !== -1) {
-                            const angleStep = (Math.PI * 2) / activeNodes.length;
-                            // Continuous slow rotation
-                            const baseAngle = (node.orbitOffset || 0) + (time * 0.05); 
-                            const angle = baseAngle + (idx * angleStep);
-                            
-                            // Breathing orbit radius
-                            const breathe = Math.sin(time * 0.8 + idx) * 15;
-                            const orbitR = minOrbitR + breathe;
-                            
-                            const tx = cx + orbitR * Math.cos(angle);
-                            const ty = orbitCenterY + orbitR * Math.sin(angle);
+                        // ORGANIC NEIGHBOR CLOUD
+                        const targetY = height * 0.45;
+                        
+                        // 1. Gentle Gravity (Pull towards center/hero)
+                        const gravity = 0.005; 
+                        node.vx = (node.vx || 0) + (cx - node.x) * gravity;
+                        node.vy = (node.vy || 0) + (targetY - node.y) * gravity;
 
-                            node.vx = (node.vx || 0) + (tx - node.x) * 0.05;
-                            node.vy = (node.vy || 0) + (ty - node.y) * 0.05;
-                            node.targetScale = node.relevanceScore > 40 ? 0.6 : 0.45;
-                            node.targetOpacity = 1.0; 
-                        }
+                        // 2. Swirl Force (Tangential movement)
+                        const dx = node.x - cx;
+                        const dy = node.y - targetY;
+                        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+                        const swirlSpeed = 0.2; 
+                        
+                        // Apply tangential vector (-dy, dx) normalized
+                        node.vx += (-dy / dist) * swirlSpeed;
+                        node.vy += (dx / dist) * swirlSpeed;
+
+                        node.targetScale = node.relevanceScore > 40 ? 0.6 : 0.45;
+                        node.targetOpacity = 1.0; 
                     } 
                     else {
                         // Exit transition
@@ -418,8 +444,15 @@ const Experience: React.FC<ExperienceProps> = ({
                         const dx = node.x - cx;
                         const dy = node.y - cy;
                         const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-                        node.vx = (node.vx || 0) + (dx/dist) * 5;
-                        node.vy = (node.vy || 0) + (dy/dist) * 5;
+                        
+                        // Limit push distance so they don't fly to infinity (makes return faster)
+                        if (dist < 1500) {
+                             node.vx = (node.vx || 0) + (dx/dist) * 5;
+                             node.vy = (node.vy || 0) + (dy/dist) * 5;
+                        } else {
+                            node.vx = 0;
+                            node.vy = 0;
+                        }
                     }
                 }
                 else if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') {
@@ -450,9 +483,10 @@ const Experience: React.FC<ExperienceProps> = ({
                 // Damping
                 node.vx = (node.vx || 0) * 0.9;
                 node.vy = (node.vy || 0) * 0.9;
-                const lerp = 0.1;
-                node.currentScale += (node.targetScale - node.currentScale) * lerp;
-                node.currentOpacity += (node.targetOpacity - node.currentOpacity) * lerp;
+                
+                // Smoother Scale & Opacity Lerp
+                node.currentScale += (node.targetScale - node.currentScale) * lerpFactor;
+                node.currentOpacity += (node.targetOpacity - node.currentOpacity) * lerpFactor;
 
                 const el = nodeRefs.current.get(node.id);
                 if (el) {
@@ -694,12 +728,17 @@ const Experience: React.FC<ExperienceProps> = ({
                                             const tag = tags.find(t => t.id === tid);
                                             if (!tag) return null;
                                             return (
-                                                <span 
+                                                <button 
                                                     key={tid} 
-                                                    className="px-3 py-1 bg-zinc-100 text-zinc-600 text-xs rounded-full border border-zinc-200"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onAnchorChange({ mode: 'TAG', id: tag.id, meta: tag });
+                                                        setIsDetailOpen(false);
+                                                    }}
+                                                    className="px-3 py-1 bg-zinc-100 text-zinc-600 text-xs rounded-full border border-zinc-200 hover:bg-zinc-200 hover:text-zinc-900 transition-colors"
                                                 >
                                                     {tag.label}
-                                                </span>
+                                                </button>
                                             );
                                         })}
                                     </div>
@@ -713,11 +752,21 @@ const Experience: React.FC<ExperienceProps> = ({
                                     </h3>
                                     <div className="flex h-12 w-full rounded-lg overflow-hidden border border-zinc-200 shadow-sm">
                                         {activeNode.original.palette.map((color, i) => (
-                                            <div key={i} className="flex-1 h-full group relative" style={{ backgroundColor: color }}>
+                                            <button 
+                                                key={i} 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onAnchorChange({ mode: 'COLOR', id: color, meta: color });
+                                                    setIsDetailOpen(false);
+                                                }}
+                                                className="flex-1 h-full group relative hover:opacity-90 transition-opacity" 
+                                                style={{ backgroundColor: color }}
+                                                title="Click to explore color"
+                                            >
                                                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 text-white text-[10px] font-mono transition-opacity">
                                                     {color}
                                                 </div>
-                                            </div>
+                                            </button>
                                         ))}
                                     </div>
                                 </div>
