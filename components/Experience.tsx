@@ -66,6 +66,15 @@ const getMinPaletteDistance = (p1: string[], p2: string[]): number => {
     return min;
 };
 
+const MONO_KEYWORDS = ['b&w', 'black and white', 'monochrome', 'grayscale', 'noir', 'silver gelatin'];
+
+const isMonochrome = (tags: Tag[], tagIds: string[]) => {
+    return tagIds.some(id => {
+        const tag = tags.find(t => t.id === id);
+        return tag && MONO_KEYWORDS.some(k => tag.label.toLowerCase().includes(k));
+    });
+};
+
 const getDominantColorsFromNodes = (nodes: SimNode[], count: number = 5, excludeColor?: string): string[] => {
     const colorCounts: Record<string, number> = {};
     nodes.forEach(node => {
@@ -155,42 +164,84 @@ const Experience: React.FC<ExperienceProps> = ({
         // --- A. Scoring Nodes ---
         const scoredNodes = simNodes.map(node => {
              let score = 0;
+             
              if (anchor.mode === 'IMAGE') {
-                 if (node.id === anchor.id) score = 1000;
+                 if (node.id === anchor.id) score = 10000; // Hero is king
                  else {
                      const anchorImg = images.find(i => i.id === anchor.id);
                      if (anchorImg) {
-                         // Combine User and AI tags for both anchor and target node
                          const anchorTags = [...anchorImg.tagIds, ...(anchorImg.aiTagIds || [])];
                          const targetTags = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
                          
+                         const anchorIsMono = isMonochrome(tags, anchorTags);
+                         const targetIsMono = isMonochrome(tags, targetTags);
+                         
+                         const colorDist = getMinPaletteDistance(anchorImg.palette, node.original.palette);
+                         const sameDate = node.original.shootDayClusterId === anchorImg.shootDayClusterId;
+                         
+                         // Tag Overlap Calculation
                          const sharedTags = targetTags.filter(t => anchorTags.includes(t));
+                         let sharedAICount = 0;
                          
                          sharedTags.forEach(tid => {
                              const t = getTagById(tid);
                              if (t) {
-                                 // Weighting: Treat AI Tags similarly to Qualitative/Categorical tags for strong clustering
-                                 if (t.type === TagType.AI_GENERATED) score += 20;
+                                 if (t.type === TagType.AI_GENERATED) {
+                                     score += 20;
+                                     sharedAICount++;
+                                 }
                                  else if (t.type === TagType.QUALITATIVE) score += 25; 
                                  else if (t.type === TagType.CATEGORICAL) score += 20;
                                  else if (t.type === TagType.TECHNICAL) score += 5;
                                  else score += 2;
-                                 
-                                 if (score > 15) newCommonTags.add(tid);
                              }
                          });
-                         
-                         // Technical & Meta matches
+
+                         // --- STRICT COLOR & B&W LOGIC ---
+
+                         if (anchorIsMono) {
+                             // SCENARIO 1: Hero is B&W
+                             // Rule: "make an attempt to pull in images taken on the same date even if they don't have the b&w tag"
+                             // Rule: Ignore color variance penalties generally for B&W heroes as they act as timeless anchors
+                             
+                             if (sameDate) score += 500; // Massive boost for same date
+                             if (sharedAICount >= 2) score += 100; // Boost for semantic similarity
+                             score += 50; // Base boost for visibility
+                             
+                             // We don't penalize color distance here because B&W can match colored photos structurally/temporally
+                         } 
+                         else {
+                             // SCENARIO 2: Hero is Color
+                             
+                             if (targetIsMono) {
+                                 // Sub-rule: "It is ok if the hero is color and the neighbor is b&w to be included"
+                                 // We grant a base score to allow inclusion if other factors match (tags/date), bypassing color penalty.
+                                 score += 50; 
+
+                                 if (sameDate) score += 200;
+                                 if (sharedAICount >= 2) score += 100;
+                             } 
+                             else {
+                                 // Sub-rule: Both are Color
+                                 // Rule: "I want the hero color and neighbor color to be similar for them to be included"
+                                 // We apply stricter variance penalties here.
+                                 
+                                 if (colorDist < 2500) score += 100; // Very tight match
+                                 else if (colorDist < 5000) score += 50; // Good match
+                                 else if (colorDist < 8000) score += 10; // Acceptable match
+                                 
+                                 // STRICT EXCLUSION FOR VARIANCE
+                                 else if (colorDist > 8000) score -= 2000; // Hard exclude: Colors are clashing/too different
+                                 else score -= 100; // Moderate penalty for variance between 5000-8000
+                             }
+                         }
+
+                         // Standard Meta Matches (Secondary importance now)
                          if (node.original.cameraModel === anchorImg.cameraModel && node.original.cameraModel !== 'Unknown Camera') score += 10;
                          if (node.original.lensModel === anchorImg.lensModel && node.original.lensModel !== 'Unknown Lens') score += 15;
-                         if (node.original.shootDayClusterId === anchorImg.shootDayClusterId) score += 40; 
-                         
-                         const colorDist = getMinPaletteDistance(anchorImg.palette, node.original.palette);
-                         if (colorDist < 500) score += 20;
                      }
                  }
              } else if (anchor.mode === 'TAG') {
-                 // Check both tag arrays
                  const hasTag = node.original.tagIds.includes(anchor.id) || (node.original.aiTagIds && node.original.aiTagIds.includes(anchor.id));
                  if (hasTag) score = 100;
              } else if (anchor.mode === 'COLOR') {
@@ -202,33 +253,40 @@ const Experience: React.FC<ExperienceProps> = ({
 
         // --- B. Determine Visibility & Context ---
         
-        // Helper to get visible subset for context calculation
         const visibleSubset: SimNode[] = [];
 
         if (anchor.mode === 'IMAGE') {
+            // Filter out nodes with negative scores (excluded by color variance)
+            // But ensure we don't return an empty set if everything is penalized
             const neighbors = scoredNodes.filter(n => n.id !== anchor.id);
             neighbors.sort((a, b) => b.relevanceScore - a.relevanceScore);
-            const MAX_NEIGHBORS = 7;
-            const visibleNeighborIds = new Set(neighbors.slice(0, MAX_NEIGHBORS).map(n => n.id));
+            
+            // DYNAMIC DENSITY LOGIC
+            // Threshold for "strong match"
+            const RELEVANCE_THRESHOLD = 50; 
+            const strongMatchCount = neighbors.filter(n => n.relevanceScore >= RELEVANCE_THRESHOLD).length;
+            
+            const visibleCount = Math.max(5, Math.min(18, strongMatchCount));
+            
+            const visibleNeighborIds = new Set(neighbors.slice(0, visibleCount).map(n => n.id));
             
             scoredNodes.forEach(n => {
-                const isNeighbor = visibleNeighborIds.has(n.id) && n.relevanceScore > 10;
                 const isAnchor = n.id === anchor.id;
-                const shouldBeVisible = isAnchor || isNeighbor;
+                const isNeighbor = visibleNeighborIds.has(n.id);
+                
+                // Final Check: Ensure excluded items (negative score) are truly hidden unless they are in the forced top 5 fallback
+                const shouldBeVisible = isAnchor || (isNeighbor && n.relevanceScore > -500);
                 const wasVisible = n.isVisible;
 
                 if (shouldBeVisible) {
                     n.isVisible = true;
-                    // IF NODE WAS INVISIBLE, SNAP IT CLOSER TO REDUCE TRAVEL TIME
                     if (!wasVisible) {
                         const cx = window.innerWidth / 2;
                         const cy = window.innerHeight / 2;
                         const theta = Math.random() * Math.PI * 2;
-                        // Spawn at edge of "immediate" space (500-800px)
                         const R = 600 + Math.random() * 200; 
                         n.x = cx + R * Math.cos(theta);
                         n.y = cy + R * Math.sin(theta);
-                        // Initial inward velocity kick
                         n.vx = (cx - n.x) * 0.01; 
                         n.vy = (cy - n.y) * 0.01;
                     }
@@ -238,38 +296,28 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
             });
 
-            // Context for Image Mode
             const anchorImg = images.find(i => i.id === anchor.id);
             calculatedPalette = anchorImg ? anchorImg.palette : [];
-            
-            // Refined Context: Get most frequent tags among the visible subset
             calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 6);
 
         } else if (anchor.mode === 'TAG') {
-             // In tag mode, all matching nodes are visible
              scoredNodes.forEach(n => {
                  n.isVisible = n.relevanceScore > 0;
                  if (n.isVisible) visibleSubset.push(n);
              });
-
-             // Context: Selected Tag + Co-occurring Tags
              calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 5, anchor.id);
              calculatedPalette = []; 
 
         } else if (anchor.mode === 'COLOR') {
-             // In color mode, matching nodes are visible
              scoredNodes.forEach(n => {
                  n.isVisible = n.relevanceScore > 0;
                  if (n.isVisible) visibleSubset.push(n);
              });
-
-             // Context: Selected Color + Adjacent Palette
              const adjacent = getDominantColorsFromNodes(visibleSubset, 5, anchor.id);
              calculatedPalette = [anchor.id, ...adjacent].slice(0, 5);
              calculatedTags = []; 
 
         } else {
-            // NONE mode
             scoredNodes.forEach(n => n.isVisible = true);
             calculatedPalette = [];
             calculatedTags = [];
@@ -298,14 +346,11 @@ const Experience: React.FC<ExperienceProps> = ({
             const existingMap = new Map(prev.map(n => [n.id, n]));
             return images.map((img, idx) => {
                 const existing = existingMap.get(img.id);
-                // Orbit characteristics
                 const orbitSpeed = 0.05 + (Math.random() * 0.1); 
                 const orbitOffset = Math.random() * Math.PI * 2; 
                 const orbitRadiusBase = 250 + (Math.random() * 100); 
 
-                // Start randomly distributed if no existing position
                 const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-                // INCREASED SPACING (45 instead of 10-25) to reduce collisions
                 const SPREAD_FACTOR = 45; 
                 const initR = SPREAD_FACTOR * Math.sqrt(idx); 
                 const initTheta = idx * goldenAngle;
@@ -359,20 +404,17 @@ const Experience: React.FC<ExperienceProps> = ({
 
         const maxScaleByHeight = (height * 0.6) / 288;
         const heroScale = Math.min(Math.max(maxScaleByHeight, 1.2), 1.8); 
-        
         const heroWidth = 192 * heroScale;
         const heroHeight = heroWidth * 1.5;
         const heroRadius = Math.sqrt(heroWidth ** 2 + heroHeight ** 2) / 2;
 
         const simulation = d3.forceSimulation<SimNode>(simNodes)
-            // SETTLING LOGIC: If NONE (Home), let it decay to 0 so it stops moving. If ACTIVE, keep alive.
             .alphaTarget(anchor.mode === 'NONE' ? 0 : 0.05) 
-            .velocityDecay(anchor.mode === 'NONE' ? 0.2 : 0.3) // Slightly slicker in home view to return fast, then stop
+            .velocityDecay(anchor.mode === 'NONE' ? 0.2 : 0.3) 
             .force("charge", d3.forceManyBody<SimNode>().strength((d) => {
                 if (!d.isVisible) return 0;
-                if (anchor.mode === 'NONE') return -50; // Moderate repulsion for spacing
-                if (d.id === anchor.id) return -1500; // Stronger repulsion from Hero to create space
-                // IN GRID MODE (TAG/COLOR), reduce repulsion so grid force wins
+                if (anchor.mode === 'NONE') return -50; 
+                if (d.id === anchor.id) return -1500; 
                 if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return -30;
                 return -200; 
             }))
@@ -382,13 +424,12 @@ const Experience: React.FC<ExperienceProps> = ({
                      if (d.id === anchor.id) return heroRadius * 0.95; 
                      return 65; 
                  }
-                 // Smaller collision in Grid mode so they don't jitter against each other
                  if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return 30;
                  return 55; 
             }).strength(0.8)); 
 
         const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-        const HOME_SPREAD = 45; // Must match initialization spread for clean reset
+        const HOME_SPREAD = 45; 
 
         simulation.on("tick", () => {
             const cx = width / 2;
@@ -399,7 +440,6 @@ const Experience: React.FC<ExperienceProps> = ({
             simNodes.forEach((node, i) => {
                 const isAnchor = anchor.mode === 'IMAGE' && node.id === anchor.id;
 
-                // --- GLOBAL ORGANIC MOVEMENT (Only if NOT in Home/NONE mode or Grid Mode) ---
                 if (node.isVisible && !isAnchor && anchor.mode !== 'NONE' && anchor.mode !== 'TAG' && anchor.mode !== 'COLOR') {
                      const floatSpeed = 0.5;
                      const floatAmp = 0.05; 
@@ -408,70 +448,47 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
 
                 if (anchor.mode === 'NONE') {
-                    // HOME VIEW - Return to structured layout and SETTLE
                     node.targetScale = 0.4;
                     node.targetOpacity = 0.8;
-
-                    // Calculate spiral home position
                     const r = HOME_SPREAD * Math.sqrt(i); 
                     const theta = i * goldenAngle;
                     const homeX = cx + r * Math.cos(theta);
                     const homeY = cy + r * Math.sin(theta);
-                    
-                    // Strong homing force
                     const pull = 0.05;
                     node.vx = (node.vx || 0) + (homeX - node.x) * pull;
                     node.vy = (node.vy || 0) + (homeY - node.y) * pull;
                 }
                 else if (anchor.mode === 'IMAGE') {
                     if (isAnchor) {
-                        // HERO PHYSICS: Intentional & Graceful
                         const targetY = height * 0.45; 
-                        
-                        // Stronger pull for responsive start
                         const k = 0.12;
                         node.vx = (node.vx || 0) + (cx - node.x) * k; 
                         node.vy = (node.vy || 0) + (targetY - node.y) * k;
-                        
-                        // Heavy localized damping for graceful landing (Critically Damped feel)
-                        // Prevents wobble/overshoot when arriving at target
                         node.vx *= 0.8; 
                         node.vy *= 0.8;
-
                         node.targetScale = heroScale;
                         node.targetOpacity = 1;
                     } 
                     else if (node.isVisible) {
-                        // ORGANIC NEIGHBOR CLOUD
                         const targetY = height * 0.45;
-                        
-                        // 1. Gentle Gravity (Pull towards center/hero)
                         const gravity = 0.005; 
                         node.vx = (node.vx || 0) + (cx - node.x) * gravity;
                         node.vy = (node.vy || 0) + (targetY - node.y) * gravity;
-
-                        // 2. Swirl Force (Tangential movement)
                         const dx = node.x - cx;
                         const dy = node.y - targetY;
                         const dist = Math.sqrt(dx*dx + dy*dy) || 1;
                         const swirlSpeed = 0.2; 
-                        
-                        // Apply tangential vector (-dy, dx) normalized
                         node.vx += (-dy / dist) * swirlSpeed;
                         node.vy += (dx / dist) * swirlSpeed;
-
                         node.targetScale = node.relevanceScore > 40 ? 0.6 : 0.45;
                         node.targetOpacity = 1.0; 
                     } 
                     else {
-                        // Exit transition
                         node.targetScale = 0;
                         node.targetOpacity = 0;
                         const dx = node.x - cx;
                         const dy = node.y - cy;
                         const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-                        
-                        // Limit push distance so they don't fly to infinity (makes return faster)
                         if (dist < 1500) {
                              node.vx = (node.vx || 0) + (dx/dist) * 5;
                              node.vy = (node.vy || 0) + (dy/dist) * 5;
@@ -483,35 +500,24 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
                 else if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') {
                     if (node.isVisible) {
-                        // GRID FORMATION LOGIC
                         const idx = activeNodes.indexOf(node);
                         const total = activeNodes.length;
-                        
-                        // Grid Dimensions
                         const COLS = Math.ceil(Math.sqrt(total));
                         const ROWS = Math.ceil(total / COLS);
-                        const CELL_W = 220; // Width + Gap
-                        const CELL_H = 220; // Height + Gap
-                        
+                        const CELL_W = 220; 
+                        const CELL_H = 220; 
                         const col = idx % COLS;
                         const row = Math.floor(idx / COLS);
-                        
-                        // Calculate center offset to keep grid in middle of viewport
                         const gridW = (COLS - 1) * CELL_W;
                         const gridH = (ROWS - 1) * CELL_H;
-                        
                         const tx = cx + (col * CELL_W) - (gridW / 2);
                         const ty = cy + (row * CELL_H) - (gridH / 2);
-                        
-                        // Direct Homing Force (Structured)
                         const structureStrength = 0.15;
                         node.vx = (node.vx || 0) + (tx - node.x) * structureStrength;
                         node.vy = (node.vy || 0) + (ty - node.y) * structureStrength;
-                        
-                        node.targetScale = 0.85; // Slightly larger for clarity in grid
+                        node.targetScale = 0.85; 
                         node.targetOpacity = 1;
                     } else {
-                        // Exit logic
                         node.targetScale = 0;
                         node.targetOpacity = 0;
                         const dx = node.x - cx;
@@ -522,11 +528,8 @@ const Experience: React.FC<ExperienceProps> = ({
                     }
                 }
 
-                // Damping
                 node.vx = (node.vx || 0) * 0.9;
                 node.vy = (node.vy || 0) * 0.9;
-                
-                // Smoother Scale & Opacity Lerp
                 node.currentScale += (node.targetScale - node.currentScale) * lerpFactor;
                 node.currentOpacity += (node.targetOpacity - node.currentOpacity) * lerpFactor;
 
@@ -573,11 +576,10 @@ const Experience: React.FC<ExperienceProps> = ({
     const handleNodeClick = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (anchor.id === id && anchor.mode === 'IMAGE') {
-             // If already selected, open the detailed view
             setIsDetailOpen(true);
         } else {
             onAnchorChange({ mode: 'IMAGE', id });
-            setIsDetailOpen(false); // Reset detail view on new selection
+            setIsDetailOpen(false); 
         }
     };
     
@@ -602,7 +604,7 @@ const Experience: React.FC<ExperienceProps> = ({
     return (
         <div className="relative w-full h-full bg-[#faf9f6] overflow-hidden font-mono select-none">
             
-            {/* Ambient Background Layer - CSS Only for Max Performance */}
+            {/* Ambient Background Layer */}
             <div 
                 className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-in-out"
                 style={{
@@ -614,7 +616,7 @@ const Experience: React.FC<ExperienceProps> = ({
                 }}
             />
 
-            {/* Film Grain Texture - Static SVG pattern is extremely performant */}
+            {/* Film Grain Texture */}
             <div 
                 className="absolute inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-multiply"
                 style={{
@@ -687,7 +689,7 @@ const Experience: React.FC<ExperienceProps> = ({
                         <div className="w-1/2 h-full p-10 overflow-y-auto">
                             <div className="space-y-8">
                                 
-                                {/* Timeline Section replacing Header */}
+                                {/* Timeline Section */}
                                 <div className="mb-8">
                                     <div className="flex items-end justify-between mb-2">
                                          <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
@@ -700,10 +702,7 @@ const Experience: React.FC<ExperienceProps> = ({
                                     </div>
                                     
                                     <div className="relative h-12 w-full flex items-center select-none group/timeline">
-                                        {/* Background Track */}
                                         <div className="absolute inset-x-0 h-px bg-zinc-200" />
-                                        
-                                        {/* Density Plot */}
                                         {images.map(img => {
                                             const pct = ((img.captureTimestamp - minTime) / timeRange) * 100;
                                             return (
@@ -714,16 +713,12 @@ const Experience: React.FC<ExperienceProps> = ({
                                                 />
                                             )
                                         })}
-
-                                        {/* Active Node Marker */}
                                         <div 
                                             className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-zinc-800 rounded-full border-2 border-white shadow-md z-10 flex items-center justify-center transition-all hover:scale-110 cursor-help"
                                             style={{ left: `${((activeNode.original.captureTimestamp - minTime) / timeRange) * 100}%`, transform: 'translate(-50%, -50%)' }}
                                         >
                                              <div className="w-1.5 h-1.5 bg-white rounded-full" />
                                         </div>
-
-                                        {/* Labels */}
                                         <div className="absolute -bottom-4 left-0 text-[9px] text-zinc-400 font-mono">
                                             {new Date(minTime).getFullYear()}
                                         </div>
@@ -769,20 +764,17 @@ const Experience: React.FC<ExperienceProps> = ({
 
                                 <div className="h-px w-full bg-zinc-100" />
 
-                                {/* Tags - Unified User & AI */}
+                                {/* Tags */}
                                 <div>
                                     <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                                         <Hash size={12} />
                                         Semantic Tags
                                     </h3>
                                     <div className="flex flex-wrap gap-2">
-                                        {/* Combine both arrays for display */}
                                         {[...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])].map(tid => {
                                             const tag = tags.find(t => t.id === tid);
                                             if (!tag) return null;
-                                            
                                             const isAI = tag.type === TagType.AI_GENERATED;
-                                            
                                             return (
                                                 <button 
                                                     key={tid} 
