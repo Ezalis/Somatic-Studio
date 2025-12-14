@@ -7,7 +7,9 @@ import {
     saveTagDefinitions,
     saveTagsForFile,
     exportDatabase,
-    getSavedTagsForFile
+    getSavedTagsForFile,
+    saveAITagsForFile,
+    exportAITagsDatabase
 } from './services/resourceService';
 import { 
     processImageFile, 
@@ -16,6 +18,7 @@ import {
     extractColorPalette, 
     formatShutterSpeed 
 } from './services/dataService';
+import { processBatchAIAnalysis } from './services/aiService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
 import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash } from 'lucide-react';
@@ -26,6 +29,10 @@ const App: React.FC = () => {
     const [images, setImages] = useState<ImageNode[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
+    
+    // AI State
+    const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
+    const [analysisProgress, setAnalysisProgress] = useState(0);
 
     // Experience State
     const [experienceAnchor, setExperienceAnchor] = useState<AnchorState>({ mode: 'NONE', id: '' });
@@ -71,6 +78,69 @@ const App: React.FC = () => {
         setExperienceAnchor({ mode: 'COLOR', id: colorHex, meta: colorHex });
     };
 
+    // --- AI ANALYSIS ---
+    const handleRunAIAnalysis = async () => {
+        if (images.length === 0) return;
+        
+        // 1. Filter for images that lack AI tags to prioritize them
+        const unanalyzedImages = images.filter(img => !img.aiTagIds || img.aiTagIds.length === 0);
+        
+        // 2. If all are analyzed, ask to re-analyze all, otherwise process only new ones
+        let batchToProcess = unanalyzedImages;
+        if (unanalyzedImages.length === 0) {
+            if (window.confirm("All images have AI tags. Re-analyze everything?")) {
+                batchToProcess = images;
+            } else {
+                return;
+            }
+        }
+
+        setIsAIAnalyzing(true);
+        setAnalysisProgress(0);
+
+        try {
+            const results = await processBatchAIAnalysis(batchToProcess, (completed, total) => {
+                setAnalysisProgress(Math.round((completed / total) * 100));
+            });
+
+            // Update State and DB
+            const newTagsToAdd: Tag[] = [];
+            
+            const updatedImages = images.map(img => {
+                const result = results.find(r => r.imageId === img.id);
+                if (result) {
+                    // Accumulate definitions
+                    result.tags.forEach(t => {
+                        if (!tags.some(existing => existing.id === t.id) && !newTagsToAdd.some(pending => pending.id === t.id)) {
+                            newTagsToAdd.push(t);
+                        }
+                    });
+                    
+                    // Persist Mappings
+                    saveAITagsForFile(img.fileName, result.tagIds);
+                    
+                    return { ...img, aiTagIds: result.tagIds };
+                }
+                return img;
+            });
+
+            if (newTagsToAdd.length > 0) {
+                const mergedTags = [...tags, ...newTagsToAdd];
+                setTags(mergedTags);
+                await saveTagDefinitions(mergedTags);
+            }
+
+            setImages(updatedImages);
+
+        } catch (error) {
+            console.error("AI Analysis Failed", error);
+            alert("Analysis interrupted. Please check console.");
+        } finally {
+            setIsAIAnalyzing(false);
+            setAnalysisProgress(0);
+        }
+    };
+
     // --- GLOBAL FILE INGESTION ---
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
@@ -104,54 +174,19 @@ const App: React.FC = () => {
 
         try {
             for (const file of files) {
-                const objectUrl = URL.createObjectURL(file);
-                const [exifData, imgElem] = await Promise.all([
-                    exifr.parse(file, ['Make', 'Model', 'LensModel', 'ISO', 'ExposureTime', 'FNumber', 'DateTimeOriginal', 'CreateDate']).catch(() => null),
-                    new Promise<HTMLImageElement>((resolve, reject) => {
-                        const img = new Image();
-                        img.onload = () => resolve(img);
-                        img.onerror = reject;
-                        img.src = objectUrl;
-                    })
-                ]);
-
-                const palette = extractColorPalette(imgElem);
-                const captureDate = exifData?.DateTimeOriginal || exifData?.CreateDate || new Date();
-                const timestamp = new Date(captureDate).getTime();
-                const dateStr = new Date(captureDate).toISOString().split('T')[0];
-                let camera = exifData?.Model || exifData?.Make || 'Unknown Camera';
-                let lens = exifData?.LensModel || 'Unknown Lens';
-                if (lens !== 'Unknown Lens') lens = lens.replace(/^Fujifilm\s+Fujinon\s+/i, '').trim();
-                const season = getSeason(new Date(captureDate));
-                if (lens === '18.5 mm f/2.8') camera = 'X70';
-
-                const tagIds: string[] = [];
-                tagIds.push(ensureTag(season, TagType.SEASONAL));
-                if (camera !== 'Unknown Camera') tagIds.push(ensureTag(camera, TagType.TECHNICAL));
-                if (lens !== 'Unknown Lens') tagIds.push(ensureTag(lens, TagType.TECHNICAL));
-
-                const savedTags = getSavedTagsForFile(file.name);
-                if (savedTags.length > 0) {
-                    savedTags.forEach(tId => { if (!tagIds.includes(tId)) tagIds.push(tId); });
-                } else {
-                    saveTagsForFile(file.name, tagIds);
-                }
-
-                newImages.push({
-                    id: generateUUID(),
-                    fileName: file.name,
-                    fileUrl: objectUrl,
-                    captureTimestamp: timestamp,
-                    inferredSeason: season,
-                    shootDayClusterId: dateStr,
-                    cameraModel: camera,
-                    lensModel: lens,
-                    aperture: exifData?.FNumber ? `f/${exifData.FNumber}` : '--',
-                    shutterSpeed: formatShutterSpeed(exifData?.ExposureTime),
-                    iso: exifData?.ISO || 0,
-                    tagIds: tagIds,
-                    palette: palette 
+                const { image, newTags } = await processImageFile(file, file.name, currentTags);
+                
+                // Merge new tags from processing
+                newTags.forEach(t => {
+                    if (!processedTags.has(t.id)) {
+                        handleAddTag(t);
+                        processedTags.add(t.id);
+                        currentTags.push(t);
+                    }
                 });
+                if(newTags.length > 0) saveTagDefinitions(currentTags);
+
+                newImages.push(image);
             }
             setImages(prev => [...prev, ...newImages].sort((a, b) => a.captureTimestamp - b.captureTimestamp));
         } catch (error) {
@@ -229,7 +264,12 @@ const App: React.FC = () => {
                                                 <button 
                                                     key={tag.id} 
                                                     onClick={() => handleTagClick(tag)}
-                                                    className="px-2 py-0.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-[10px] text-zinc-600 hover:text-zinc-900 rounded transition-colors whitespace-nowrap uppercase tracking-wide"
+                                                    className={`
+                                                        px-2 py-0.5 text-[10px] rounded transition-colors whitespace-nowrap uppercase tracking-wide border
+                                                        ${tag.type === TagType.AI_GENERATED 
+                                                            ? 'bg-violet-50 hover:bg-violet-100 border-violet-100 text-violet-700' 
+                                                            : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200 text-zinc-600 hover:text-zinc-900'}
+                                                    `}
                                                 >
                                                     {tag.label}
                                                 </button>
@@ -244,8 +284,12 @@ const App: React.FC = () => {
                                 {/* 2. TAG MODE */}
                                 {experienceAnchor.mode === 'TAG' && (
                                     <>
-                                        <div className="flex items-center gap-2 text-xs text-zinc-800 font-bold bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200/50">
-                                            <TagIcon size={10} className="text-zinc-400" />
+                                        <div className={`flex items-center gap-2 text-xs font-bold px-2 py-0.5 rounded border ${
+                                            experienceAnchor.meta?.type === TagType.AI_GENERATED 
+                                                ? 'bg-violet-100 text-violet-800 border-violet-200' 
+                                                : 'bg-zinc-100 text-zinc-800 border-zinc-200/50'
+                                        }`}>
+                                            <TagIcon size={10} className={experienceAnchor.meta?.type === TagType.AI_GENERATED ? 'text-violet-500' : 'text-zinc-400'} />
                                             <span className="uppercase tracking-wide">{experienceAnchor.meta?.label || 'TAG'}</span>
                                         </div>
                                         
@@ -258,7 +302,12 @@ const App: React.FC = () => {
                                                         <button 
                                                             key={tag.id} 
                                                             onClick={() => handleTagClick(tag)}
-                                                            className="px-2 py-0.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-[10px] text-zinc-600 hover:text-zinc-900 rounded transition-colors whitespace-nowrap uppercase tracking-wide"
+                                                            className={`
+                                                                px-2 py-0.5 text-[10px] rounded transition-colors whitespace-nowrap uppercase tracking-wide border
+                                                                ${tag.type === TagType.AI_GENERATED 
+                                                                    ? 'bg-violet-50 hover:bg-violet-100 border-violet-100 text-violet-700' 
+                                                                    : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200 text-zinc-600 hover:text-zinc-900'}
+                                                            `}
                                                         >
                                                             {tag.label}
                                                         </button>
@@ -352,6 +401,10 @@ const App: React.FC = () => {
                         onAddTag={handleAddTag}
                         onViewChange={setViewMode}
                         onResetDatabase={handleResetDatabase}
+                        onRunAIAnalysis={handleRunAIAnalysis}
+                        onExportAITags={exportAITagsDatabase}
+                        isAnalyzing={isAIAnalyzing}
+                        analysisProgress={analysisProgress}
                     />
                 ) : (
                     <Experience 
