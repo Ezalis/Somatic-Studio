@@ -74,8 +74,17 @@ const App: React.FC = () => {
     // --- GLOBAL FILE INGESTION ---
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
+        
+        // Filter out duplicates based on filename
+        const existingFileNames = new Set(images.map(img => img.fileName));
+        const files = Array.from(e.target.files).filter(f => !existingFileNames.has(f.name));
+
+        if (files.length === 0) {
+            e.target.value = '';
+            return;
+        }
+
         setIsProcessing(true);
-        const files = Array.from(e.target.files);
         const newImages: ImageNode[] = [];
         let currentTags = [...tags];
         const processedTags = new Set<string>(tags.map(t => t.id));
