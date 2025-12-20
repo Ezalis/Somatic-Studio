@@ -1,17 +1,72 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
-import { ImageNode, Tag, TagType, SimulationNodeDatum, ViewMode, AnchorState, ExperienceContext } from '../types';
+import { ImageNode, Tag, TagType, SimulationNodeDatum, ViewMode, ExploreViewMode, AnchorState, ExperienceContext } from '../types';
 import { X, Camera, Activity, Maximize2, Calendar, Aperture, Info, Hash, Palette, Sparkles } from 'lucide-react';
 
 interface ExperienceProps {
     images: ImageNode[];
     tags: Tag[];
     anchor: AnchorState;
+    exploreViewMode: ExploreViewMode;
     onAnchorChange: (anchor: AnchorState) => void;
     onContextUpdate: (ctx: ExperienceContext) => void;
     onViewChange: (mode: ViewMode) => void;
 }
+
+// --- Procedural Sprite Component ---
+
+const EsotericSprite: React.FC<{ node: SimNode }> = ({ node }) => {
+    const palette = node.original.palette;
+    const tagCount = (node.original.tagIds?.length || 0) + (node.original.aiTagIds?.length || 0);
+    
+    // Use the node id to generate deterministic "randomness"
+    const hash = (str: string) => {
+        let h = 0;
+        for (let i = 0; i < str.length; i++) h = ((h << 5) - h) + str.charCodeAt(i) | 0;
+        return Math.abs(h);
+    };
+    const seed = hash(node.id);
+    
+    return (
+        <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md overflow-visible">
+            <defs>
+                <filter id={`glow-${node.id}`} x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="3" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+            </defs>
+            <g filter={`url(#glow-${node.id})`}>
+                {/* Background Blobs */}
+                {palette.slice(1).map((color, i) => {
+                    const angle = (seed + i * 73) % 360;
+                    const dist = 10 + (seed % 15);
+                    const rx = 20 + ((seed + i) % 15);
+                    const ry = 20 + ((seed * (i+1)) % 15);
+                    const tx = 50 + dist * Math.cos(angle * Math.PI / 180);
+                    const ty = 50 + dist * Math.sin(angle * Math.PI / 180);
+                    
+                    return (
+                        <ellipse 
+                            key={i}
+                            cx={tx} cy={ty} rx={rx} ry={ry}
+                            fill={color}
+                            fillOpacity={0.6}
+                            transform={`rotate(${(seed * (i+1)) % 360}, ${tx}, ${ty})`}
+                        />
+                    );
+                })}
+                {/* Core Nucleus */}
+                <circle 
+                    cx="50" cy="50" r={15 + Math.min(tagCount, 15)} 
+                    fill={palette[0]} 
+                    className="animate-pulse"
+                    style={{ animationDuration: `${3 + (seed % 5)}s` }}
+                />
+            </g>
+        </svg>
+    );
+};
 
 // --- Types ---
 
@@ -114,6 +169,7 @@ const Experience: React.FC<ExperienceProps> = ({
     images, 
     tags, 
     anchor,
+    exploreViewMode,
     onAnchorChange,
     onContextUpdate,
     onViewChange 
@@ -200,43 +256,25 @@ const Experience: React.FC<ExperienceProps> = ({
                          // --- STRICT COLOR & B&W LOGIC ---
 
                          if (anchorIsMono) {
-                             // SCENARIO 1: Hero is B&W
-                             // Rule: "make an attempt to pull in images taken on the same date even if they don't have the b&w tag"
-                             // Rule: Ignore color variance penalties generally for B&W heroes as they act as timeless anchors
-                             
-                             if (sameDate) score += 500; // Massive boost for same date
-                             if (sharedAICount >= 2) score += 100; // Boost for semantic similarity
-                             score += 50; // Base boost for visibility
-                             
-                             // We don't penalize color distance here because B&W can match colored photos structurally/temporally
+                             if (sameDate) score += 500; 
+                             if (sharedAICount >= 2) score += 100; 
+                             score += 50; 
                          } 
                          else {
-                             // SCENARIO 2: Hero is Color
-                             
                              if (targetIsMono) {
-                                 // Sub-rule: "It is ok if the hero is color and the neighbor is b&w to be included"
-                                 // We grant a base score to allow inclusion if other factors match (tags/date), bypassing color penalty.
                                  score += 50; 
-
                                  if (sameDate) score += 200;
                                  if (sharedAICount >= 2) score += 100;
                              } 
                              else {
-                                 // Sub-rule: Both are Color
-                                 // Rule: "I want the hero color and neighbor color to be similar for them to be included"
-                                 // We apply stricter variance penalties here.
-                                 
-                                 if (colorDist < 2500) score += 100; // Very tight match
-                                 else if (colorDist < 5000) score += 50; // Good match
-                                 else if (colorDist < 8000) score += 10; // Acceptable match
-                                 
-                                 // STRICT EXCLUSION FOR VARIANCE
-                                 else if (colorDist > 8000) score -= 2000; // Hard exclude: Colors are clashing/too different
-                                 else score -= 100; // Moderate penalty for variance between 5000-8000
+                                 if (colorDist < 2500) score += 100; 
+                                 else if (colorDist < 5000) score += 50; 
+                                 else if (colorDist < 8000) score += 10; 
+                                 else if (colorDist > 8000) score -= 2000; 
+                                 else score -= 100; 
                              }
                          }
 
-                         // Standard Meta Matches (Secondary importance now)
                          if (node.original.cameraModel === anchorImg.cameraModel && node.original.cameraModel !== 'Unknown Camera') score += 10;
                          if (node.original.lensModel === anchorImg.lensModel && node.original.lensModel !== 'Unknown Lens') score += 15;
                      }
@@ -256,25 +294,17 @@ const Experience: React.FC<ExperienceProps> = ({
         const visibleSubset: SimNode[] = [];
 
         if (anchor.mode === 'IMAGE') {
-            // Filter out nodes with negative scores (excluded by color variance)
-            // But ensure we don't return an empty set if everything is penalized
             const neighbors = scoredNodes.filter(n => n.id !== anchor.id);
             neighbors.sort((a, b) => b.relevanceScore - a.relevanceScore);
             
-            // DYNAMIC DENSITY LOGIC
-            // Threshold for "strong match"
             const RELEVANCE_THRESHOLD = 50; 
             const strongMatchCount = neighbors.filter(n => n.relevanceScore >= RELEVANCE_THRESHOLD).length;
-            
             const visibleCount = Math.max(5, Math.min(18, strongMatchCount));
-            
             const visibleNeighborIds = new Set(neighbors.slice(0, visibleCount).map(n => n.id));
             
             scoredNodes.forEach(n => {
                 const isAnchor = n.id === anchor.id;
                 const isNeighbor = visibleNeighborIds.has(n.id);
-                
-                // Final Check: Ensure excluded items (negative score) are truly hidden unless they are in the forced top 5 fallback
                 const shouldBeVisible = isAnchor || (isNeighbor && n.relevanceScore > -500);
                 const wasVisible = n.isVisible;
 
@@ -342,8 +372,9 @@ const Experience: React.FC<ExperienceProps> = ({
         const centerX = window.innerWidth / 2;
         const centerY = window.innerHeight / 2;
 
-        setSimNodes(prev => {
-            const existingMap = new Map(prev.map(n => [n.id, n]));
+        setSimNodes((prev: SimNode[]) => {
+            // Fix: Add explicit generic type to Map to avoid unknown inference
+            const existingMap = new Map<string, SimNode>(prev.map(n => [n.id, n]));
             return images.map((img, idx) => {
                 const existing = existingMap.get(img.id);
                 const orbitSpeed = 0.05 + (Math.random() * 0.1); 
@@ -422,7 +453,7 @@ const Experience: React.FC<ExperienceProps> = ({
                  if (!d.isVisible) return 0;
                  if (anchor.mode === 'IMAGE') {
                      if (d.id === anchor.id) return heroRadius * 0.95; 
-                     return 65; 
+                     return exploreViewMode === 'ESOTERIC' ? 45 : 65; 
                  }
                  if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return 30;
                  return 55; 
@@ -480,7 +511,12 @@ const Experience: React.FC<ExperienceProps> = ({
                         const swirlSpeed = 0.2; 
                         node.vx += (-dy / dist) * swirlSpeed;
                         node.vy += (dx / dist) * swirlSpeed;
-                        node.targetScale = node.relevanceScore > 40 ? 0.6 : 0.45;
+                        
+                        if (exploreViewMode === 'ESOTERIC') {
+                            node.targetScale = node.relevanceScore > 40 ? 0.8 : 0.6;
+                        } else {
+                            node.targetScale = node.relevanceScore > 40 ? 0.6 : 0.45;
+                        }
                         node.targetOpacity = 1.0; 
                     } 
                     else {
@@ -545,11 +581,11 @@ const Experience: React.FC<ExperienceProps> = ({
                          if (node.id === anchor.id) {
                              el.style.boxShadow = `0 20px 60px -10px ${activePalette[0] || 'rgba(0,0,0,0.3)'}`;
                          } else {
-                             el.style.boxShadow = '0 10px 30px -5px rgba(0,0,0,0.2)';
+                             el.style.boxShadow = exploreViewMode === 'ESOTERIC' ? 'none' : '0 10px 30px -5px rgba(0,0,0,0.2)';
                          }
                     } else {
                          el.style.zIndex = Math.floor(node.currentScale * 100).toString();
-                         el.style.filter = node.currentScale < 0.4 ? 'grayscale(100%) blur(1px)' : 'none';
+                         el.style.filter = node.currentScale < 0.4 && exploreViewMode === 'GALLERY' ? 'grayscale(100%) blur(1px)' : 'none';
                          el.style.boxShadow = 'none';
                     }
                 }
@@ -559,7 +595,7 @@ const Experience: React.FC<ExperienceProps> = ({
         return () => {
             simulation.stop();
         };
-    }, [simNodes, anchor, activePalette]); 
+    }, [simNodes, anchor, activePalette, exploreViewMode]); 
 
     // 4. ZOOM RESET EFFECT
     useEffect(() => {
@@ -627,31 +663,40 @@ const Experience: React.FC<ExperienceProps> = ({
             {/* 3D World */}
             <div ref={containerRef} className="absolute inset-0 top-0 cursor-move active:cursor-grabbing z-10 pb-0">
                 <div ref={worldRef} className="absolute inset-0 origin-top-left will-change-transform">
-                    {simNodes.map(node => (
-                        <div
-                            key={node.id}
-                            ref={(el) => {
-                                if (el) nodeRefs.current.set(node.id, el);
-                                else nodeRefs.current.delete(node.id);
-                            }}
-                            className="absolute top-0 left-0 w-0 h-0"
-                            style={{ willChange: 'transform, opacity, filter' }}
-                        >
-                            <div 
-                                onClick={(e) => handleNodeClick(node.id, e)}
-                                onMouseEnter={() => handleMouseEnter(node)}
-                                onMouseLeave={() => handleMouseLeave(node)}
-                                className={`absolute -translate-x-1/2 -translate-y-1/2 w-48 transition-all duration-300 cursor-pointer ${node.id === anchor.id ? '' : 'hover:scale-105'}`}
+                    {simNodes.map(node => {
+                        const isHero = anchor.mode === 'IMAGE' && node.id === anchor.id;
+                        const isEsotericMode = exploreViewMode === 'ESOTERIC' && anchor.mode === 'IMAGE' && !isHero;
+                        
+                        return (
+                            <div
+                                key={node.id}
+                                ref={(el) => {
+                                    if (el) nodeRefs.current.set(node.id, el);
+                                    else nodeRefs.current.delete(node.id);
+                                }}
+                                className="absolute top-0 left-0 w-0 h-0"
+                                style={{ willChange: 'transform, opacity, filter' }}
                             >
-                                <img 
-                                    src={node.original.fileUrl} 
-                                    alt="" 
-                                    className={`w-full h-auto rounded-md pointer-events-none bg-white transition-all duration-500 ${node.id === anchor.id ? 'ring-4 ring-white/50' : 'ring-1 ring-black/5'}`}
-                                    loading="lazy"
-                                />
+                                <div 
+                                    onClick={(e) => handleNodeClick(node.id, e)}
+                                    onMouseEnter={() => handleMouseEnter(node)}
+                                    onMouseLeave={() => handleMouseLeave(node)}
+                                    className={`absolute -translate-x-1/2 -translate-y-1/2 ${isEsotericMode ? 'w-24 h-24' : 'w-48'} transition-all duration-300 cursor-pointer ${isHero ? '' : 'hover:scale-105'}`}
+                                >
+                                    {isEsotericMode ? (
+                                        <EsotericSprite node={node} />
+                                    ) : (
+                                        <img 
+                                            src={node.original.fileUrl} 
+                                            alt="" 
+                                            className={`w-full h-auto rounded-md pointer-events-none bg-white transition-all duration-500 ${isHero ? 'ring-4 ring-white/50' : 'ring-1 ring-black/5'}`}
+                                            loading="lazy"
+                                        />
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 

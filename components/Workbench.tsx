@@ -403,7 +403,8 @@ const Workbench: React.FC<WorkbenchProps> = ({
 
             {/* --- LIST VIEW --- */}
             <div className="flex-1 overflow-y-auto pb-32" onClick={() => setSelectedIds(new Set())}>
-                {filteredImages.map((img) => {
+                {/* Fix: Explicitly type img as ImageNode to resolve unknown inference issues */}
+                {filteredImages.map((img: ImageNode) => {
                     const isSelected = selectedIds.has(img.id);
                     const dateObj = new Date(img.captureTimestamp);
                     const isHarmonized = img.tagVersion === 1;

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ViewMode, ImageNode, Tag, TagType, AnchorState, ExperienceContext } from './types';
+import { ViewMode, ExploreViewMode, ImageNode, Tag, TagType, AnchorState, ExperienceContext } from './types';
 import { 
     initDatabase,
     clearDatabase,
@@ -21,11 +21,12 @@ import {
 import { processBatchAIAnalysis } from './services/aiService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
-import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash } from 'lucide-react';
+import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash, Eye, Sparkles as SparklesIcon } from 'lucide-react';
 import exifr from 'exifr';
 
 const App: React.FC = () => {
     const [viewMode, setViewMode] = useState<ViewMode>('WORKBENCH');
+    const [exploreViewMode, setExploreViewMode] = useState<ExploreViewMode>('ESOTERIC');
     const [images, setImages] = useState<ImageNode[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -147,7 +148,8 @@ const App: React.FC = () => {
         
         // Filter out duplicates based on filename
         const existingFileNames = new Set(images.map(img => img.fileName));
-        const files = Array.from(e.target.files).filter(f => !existingFileNames.has(f.name));
+        // Fix: Explicitly cast Array.from result to File[] to avoid unknown inference
+        const files = (Array.from(e.target.files) as File[]).filter(f => !existingFileNames.has(f.name));
 
         if (files.length === 0) {
             e.target.value = '';
@@ -174,6 +176,7 @@ const App: React.FC = () => {
 
         try {
             for (const file of files) {
+                // Fix: file is already typed as File from the array cast above
                 const { image, newTags } = await processImageFile(file, file.name, currentTags);
                 
                 // Merge new tags from processing
@@ -223,6 +226,27 @@ const App: React.FC = () => {
                             EXPERIENCE
                         </button>
                     </div>
+
+                    {viewMode === 'EXPERIENCE' && (
+                        <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                            <button 
+                                onClick={() => setExploreViewMode('ESOTERIC')} 
+                                className={`px-3 py-1 text-xs font-medium flex items-center gap-2 transition-all rounded-md ${exploreViewMode === 'ESOTERIC' ? 'bg-zinc-800 shadow-sm text-zinc-50 font-bold' : 'text-zinc-500 hover:text-zinc-800'}`}
+                                title="Procedural glyph representation"
+                            >
+                                <SparklesIcon size={12} />
+                                ESOTERIC
+                            </button>
+                            <button 
+                                onClick={() => setExploreViewMode('GALLERY')} 
+                                className={`px-3 py-1 text-xs font-medium flex items-center gap-2 transition-all rounded-md ${exploreViewMode === 'GALLERY' ? 'bg-zinc-800 shadow-sm text-zinc-50 font-bold' : 'text-zinc-500 hover:text-zinc-800'}`}
+                                title="Photographic gallery"
+                            >
+                                <Eye size={12} />
+                                GALLERY
+                            </button>
+                        </div>
+                    )}
                     
                     {viewMode === 'WORKBENCH' && (
                         <div className="hidden md:flex items-center gap-2 text-xs text-zinc-400 border-l border-zinc-200 pl-4 h-6">
@@ -411,6 +435,7 @@ const App: React.FC = () => {
                         images={images} 
                         tags={tags} 
                         anchor={experienceAnchor}
+                        exploreViewMode={exploreViewMode}
                         onAnchorChange={setExperienceAnchor}
                         onContextUpdate={handleExperienceContextUpdate}
                         onViewChange={setViewMode}
