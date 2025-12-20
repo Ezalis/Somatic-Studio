@@ -71,7 +71,7 @@ export interface InsightSnapshot {
 }
 
 export type ViewMode = 'WORKBENCH' | 'EXPERIENCE';
-export type ExploreViewMode = 'GALLERY' | 'ESOTERIC';
+export type ExperienceMode = 'EXPLORE' | 'HISTORY';
 
 export type AnchorMode = 'NONE' | 'IMAGE' | 'TAG' | 'COLOR';
 

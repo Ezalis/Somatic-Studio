@@ -1,14 +1,15 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
-import { ImageNode, Tag, TagType, SimulationNodeDatum, ViewMode, ExploreViewMode, AnchorState, ExperienceContext } from '../types';
-import { X, Camera, Activity, Maximize2, Calendar, Aperture, Info, Hash, Palette, Sparkles } from 'lucide-react';
+import { ImageNode, Tag, TagType, SimulationNodeDatum, ViewMode, ExperienceMode, AnchorState, ExperienceContext } from '../types';
+import { X, Camera, Activity, Maximize2, Calendar, Aperture, Info, Hash, Palette, Sparkles, MoveDown, ArrowDown } from 'lucide-react';
 
 interface ExperienceProps {
     images: ImageNode[];
     tags: Tag[];
     anchor: AnchorState;
-    exploreViewMode: ExploreViewMode;
+    history: AnchorState[];
+    experienceMode: ExperienceMode;
     onAnchorChange: (anchor: AnchorState) => void;
     onContextUpdate: (ctx: ExperienceContext) => void;
     onViewChange: (mode: ViewMode) => void;
@@ -163,13 +164,178 @@ const getRelatedTagsFromNodes = (nodes: SimNode[], tags: Tag[], count: number = 
         .filter((t): t is Tag => !!t);
 };
 
+// --- HISTORY SUB-COMPONENT ---
+
+const HistoryTimeline: React.FC<{ 
+    history: AnchorState[]; 
+    images: ImageNode[]; 
+    tags: Tag[];
+    activeMode: ExperienceMode;
+}> = ({ history, images, tags, activeMode }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll to top when re-entering History view
+    useEffect(() => {
+        if (activeMode === 'HISTORY' && scrollRef.current) {
+            scrollRef.current.scrollTo({ top: 0, behavior: 'instant' });
+        }
+    }, [activeMode]);
+    
+    // Auto-scroll to top (rapidly) when leaving History view (before unmount visually completes)
+    useEffect(() => {
+        if (activeMode === 'EXPLORE' && scrollRef.current) {
+            scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }, [activeMode]);
+
+    return (
+        <div 
+            ref={scrollRef}
+            className={`
+                absolute inset-0 z-40 bg-zinc-900/95 backdrop-blur-md overflow-y-auto 
+                snap-y snap-mandatory scroll-smooth no-scrollbar transition-opacity duration-500
+                ${activeMode === 'HISTORY' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
+            `}
+        >
+            <div className="flex flex-col items-center min-h-full py-20 relative">
+                {/* Central Timeline Thread */}
+                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-transparent via-zinc-700 to-transparent" />
+                
+                {history.map((step, index) => {
+                    const isFirst = index === 0;
+                    const prevStep = history[index + 1]; // Technically the "next" item in the visual list (which is older in time)
+                    
+                    const isDirectLink = step.mode === 'IMAGE' && prevStep?.mode === 'IMAGE';
+
+                    return (
+                        <div key={index} className="w-full max-w-2xl flex flex-col items-center snap-center shrink-0 py-12 relative group">
+                            
+                            {/* Connection Marker on Line (Only if NOT direct link, or we let the new bridge handle it) */}
+                            {!isFirst && !isDirectLink && (
+                                <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-0 flex flex-col items-center">
+                                    <ArrowDown size={14} className="text-zinc-500 mb-2" />
+                                </div>
+                            )}
+
+                            {/* --- NODE VISUALIZATION --- */}
+                            
+                            {step.mode === 'IMAGE' && (() => {
+                                const img = images.find(i => i.id === step.id);
+                                if (!img) return null;
+                                return (
+                                    <div className="relative z-10 w-full flex flex-col items-center gap-6">
+                                        {/* Timestamp of visit (Simulated for visual) */}
+                                        <span className="text-[10px] font-mono text-zinc-300 uppercase tracking-widest bg-zinc-900 px-2 py-1 border border-zinc-700 rounded-full">
+                                            {index === 0 ? "Current View" : `Step -${index}`}
+                                        </span>
+                                        
+                                        {/* Card */}
+                                        <div className="bg-white p-3 rounded-sm shadow-2xl rotate-1 group-hover:rotate-0 transition-transform duration-500 max-w-[80%] relative">
+                                            <img src={img.fileUrl} alt="" className="max-h-[50vh] object-contain" />
+                                            {/* Highlighted connection context if applicable */}
+                                            {prevStep?.mode === 'TAG' && (
+                                                <div className="absolute -bottom-4 -right-4 bg-violet-600 text-white px-3 py-1 text-xs font-bold rounded-full shadow-lg flex items-center gap-2">
+                                                    <Hash size={12} /> {prevStep.meta?.label}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Mini Metadata Web */}
+                                        <div className="flex gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
+                                            {img.tagIds.slice(0, 3).map(tid => {
+                                                const t = tags.find(tag => tag.id === tid);
+                                                return t ? <span key={tid} className="text-[9px] text-zinc-400 border border-zinc-700 px-1.5 py-0.5 rounded-full">{t.label}</span> : null;
+                                            })}
+                                        </div>
+
+                                        {/* NEW: Visual Bridge Node (Abstract Representation) */}
+                                        {isDirectLink && (
+                                            <div className="mt-8 flex flex-col items-center gap-4 opacity-90 hover:opacity-100 transition-opacity">
+                                                <div className="relative flex flex-col items-center">
+                                                    {/* Top arrow into sprite */}
+                                                    <div className="h-4 w-px bg-zinc-600 mb-2" />
+                                                    <ArrowDown size={12} className="text-zinc-500 mb-2" />
+                                                    
+                                                    <span className="text-[9px] font-mono text-zinc-200 uppercase tracking-widest bg-zinc-900/90 px-3 py-1 border border-zinc-600 rounded-full backdrop-blur-md shadow-sm flex items-center gap-2 mb-2">
+                                                        <Sparkles size={10} className="text-violet-300" />
+                                                        Visual Connection
+                                                    </span>
+                                                    
+                                                    <div className="w-24 h-24 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm shadow-[0_0_30px_rgba(139,92,246,0.1)] p-2 flex items-center justify-center overflow-hidden relative group/sprite cursor-help">
+                                                        <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/0 to-violet-500/10 opacity-0 group-hover/sprite:opacity-100 transition-opacity" />
+                                                        <EsotericSprite node={{
+                                                            id: img.id,
+                                                            original: img,
+                                                            x: 0, y: 0,
+                                                            currentScale: 1, targetScale: 1,
+                                                            currentOpacity: 1, targetOpacity: 1,
+                                                            relevanceScore: 100, isVisible: true
+                                                        }} />
+                                                    </div>
+
+                                                     {/* Bottom arrow out of sprite */}
+                                                     <div className="h-4 w-px bg-zinc-600 mt-2" />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {step.mode === 'TAG' && (
+                                <div className="relative z-10 flex flex-col items-center gap-4">
+                                     <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest bg-zinc-900 px-2 py-1 border border-zinc-700 rounded-full">
+                                        Semantic Bridge
+                                    </span>
+                                    <div className="min-w-[140px] px-8 py-6 rounded-full border border-violet-500/30 bg-violet-900/10 backdrop-blur flex flex-col items-center justify-center gap-2 shadow-[0_0_30px_rgba(139,92,246,0.2)] animate-pulse">
+                                        <Hash size={24} className="text-violet-400" />
+                                        <span className="text-sm font-bold text-white uppercase tracking-widest whitespace-nowrap">{step.meta?.label}</span>
+                                    </div>
+                                    {prevStep?.mode === 'IMAGE' && (
+                                        <div className="text-[10px] text-zinc-400 max-w-xs text-center">
+                                            Extracted from previous selection
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {step.mode === 'COLOR' && (
+                                <div className="relative z-10 flex flex-col items-center gap-4">
+                                    <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest bg-zinc-900 px-2 py-1 border border-zinc-700 rounded-full">
+                                        Chromatic Bridge
+                                    </span>
+                                    <div 
+                                        className="w-24 h-24 rounded-full border-4 border-white/10 flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                                        style={{ backgroundColor: step.id }}
+                                    >
+                                        <span className="text-[10px] font-mono font-bold text-white mix-blend-difference">{step.id}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    );
+                })}
+
+                {/* End of History */}
+                <div className="mt-20 flex flex-col items-center gap-2 opacity-30">
+                    <div className="w-2 h-2 bg-zinc-600 rounded-full" />
+                    <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">Origin Point</span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 // --- MAIN COMPONENT ---
 
 const Experience: React.FC<ExperienceProps> = ({ 
     images, 
     tags, 
     anchor,
-    exploreViewMode,
+    history,
+    experienceMode,
     onAnchorChange,
     onContextUpdate,
     onViewChange 
@@ -453,7 +619,7 @@ const Experience: React.FC<ExperienceProps> = ({
                  if (!d.isVisible) return 0;
                  if (anchor.mode === 'IMAGE') {
                      if (d.id === anchor.id) return heroRadius * 0.95; 
-                     return exploreViewMode === 'ESOTERIC' ? 45 : 65; 
+                     return 45; // Esoteric radius
                  }
                  if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return 30;
                  return 55; 
@@ -512,11 +678,9 @@ const Experience: React.FC<ExperienceProps> = ({
                         node.vx += (-dy / dist) * swirlSpeed;
                         node.vy += (dx / dist) * swirlSpeed;
                         
-                        if (exploreViewMode === 'ESOTERIC') {
-                            node.targetScale = node.relevanceScore > 40 ? 0.8 : 0.6;
-                        } else {
-                            node.targetScale = node.relevanceScore > 40 ? 0.6 : 0.45;
-                        }
+                        // ESOTERIC SCALE LOGIC
+                        node.targetScale = node.relevanceScore > 40 ? 0.8 : 0.6;
+                        
                         node.targetOpacity = 1.0; 
                     } 
                     else {
@@ -581,11 +745,11 @@ const Experience: React.FC<ExperienceProps> = ({
                          if (node.id === anchor.id) {
                              el.style.boxShadow = `0 20px 60px -10px ${activePalette[0] || 'rgba(0,0,0,0.3)'}`;
                          } else {
-                             el.style.boxShadow = exploreViewMode === 'ESOTERIC' ? 'none' : '0 10px 30px -5px rgba(0,0,0,0.2)';
+                             el.style.boxShadow = 'none'; // No shadow for sprites
                          }
                     } else {
                          el.style.zIndex = Math.floor(node.currentScale * 100).toString();
-                         el.style.filter = node.currentScale < 0.4 && exploreViewMode === 'GALLERY' ? 'grayscale(100%) blur(1px)' : 'none';
+                         el.style.filter = 'none';
                          el.style.boxShadow = 'none';
                     }
                 }
@@ -595,7 +759,7 @@ const Experience: React.FC<ExperienceProps> = ({
         return () => {
             simulation.stop();
         };
-    }, [simNodes, anchor, activePalette, exploreViewMode]); 
+    }, [simNodes, anchor, activePalette]); 
 
     // 4. ZOOM RESET EFFECT
     useEffect(() => {
@@ -665,7 +829,8 @@ const Experience: React.FC<ExperienceProps> = ({
                 <div ref={worldRef} className="absolute inset-0 origin-top-left will-change-transform">
                     {simNodes.map(node => {
                         const isHero = anchor.mode === 'IMAGE' && node.id === anchor.id;
-                        const isEsotericMode = exploreViewMode === 'ESOTERIC' && anchor.mode === 'IMAGE' && !isHero;
+                        // ESOTERIC LOGIC: Only show sprites if an anchor is selected and this is NOT the hero.
+                        const isEsotericSprite = anchor.mode === 'IMAGE' && !isHero;
                         
                         return (
                             <div
@@ -681,9 +846,9 @@ const Experience: React.FC<ExperienceProps> = ({
                                     onClick={(e) => handleNodeClick(node.id, e)}
                                     onMouseEnter={() => handleMouseEnter(node)}
                                     onMouseLeave={() => handleMouseLeave(node)}
-                                    className={`absolute -translate-x-1/2 -translate-y-1/2 ${isEsotericMode ? 'w-24 h-24' : 'w-48'} transition-all duration-300 cursor-pointer ${isHero ? '' : 'hover:scale-105'}`}
+                                    className={`absolute -translate-x-1/2 -translate-y-1/2 ${isEsotericSprite ? 'w-24 h-24' : 'w-48'} transition-all duration-300 cursor-pointer ${isHero ? '' : 'hover:scale-105'}`}
                                 >
-                                    {isEsotericMode ? (
+                                    {isEsotericSprite ? (
                                         <EsotericSprite node={node} />
                                     ) : (
                                         <img 
@@ -700,8 +865,16 @@ const Experience: React.FC<ExperienceProps> = ({
                 </div>
             </div>
 
-            {/* --- DETAILED CONTEXTUAL MODAL --- */}
-            {isDetailOpen && activeNode && (
+            {/* --- HISTORY TIMELINE VIEW (OVERLAY) --- */}
+            <HistoryTimeline 
+                history={history} 
+                images={images} 
+                tags={tags} 
+                activeMode={experienceMode}
+            />
+
+            {/* --- DETAILED CONTEXTUAL MODAL (Only in Explore Mode) --- */}
+            {isDetailOpen && activeNode && experienceMode === 'EXPLORE' && (
                 <div 
                     className="absolute inset-0 z-50 flex items-center justify-center bg-zinc-900/10 backdrop-blur-sm p-8 animate-in fade-in duration-300"
                     onClick={() => setIsDetailOpen(false)}
@@ -875,8 +1048,8 @@ const Experience: React.FC<ExperienceProps> = ({
                 </div>
             )}
 
-            {/* --- FULL SCREEN GALLERY --- */}
-            {isGalleryOpen && activeNode && (
+            {/* --- FULL SCREEN GALLERY (Only in Explore Mode) --- */}
+            {isGalleryOpen && activeNode && experienceMode === 'EXPLORE' && (
                 <div 
                     className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-in fade-in duration-500 cursor-zoom-out"
                     onClick={() => setIsGalleryOpen(false)}

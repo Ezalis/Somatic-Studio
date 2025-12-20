@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ViewMode, ExploreViewMode, ImageNode, Tag, TagType, AnchorState, ExperienceContext } from './types';
+import { ViewMode, ExperienceMode, ImageNode, Tag, TagType, AnchorState, ExperienceContext } from './types';
 import { 
     initDatabase,
     clearDatabase,
@@ -21,12 +21,13 @@ import {
 import { processBatchAIAnalysis } from './services/aiService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
-import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash, Eye, Sparkles as SparklesIcon } from 'lucide-react';
+import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash, Eye, Sparkles as SparklesIcon, History, Globe } from 'lucide-react';
 import exifr from 'exifr';
 
 const App: React.FC = () => {
     const [viewMode, setViewMode] = useState<ViewMode>('WORKBENCH');
-    const [exploreViewMode, setExploreViewMode] = useState<ExploreViewMode>('ESOTERIC');
+    const [experienceMode, setExperienceMode] = useState<ExperienceMode>('EXPLORE');
+    
     const [images, setImages] = useState<ImageNode[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -38,6 +39,9 @@ const App: React.FC = () => {
     // Experience State
     const [experienceAnchor, setExperienceAnchor] = useState<AnchorState>({ mode: 'NONE', id: '' });
     const [experienceContext, setExperienceContext] = useState<ExperienceContext>({ commonTags: [], activePalette: [] });
+    
+    // History Log (Newest first)
+    const [history, setHistory] = useState<AnchorState[]>([]);
 
     // --- INITIALIZATION ---
     useEffect(() => {
@@ -47,6 +51,21 @@ const App: React.FC = () => {
         };
         init();
     }, []);
+
+    // --- HISTORY TRACKING ENGINE ---
+    useEffect(() => {
+        setHistory(prev => {
+            // Prevent duplicate adjacent entries (e.g. React double-invokes or accidental multi-clicks)
+            if (prev.length > 0) {
+                const last = prev[0];
+                if (last.mode === experienceAnchor.mode && last.id === experienceAnchor.id) {
+                    return prev;
+                }
+            }
+            // Add new step to the TOP of the stack
+            return [experienceAnchor, ...prev];
+        });
+    }, [experienceAnchor]);
 
     const handleUpdateImages = (updatedImages: ImageNode[]) => setImages(updatedImages);
 
@@ -62,6 +81,7 @@ const App: React.FC = () => {
             await clearDatabase();
             setTags([]);
             setImages([]);
+            setHistory([]);
             const loadedTags = await initDatabase();
             setTags(loadedTags);
         }
@@ -83,10 +103,8 @@ const App: React.FC = () => {
     const handleRunAIAnalysis = async () => {
         if (images.length === 0) return;
         
-        // 1. Filter for images that lack AI tags to prioritize them
         const unanalyzedImages = images.filter(img => !img.aiTagIds || img.aiTagIds.length === 0);
         
-        // 2. If all are analyzed, ask to re-analyze all, otherwise process only new ones
         let batchToProcess = unanalyzedImages;
         if (unanalyzedImages.length === 0) {
             if (window.confirm("All images have AI tags. Re-analyze everything?")) {
@@ -104,22 +122,18 @@ const App: React.FC = () => {
                 setAnalysisProgress(Math.round((completed / total) * 100));
             });
 
-            // Update State and DB
             const newTagsToAdd: Tag[] = [];
             
             const updatedImages = images.map(img => {
                 const result = results.find(r => r.imageId === img.id);
                 if (result) {
-                    // Accumulate definitions
                     result.tags.forEach(t => {
                         if (!tags.some(existing => existing.id === t.id) && !newTagsToAdd.some(pending => pending.id === t.id)) {
                             newTagsToAdd.push(t);
                         }
                     });
                     
-                    // Persist Mappings
                     saveAITagsForFile(img.fileName, result.tagIds);
-                    
                     return { ...img, aiTagIds: result.tagIds };
                 }
                 return img;
@@ -146,9 +160,7 @@ const App: React.FC = () => {
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
         
-        // Filter out duplicates based on filename
         const existingFileNames = new Set(images.map(img => img.fileName));
-        // Fix: Explicitly cast Array.from result to File[] to avoid unknown inference
         const files = (Array.from(e.target.files) as File[]).filter(f => !existingFileNames.has(f.name));
 
         if (files.length === 0) {
@@ -176,10 +188,8 @@ const App: React.FC = () => {
 
         try {
             for (const file of files) {
-                // Fix: file is already typed as File from the array cast above
                 const { image, newTags } = await processImageFile(file, file.name, currentTags);
                 
-                // Merge new tags from processing
                 newTags.forEach(t => {
                     if (!processedTags.has(t.id)) {
                         handleAddTag(t);
@@ -227,27 +237,6 @@ const App: React.FC = () => {
                         </button>
                     </div>
 
-                    {viewMode === 'EXPERIENCE' && (
-                        <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
-                            <button 
-                                onClick={() => setExploreViewMode('ESOTERIC')} 
-                                className={`px-3 py-1 text-xs font-medium flex items-center gap-2 transition-all rounded-md ${exploreViewMode === 'ESOTERIC' ? 'bg-zinc-800 shadow-sm text-zinc-50 font-bold' : 'text-zinc-500 hover:text-zinc-800'}`}
-                                title="Procedural glyph representation"
-                            >
-                                <SparklesIcon size={12} />
-                                ESOTERIC
-                            </button>
-                            <button 
-                                onClick={() => setExploreViewMode('GALLERY')} 
-                                className={`px-3 py-1 text-xs font-medium flex items-center gap-2 transition-all rounded-md ${exploreViewMode === 'GALLERY' ? 'bg-zinc-800 shadow-sm text-zinc-50 font-bold' : 'text-zinc-500 hover:text-zinc-800'}`}
-                                title="Photographic gallery"
-                            >
-                                <Eye size={12} />
-                                GALLERY
-                            </button>
-                        </div>
-                    )}
-                    
                     {viewMode === 'WORKBENCH' && (
                         <div className="hidden md:flex items-center gap-2 text-xs text-zinc-400 border-l border-zinc-200 pl-4 h-6">
                             <div className="flex items-center gap-2">
@@ -256,10 +245,32 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     )}
+                    
+                    {viewMode === 'EXPERIENCE' && (
+                         <div className="flex items-center gap-2 text-xs text-zinc-400 border-l border-zinc-200 pl-4 h-6">
+                            <span className="font-bold text-zinc-300 uppercase tracking-widest text-[10px]">View Mode</span>
+                            <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 ml-2">
+                                <button 
+                                    onClick={() => setExperienceMode('EXPLORE')}
+                                    className={`px-2 py-0.5 text-[10px] font-bold flex items-center gap-1.5 transition-all rounded-md ${experienceMode === 'EXPLORE' ? 'bg-white shadow-sm text-indigo-600' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                >
+                                    <Globe size={12} />
+                                    EXPLORE
+                                </button>
+                                <button 
+                                    onClick={() => setExperienceMode('HISTORY')}
+                                    className={`px-2 py-0.5 text-[10px] font-bold flex items-center gap-1.5 transition-all rounded-md ${experienceMode === 'HISTORY' ? 'bg-white shadow-sm text-rose-600' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                >
+                                    <History size={12} />
+                                    HISTORY
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Center: Contextual Toolbar (EXPERIENCE MODE) */}
-                {viewMode === 'EXPERIENCE' && (
+                {/* Center: Contextual Toolbar (EXPERIENCE MODE - EXPLORE ONLY) */}
+                {viewMode === 'EXPERIENCE' && experienceMode === 'EXPLORE' && (
                     <div className="flex-1 flex items-center justify-center px-4 animate-in fade-in slide-in-from-top-2 duration-300">
                         {experienceAnchor.mode !== 'NONE' && (
                             <div className="flex items-center gap-4 h-9 px-4 bg-white rounded-md border border-zinc-200 shadow-sm font-mono">
@@ -435,7 +446,8 @@ const App: React.FC = () => {
                         images={images} 
                         tags={tags} 
                         anchor={experienceAnchor}
-                        exploreViewMode={exploreViewMode}
+                        history={history}
+                        experienceMode={experienceMode}
                         onAnchorChange={setExperienceAnchor}
                         onContextUpdate={handleExperienceContextUpdate}
                         onViewChange={setViewMode}

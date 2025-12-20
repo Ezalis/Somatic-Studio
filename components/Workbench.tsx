@@ -65,7 +65,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
     const [harmonizeProgress, setHarmonizeProgress] = useState(0);
     
     // --- DERIVED DATA ---
-    const filteredImages = useMemo(() => {
+    const filteredImages: ImageNode[] = useMemo(() => {
         return images.filter(img => {
             // 1. Tag Filters
             if (activeTagFilters.size > 0) {
@@ -220,18 +220,23 @@ const Workbench: React.FC<WorkbenchProps> = ({
     // --- HANDLERS: BATCH OPERATIONS ---
     const handleBatchAddTag = () => {
         if (!batchTagInput.trim() || selectedIds.size === 0) return;
-        let tagToAdd = tags.find(t => t.label.toLowerCase() === batchTagInput.toLowerCase());
-        let isNewTag = false;
+        
+        const inputLabel = batchTagInput.trim();
+        let tagToAdd: Tag | undefined = tags.find(t => t.label.toLowerCase() === inputLabel.toLowerCase());
+        
         if (!tagToAdd) {
-            tagToAdd = { id: generateUUID(), label: batchTagInput, type: TagType.QUALITATIVE };
+            tagToAdd = { id: generateUUID(), label: inputLabel, type: TagType.QUALITATIVE };
             onAddTag(tagToAdd);
-            isNewTag = true;
+            saveTagDefinitions([...tags, tagToAdd]);
         }
-        if (isNewTag) saveTagDefinitions([...tags, tagToAdd]);
+        
+        // Ensure tagToAdd is treated as defined
+        const targetTag = tagToAdd as Tag;
+
         const updatedImages = images.map(img => {
             if (selectedIds.has(img.id)) {
-                if (!img.tagIds.includes(tagToAdd!.id)) {
-                    const newTags = [...img.tagIds, tagToAdd!.id];
+                if (!img.tagIds.includes(targetTag.id)) {
+                    const newTags = [...img.tagIds, targetTag.id];
                     saveTagsForFile(img.fileName, newTags);
                     return { ...img, tagIds: newTags };
                 }
@@ -387,7 +392,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                     {images.length === 0 ? (
                         <>
                             <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center border border-zinc-200 shadow-sm text-zinc-300">
-                                <Camera size={32} strokeWidth={1.5} />
+                                <Camera size={32} strokeWidth="1.5" />
                             </div>
                             <p className="font-light">No organic matter detected.</p>
                         </>
@@ -412,7 +417,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                     return (
                         <div 
                             key={img.id}
-                            onClick={(e) => { e.stopPropagation(); handleSelect(img.id, e); }}
+                            onClick={(e) => { e.stopPropagation(); handleSelect(img.id as string, e); }}
                             className={`
                                 grid grid-cols-[40px_60px_140px_1fr_1fr_200px] gap-4 px-6 py-3 border-b border-zinc-100 
                                 transition-colors cursor-pointer select-none group items-center relative
@@ -444,7 +449,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
 
                             {/* Manual Tags */}
                             <div className="flex flex-wrap gap-1.5 items-center">
-                                {img.tagIds.map(tid => {
+                                {img.tagIds.map((tid: string) => {
                                     const tag = getTagById(tid);
                                     if (!tag) return null; 
                                     return (
@@ -476,7 +481,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                             {/* AI Tags (New Column) */}
                             <div className="flex flex-wrap gap-1.5 items-center relative min-h-[24px]">
                                 {img.aiTagIds && img.aiTagIds.length > 0 ? (
-                                    img.aiTagIds.map(tid => {
+                                    img.aiTagIds.map((tid: string) => {
                                         const tag = getTagById(tid);
                                         if (!tag) return null;
                                         return (
