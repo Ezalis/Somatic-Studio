@@ -21,7 +21,7 @@ import {
 import { processBatchAIAnalysis } from './services/aiService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
-import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash, Eye, Sparkles as SparklesIcon, History, Globe, Shield, ShieldAlert } from 'lucide-react';
+import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash, Eye, Sparkles as SparklesIcon, History, Globe, Shield, ShieldAlert, Calendar, Aperture, Snowflake, Sun, Cloud, Thermometer } from 'lucide-react';
 import exifr from 'exifr';
 
 const App: React.FC = () => {
@@ -271,129 +271,6 @@ const App: React.FC = () => {
                         </div>
                     )}
                 </div>
-
-                {/* Center: Contextual Toolbar (EXPERIENCE MODE - EXPLORE ONLY) */}
-                {viewMode === 'EXPERIENCE' && experienceMode === 'EXPLORE' && (
-                    <div className="flex-1 flex items-center justify-center px-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                        {experienceAnchor.mode !== 'NONE' && (
-                            <div className="flex items-center gap-4 h-9 px-4 bg-white rounded-md border border-zinc-200 shadow-sm font-mono">
-                                
-                                {/* 1. IMAGE MODE */}
-                                {experienceAnchor.mode === 'IMAGE' && activeImage && (
-                                    <>
-                                        {/* Palette (Navigable) */}
-                                        <div className="flex gap-1.5 items-center">
-                                            {experienceContext.activePalette.map((c, i) => (
-                                                <button 
-                                                    key={i} 
-                                                    onClick={() => handleColorClick(c)} 
-                                                    className="w-3.5 h-3.5 rounded-sm ring-1 ring-black/5 hover:scale-110 hover:ring-2 hover:ring-zinc-400 transition-all" 
-                                                    style={{ backgroundColor: c }} 
-                                                    title="Explore color"
-                                                />
-                                            ))}
-                                        </div>
-
-                                        <div className="w-px h-3 bg-zinc-200" />
-
-                                        {/* Tags (Navigable) */}
-                                        <div className="flex items-center gap-1.5">
-                                            {experienceContext.commonTags.slice(0, 4).map(tag => (
-                                                <button 
-                                                    key={tag.id} 
-                                                    onClick={() => handleTagClick(tag)}
-                                                    className={`
-                                                        px-2 py-0.5 text-[10px] rounded transition-colors whitespace-nowrap uppercase tracking-wide border
-                                                        ${tag.type === TagType.AI_GENERATED 
-                                                            ? 'bg-violet-50 hover:bg-violet-100 border-violet-100 text-violet-700' 
-                                                            : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200 text-zinc-600 hover:text-zinc-900'}
-                                                    `}
-                                                >
-                                                    {tag.label}
-                                                </button>
-                                            ))}
-                                            {experienceContext.commonTags.length > 4 && (
-                                                <span className="text-[10px] text-zinc-300">•••</span>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* 2. TAG MODE */}
-                                {experienceAnchor.mode === 'TAG' && (
-                                    <>
-                                        <div className={`flex items-center gap-2 text-xs font-bold px-2 py-0.5 rounded border ${
-                                            experienceAnchor.meta?.type === TagType.AI_GENERATED 
-                                                ? 'bg-violet-100 text-violet-800 border-violet-200' 
-                                                : 'bg-zinc-100 text-zinc-800 border-zinc-200/50'
-                                        }`}>
-                                            <TagIcon size={10} className={experienceAnchor.meta?.type === TagType.AI_GENERATED ? 'text-violet-500' : 'text-zinc-400'} />
-                                            <span className="uppercase tracking-wide">{experienceAnchor.meta?.label || 'TAG'}</span>
-                                        </div>
-                                        
-                                        {experienceContext.commonTags.length > 0 && (
-                                            <>
-                                                <div className="w-px h-3 bg-zinc-200" />
-                                                <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider hidden sm:inline-block">Related</span>
-                                                <div className="flex items-center gap-1.5">
-                                                    {experienceContext.commonTags.map(tag => (
-                                                        <button 
-                                                            key={tag.id} 
-                                                            onClick={() => handleTagClick(tag)}
-                                                            className={`
-                                                                px-2 py-0.5 text-[10px] rounded transition-colors whitespace-nowrap uppercase tracking-wide border
-                                                                ${tag.type === TagType.AI_GENERATED 
-                                                                    ? 'bg-violet-50 hover:bg-violet-100 border-violet-100 text-violet-700' 
-                                                                    : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200 text-zinc-600 hover:text-zinc-900'}
-                                                            `}
-                                                        >
-                                                            {tag.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </>
-                                        )}
-                                    </>
-                                )}
-
-                                {/* 3. COLOR MODE */}
-                                {experienceAnchor.mode === 'COLOR' && (
-                                    <>
-                                        <div className="flex items-center gap-2 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200/50">
-                                             <div className="w-3 h-3 rounded-full border border-black/10" style={{ backgroundColor: experienceAnchor.id }} />
-                                             <span className="text-[10px] font-mono text-zinc-600 uppercase">{experienceAnchor.id}</span>
-                                        </div>
-
-                                        <div className="w-px h-3 bg-zinc-200" />
-                                        <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider hidden sm:inline-block">Adjacent</span>
-
-                                        <div className="flex gap-1.5 items-center">
-                                            {experienceContext.activePalette.filter(c => c !== experienceAnchor.id).map((c, i) => (
-                                                <button 
-                                                    key={i} 
-                                                    onClick={() => handleColorClick(c)} 
-                                                    className="w-3.5 h-3.5 rounded-sm ring-1 ring-black/5 hover:scale-110 hover:ring-2 hover:ring-zinc-400 transition-all" 
-                                                    style={{ backgroundColor: c }} 
-                                                    title="Navigate to color"
-                                                />
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-
-                                <div className="w-px h-3 bg-zinc-200 ml-1" />
-                                
-                                <button 
-                                    onClick={() => setExperienceAnchor({ mode: 'NONE', id: '' })} 
-                                    className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded transition-all"
-                                    title="Close View"
-                                >
-                                    <X size={14} />
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                )}
 
                 {/* Right: Global Actions (Workbench Only) */}
                 <div className="flex items-center gap-3 w-[150px] justify-end">

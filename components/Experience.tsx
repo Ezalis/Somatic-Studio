@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { ImageNode, Tag, TagType, SimulationNodeDatum, ViewMode, ExperienceMode, AnchorState, ExperienceContext } from '../types';
-import { X, Camera, Activity, Maximize2, Calendar, Aperture, Info, Hash, Palette, Sparkles, MoveDown, ArrowDown } from 'lucide-react';
+import { X, Camera, Activity, Maximize2, Calendar, Aperture, Info, Hash, Palette, Sparkles, MoveDown, ArrowDown, Clock, Sun, Cloud, Thermometer, MapPin, Gauge, Timer, Layers, Snowflake } from 'lucide-react';
 
 interface ExperienceProps {
     images: ImageNode[];
@@ -70,6 +70,72 @@ const EsotericSprite: React.FC<{ node: SimNode }> = ({ node }) => {
     );
 };
 
+// --- Procedural Hand-Drawn Arrow Component ---
+
+const GreasePencilArrow: React.FC<{ seed: number, className?: string }> = ({ seed, className }) => {
+    // Deterministic random function
+    const rng = (offset: number) => {
+        const x = Math.sin(seed + offset) * 10000;
+        return x - Math.floor(x);
+    };
+
+    // Randomized Properties
+    const tilt = (rng(1) - 0.5) * 20; // -10 to 10 degrees tilt
+    const curveX = (rng(2) - 0.5) * 15; // Curvature of the shaft
+    const headLeftLen = 8 + rng(3) * 6;
+    const headRightLen = 8 + rng(4) * 6;
+    const headLeftAngle = 25 + rng(5) * 15;
+    const headRightAngle = 25 + rng(6) * 15;
+    const shaftWiggle = (rng(7) - 0.5) * 4;
+
+    return (
+        <svg 
+            viewBox="0 0 32 64" 
+            className={className} 
+            style={{ 
+                transform: `rotate(${tilt}deg)`,
+                overflow: 'visible'
+            }}
+        >
+            <defs>
+                <filter id={`sketch-${seed % 10}`}>
+                    <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" result="noise" />
+                    <feDisplacementMap in="SourceGraphic" in2="noise" scale="2" />
+                </filter>
+            </defs>
+            <g 
+                stroke="currentColor" 
+                strokeWidth="2.5" 
+                fill="none" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                filter={`url(#sketch-${seed % 10})`}
+                opacity="0.7"
+            >
+                {/* Shaft - Pointing UP (from bottom 60 to top 4) */}
+                <path d={`M16,60 Q${16 + curveX},32 ${16 + shaftWiggle},4`} />
+                
+                {/* Arrowhead Left */}
+                <path d={`M${16 + shaftWiggle},4 l-${Math.sin(headLeftAngle * Math.PI / 180) * headLeftLen},${Math.cos(headLeftAngle * Math.PI / 180) * headLeftLen}`} />
+                
+                {/* Arrowhead Right */}
+                <path d={`M${16 + shaftWiggle},4 l${Math.sin(headRightAngle * Math.PI / 180) * headRightLen},${Math.cos(headRightAngle * Math.PI / 180) * headRightLen}`} />
+            </g>
+        </svg>
+    );
+};
+
+// --- Scribble Line for Details ---
+const ScribbleConnector: React.FC<{ direction: 'left' | 'right', width?: string }> = ({ direction, width = "100px" }) => (
+    <div className={`flex items-center ${direction === 'left' ? 'flex-row-reverse' : 'flex-row'} opacity-50 text-zinc-500`}>
+        <div className="h-px bg-current w-4" />
+        <svg width="40" height="10" viewBox="0 0 40 10" className="overflow-visible" fill="none" stroke="currentColor" strokeWidth="1">
+            <path d={direction === 'right' ? "M0,5 Q20,0 40,5" : "M40,5 Q20,10 0,5"} />
+            <circle cx={direction === 'right' ? "40" : "0"} cy="5" r="1.5" fill="currentColor" />
+        </svg>
+    </div>
+);
+
 // --- Types ---
 
 interface SimNode extends SimulationNodeDatum {
@@ -123,6 +189,48 @@ const getMinPaletteDistance = (p1: string[], p2: string[]): number => {
     return min;
 };
 
+const getIntersectionAttributes = (imgA: ImageNode, imgB: ImageNode, allTags: Tag[]) => {
+    // 1. Common Tags
+    const tagsA = new Set([...imgA.tagIds, ...(imgA.aiTagIds||[])]);
+    const tagsB = new Set([...imgB.tagIds, ...(imgB.aiTagIds||[])]);
+    const commonTagIds = [...tagsA].filter(x => tagsB.has(x));
+    const commonTags = commonTagIds.map(id => allTags.find(t => t.id === id)).filter(Boolean) as Tag[];
+
+    // 2. Color Similarity (Pairs of similar colors)
+    const colorMatches: {cA: string, cB: string}[] = [];
+    const usedB = new Set<string>();
+    imgA.palette.forEach(cA => {
+        let bestMatch = null;
+        let minDist = 3000; // Tolerance
+        imgB.palette.forEach(cB => {
+            if (usedB.has(cB)) return;
+            const dist = getColorDistSq(cA, cB);
+            if (dist < minDist) {
+                minDist = dist;
+                bestMatch = cB;
+            }
+        });
+        if (bestMatch) {
+            colorMatches.push({ cA, cB: bestMatch });
+            usedB.add(bestMatch);
+        }
+    });
+
+    // 3. Technical & Temporal
+    const techMatches: string[] = [];
+    if (imgA.cameraModel === imgB.cameraModel && imgA.cameraModel !== 'Unknown Camera') techMatches.push(imgA.cameraModel);
+    if (imgA.iso === imgB.iso) techMatches.push(`ISO ${imgA.iso}`);
+    if (imgA.inferredSeason === imgB.inferredSeason) techMatches.push(imgA.inferredSeason);
+    
+    // Day match?
+    const d1 = new Date(imgA.captureTimestamp);
+    const d2 = new Date(imgB.captureTimestamp);
+    if (d1.toDateString() === d2.toDateString()) techMatches.push("Same Day");
+    else if (Math.abs(imgA.captureTimestamp - imgB.captureTimestamp) < 3600000) techMatches.push("Within 1 Hour");
+
+    return { commonTags, colorMatches, techMatches };
+};
+
 const MONO_KEYWORDS = ['b&w', 'black and white', 'monochrome', 'grayscale', 'noir', 'silver gelatin'];
 
 const isMonochrome = (tags: Tag[], tagIds: string[]) => {
@@ -161,7 +269,14 @@ const getRelatedTagsFromNodes = (
         const allTags = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
         allTags.forEach(tId => {
             if (tId === excludeTagId) return;
-            if (nsfwFilterActive && tId === nsfwTagId) return; // Only omit NSFW if filter is active
+            // Always filter "nsfw" from suggestions
+            const t = tags.find(tag => tag.id === tId);
+            if (!t) return;
+            
+            // STRICT FILTER: Only show AI Tags in navigation
+            if (t.type !== TagType.AI_GENERATED) return;
+            if (t.label.toLowerCase().trim() === 'nsfw') return;
+            
             tagCounts[tId] = (tagCounts[tId] || 0) + 1;
         });
     });
@@ -171,12 +286,83 @@ const getRelatedTagsFromNodes = (
         .slice(0, count)
         .map(([id]) => tags.find(t => t.id === id))
         .filter((t): t is Tag => {
-            // Extra safety check: Filter out any tag labeled 'nsfw' ONLY if filter is active
             if (!t) return false;
             if (nsfwFilterActive && t.label.trim().toLowerCase() === 'nsfw') return false;
             return true;
         });
 };
+
+// --- ANNOTATION HELPERS ---
+
+const getAnnotationLayout = (id: string) => {
+    // Deterministic variability based on image ID hash
+    const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    
+    // Determine which side gets which data
+    const dateSide = hash % 2 === 0 ? 'left' : 'right';
+    const techSide = dateSide === 'left' ? 'right' : 'left';
+    
+    // Slight tilt for the image card
+    const tilt = (hash % 5) - 2; // -2deg to 2deg
+    
+    // Vertical offset for the annotations so they aren't perfectly aligned
+    const verticalOffset = (hash % 40) - 20; // -20px to 20px
+    
+    // Line style variability
+    const isCurved = hash % 3 === 0;
+    
+    return { dateSide, techSide, tilt, verticalOffset, isCurved, seed: hash };
+};
+
+const Annotation: React.FC<{
+    side: 'left' | 'right';
+    children: React.ReactNode;
+    verticalOffset?: number;
+    isCurved?: boolean;
+    compact?: boolean;
+}> = ({ side, children, verticalOffset = 0, isCurved = false, compact = false }) => {
+    const isLeft = side === 'left';
+    
+    // Base position relative to the center image container
+    const widthClass = compact ? 'w-32 md:w-40' : 'w-48 md:w-64';
+    const offsetClass = isLeft 
+        ? (compact ? 'right-full mr-4 md:mr-6 text-right' : 'right-full mr-8 md:mr-12 text-right')
+        : (compact ? 'left-full ml-4 md:ml-6 text-left' : 'left-full ml-8 md:ml-12 text-left');
+
+    return (
+        <div 
+            className={`absolute top-1/2 ${widthClass} ${offsetClass}`}
+            style={{ 
+                marginTop: `${verticalOffset}px`,
+                transform: 'translateY(-50%)'
+            }}
+        >
+            <div className={`relative font-hand text-zinc-600 ${compact ? 'text-sm md:text-base' : 'text-lg md:text-xl'} leading-snug`}>
+                {/* Connecting Line (SVG) */}
+                <svg 
+                    className={`
+                        absolute top-1/2 text-zinc-400 pointer-events-none opacity-60
+                        ${isLeft ? '-right-8 translate-x-2' : '-left-8 -translate-x-2'}
+                        ${compact ? 'w-8 h-4' : 'w-12 h-8'}
+                    `}
+                    style={{ transform: `translateY(-50%) ${isLeft ? '' : 'scaleX(-1)'}` }}
+                    viewBox="0 0 48 32"
+                    overflow="visible"
+                >
+                    {isCurved ? (
+                        <path d="M0,16 Q24,4 48,16" fill="none" stroke="currentColor" strokeWidth={compact ? 1 : 1.5} strokeLinecap="round" />
+                    ) : (
+                        <line x1="0" y1="16" x2="48" y2="16" stroke="currentColor" strokeWidth={compact ? 1 : 1.5} strokeLinecap="round" />
+                    )}
+                    <circle cx="48" cy="16" r={compact ? 1.5 : 2.5} fill="currentColor" />
+                </svg>
+
+                {children}
+            </div>
+        </div>
+    );
+};
+
 
 // --- HISTORY SUB-COMPONENT ---
 
@@ -214,12 +400,12 @@ const HistoryTimeline: React.FC<{
             `}
         >
             <div className="flex flex-col items-center min-h-full py-20 relative">
-                {/* Central Timeline Thread */}
-                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-transparent via-zinc-700 to-transparent" />
+                {/* Central Timeline Thread (Faint line behind) */}
+                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-transparent via-zinc-800 to-transparent" />
                 
                 {history.map((step, index) => {
                     const isFirst = index === 0;
-                    const prevStep = history[index + 1]; // Technically the "next" item in the visual list (which is older in time)
+                    const prevStep = history[index + 1]; 
                     
                     const isDirectLink = step.mode === 'IMAGE' && prevStep?.mode === 'IMAGE';
 
@@ -236,14 +422,24 @@ const HistoryTimeline: React.FC<{
                             if (hasNsfwTag) return null; // Omit NSFW steps
                         }
                     }
+                    
+                    // Always hide explicit NSFW tag steps AND Manual tags
+                    if (step.mode === 'TAG') {
+                        if (step.meta?.label?.toLowerCase() === 'nsfw') return null;
+                        // Hide manual tags from history stream to keep it clean
+                        if (step.meta?.type === TagType.CATEGORICAL || step.meta?.type === TagType.QUALITATIVE) return null;
+                    }
 
                     return (
-                        <div key={index} className="w-full max-w-2xl flex flex-col items-center snap-center shrink-0 py-12 relative group">
+                        <div key={index} className="w-full max-w-4xl flex flex-col items-center snap-center shrink-0 py-24 relative group perspective-1000">
                             
-                            {/* Connection Marker on Line (Only if NOT direct link, or we let the new bridge handle it) */}
+                            {/* Organic Connection Arrow (Pointing UP towards newest state) */}
                             {!isFirst && !isDirectLink && (
-                                <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-0 flex flex-col items-center">
-                                    <ArrowDown size={14} className="text-zinc-500 mb-2" />
+                                <div className="absolute -top-16 left-1/2 -translate-x-1/2 z-0 flex flex-col items-center pointer-events-none opacity-50">
+                                    <GreasePencilArrow 
+                                        seed={index * 123} 
+                                        className="text-zinc-500 w-8 h-16 drop-shadow-sm" 
+                                    />
                                 </div>
                             )}
 
@@ -252,51 +448,86 @@ const HistoryTimeline: React.FC<{
                             {step.mode === 'IMAGE' && (() => {
                                 const img = images.find(i => i.id === step.id);
                                 if (!img) return null;
+
+                                const { dateSide, techSide, tilt, verticalOffset, isCurved, seed } = getAnnotationLayout(img.id);
+                                
+                                const dateObj = new Date(img.captureTimestamp);
+                                const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                const dateStr = dateObj.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+                                const seasonStr = img.inferredSeason;
+
                                 return (
-                                    <div className="relative z-10 w-full flex flex-col items-center gap-6">
-                                        {/* Timestamp of visit (Simulated for visual) */}
-                                        <span className="text-[10px] font-mono text-zinc-300 uppercase tracking-widest bg-zinc-900 px-2 py-1 border border-zinc-700 rounded-full">
-                                            {index === 0 ? "Current View" : `Step -${index}`}
-                                        </span>
-                                        
-                                        {/* Card */}
-                                        <div className="bg-white p-3 rounded-sm shadow-2xl rotate-1 group-hover:rotate-0 transition-transform duration-500 max-w-[80%] relative">
-                                            <img src={img.fileUrl} alt="" className="max-h-[50vh] object-contain" />
-                                            {/* Highlighted connection context if applicable */}
-                                            {prevStep?.mode === 'TAG' && (
-                                                <div className="absolute -bottom-4 -right-4 bg-violet-600 text-white px-3 py-1 text-xs font-bold rounded-full shadow-lg flex items-center gap-2">
-                                                    <Hash size={12} /> {prevStep.meta?.label}
+                                    <div className="relative z-10 w-full flex flex-col items-center gap-12">
+                                        <div className="relative">
+                                            {/* --- PHOTOGRAPHER'S NOTES (Desktop Only) --- */}
+                                            <div className="hidden md:block">
+                                                <Annotation side={techSide as 'left' | 'right'} verticalOffset={-20} isCurved={isCurved}>
+                                                    <div className="flex flex-col gap-1 text-zinc-400">
+                                                        <span className="text-2xl text-zinc-300 font-bold flex items-center gap-2 justify-end flex-row-reverse">
+                                                            {img.cameraModel} 
+                                                            <Camera size={20} strokeWidth={2} className="opacity-70" />
+                                                        </span>
+                                                        <span className="text-xl italic opacity-80">{img.lensModel}</span>
+                                                        <div className="flex items-center gap-3 justify-end mt-2 text-lg opacity-60">
+                                                            <span>ISO {img.iso}</span>
+                                                            <span>•</span>
+                                                            <span>{img.aperture}</span>
+                                                            <span>•</span>
+                                                            <span>{img.shutterSpeed}s</span>
+                                                        </div>
+                                                    </div>
+                                                </Annotation>
+
+                                                <Annotation side={dateSide as 'left' | 'right'} verticalOffset={40} isCurved={!isCurved}>
+                                                    <div className="flex flex-col gap-1 text-zinc-400">
+                                                        <span className="text-3xl text-zinc-200 font-bold flex items-center gap-2">
+                                                            {seasonStr}
+                                                            {seasonStr === 'Summer' ? <Sun size={24} /> : seasonStr === 'Winter' ? <Thermometer size={24} /> : <Cloud size={24} />}
+                                                        </span>
+                                                        <span className="text-xl flex items-center gap-2">
+                                                            <Calendar size={18} /> {dateStr}
+                                                        </span>
+                                                        <span className="text-xl flex items-center gap-2 italic opacity-70">
+                                                            <Clock size={18} /> {timeStr}
+                                                        </span>
+                                                    </div>
+                                                </Annotation>
+                                            </div>
+
+                                            {/* --- IMAGE CARD --- */}
+                                            <div 
+                                                className="bg-white p-3 rounded-sm shadow-2xl transition-transform duration-700 max-w-[80vw] md:max-w-[400px] relative z-20 group-hover:scale-[1.01]"
+                                                style={{ transform: `rotate(${tilt}deg)` }}
+                                            >
+                                                <img src={img.fileUrl} alt="" className="w-full h-auto object-contain bg-zinc-100" />
+                                                <div className="md:hidden mt-3 pt-3 border-t border-dashed border-zinc-200 font-hand text-zinc-600 text-lg flex justify-between items-start">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold">{dateStr}</span>
+                                                        <span className="text-sm opacity-70">{timeStr}</span>
+                                                    </div>
+                                                    <div className="flex flex-col items-end text-sm">
+                                                        <span>{img.cameraModel}</span>
+                                                        <span className="opacity-70">{img.aperture}, ISO{img.iso}</span>
+                                                    </div>
                                                 </div>
-                                            )}
+                                            </div>
                                         </div>
 
-                                        {/* Mini Metadata Web */}
-                                        <div className="flex gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                                            {img.tagIds.slice(0, 3).map(tid => {
-                                                const t = tags.find(tag => tag.id === tid);
-                                                if (!t) return null;
-                                                // Only hide NSFW tag if filter is active
-                                                if (nsfwFilterActive && (tid === nsfwTagId || t.label.trim().toLowerCase() === 'nsfw')) return null;
-                                                
-                                                return <span key={tid} className="text-[9px] text-zinc-400 border border-zinc-700 px-1.5 py-0.5 rounded-full">{t.label}</span>;
-                                            })}
-                                        </div>
+                                        {/* --- NAVIGATION LINK (INTERMEDIATE NODE) --- */}
+                                        {isDirectLink && (() => {
+                                            const prevImg = images.find(i => i.id === prevStep.id);
+                                            if (!prevImg) return null;
+                                            const { commonTags, colorMatches, techMatches } = getIntersectionAttributes(img, prevImg, tags);
+                                            
+                                            if(commonTags.length === 0 && colorMatches.length === 0 && techMatches.length === 0) return (
+                                                <div className="absolute -top-16 left-1/2 -translate-x-1/2 z-0 flex flex-col items-center pointer-events-none opacity-50">
+                                                    <GreasePencilArrow seed={index * 99} className="text-zinc-500 w-8 h-16" />
+                                                </div>
+                                            );
 
-                                        {/* NEW: Visual Bridge Node (Abstract Representation) */}
-                                        {isDirectLink && (
-                                            <div className="mt-8 flex flex-col items-center gap-4 opacity-90 hover:opacity-100 transition-opacity">
-                                                <div className="relative flex flex-col items-center">
-                                                    {/* Top arrow into sprite */}
-                                                    <div className="h-4 w-px bg-zinc-600 mb-2" />
-                                                    <ArrowDown size={12} className="text-zinc-500 mb-2" />
-                                                    
-                                                    <span className="text-[9px] font-mono text-zinc-200 uppercase tracking-widest bg-zinc-900/90 px-3 py-1 border border-zinc-600 rounded-full backdrop-blur-md shadow-sm flex items-center gap-2 mb-2">
-                                                        <Sparkles size={10} className="text-violet-300" />
-                                                        Visual Connection
-                                                    </span>
-                                                    
-                                                    <div className="w-24 h-24 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm shadow-[0_0_30px_rgba(139,92,246,0.1)] p-2 flex items-center justify-center overflow-hidden relative group/sprite cursor-help">
-                                                        <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/0 to-violet-500/10 opacity-0 group-hover/sprite:opacity-100 transition-opacity" />
+                                            return (
+                                                <div className="relative flex flex-col items-center animate-in fade-in zoom-in duration-700 delay-300">
+                                                    <div className="w-20 h-20 rounded-full border border-white/10 bg-zinc-800/50 backdrop-blur-sm p-2 flex items-center justify-center relative z-20 shadow-[0_0_30px_rgba(139,92,246,0.1)]">
                                                         <EsotericSprite node={{
                                                             id: img.id,
                                                             original: img,
@@ -306,44 +537,192 @@ const HistoryTimeline: React.FC<{
                                                             relevanceScore: 100, isVisible: true
                                                         }} />
                                                     </div>
-
-                                                     {/* Bottom arrow out of sprite */}
-                                                     <div className="h-4 w-px bg-zinc-600 mt-2" />
+                                                    <div className="hidden md:block">
+                                                        <Annotation side="left" compact verticalOffset={0} isCurved={true}>
+                                                            <div className="flex flex-col gap-2 items-end">
+                                                                {colorMatches.slice(0, 3).map((pair, idx) => (
+                                                                    <div key={idx} className="flex items-center gap-2">
+                                                                        <span className="text-xs font-mono opacity-50 uppercase">{pair.cA}</span>
+                                                                        <div className="flex -space-x-1">
+                                                                            <div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cA}} />
+                                                                            <div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cB}} />
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                                {techMatches.length > 0 && (
+                                                                    <div className="mt-1 text-right">
+                                                                        {techMatches.map((t, idx) => (
+                                                                            <span key={idx} className="block text-zinc-400 text-sm">{t}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </Annotation>
+                                                    </div>
+                                                    <div className="hidden md:block">
+                                                        <Annotation side="right" compact verticalOffset={0} isCurved={false}>
+                                                            <div className="flex flex-col gap-1 items-start text-zinc-400">
+                                                                {commonTags.slice(0, 4).map((tag, idx) => (
+                                                                    <div key={tag.id} className="flex items-center gap-2">
+                                                                        <Hash size={12} className="opacity-50" />
+                                                                        <span>{tag.label}</span>
+                                                                    </div>
+                                                                ))}
+                                                                {commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}
+                                                            </div>
+                                                        </Annotation>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )}
+                                            );
+                                        })()}
                                     </div>
                                 );
                             })()}
 
                             {step.mode === 'TAG' && (
-                                <div className="relative z-10 flex flex-col items-center gap-4">
-                                     <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest bg-zinc-900 px-2 py-1 border border-zinc-700 rounded-full">
-                                        Semantic Bridge
-                                    </span>
-                                    <div className="min-w-[140px] px-8 py-6 rounded-full border border-violet-500/30 bg-violet-900/10 backdrop-blur flex flex-col items-center justify-center gap-2 shadow-[0_0_30px_rgba(139,92,246,0.2)] animate-pulse">
-                                        <Hash size={24} className="text-violet-400" />
-                                        <span className="text-sm font-bold text-white uppercase tracking-widest whitespace-nowrap">{step.meta?.label}</span>
-                                    </div>
-                                    {prevStep?.mode === 'IMAGE' && (
-                                        <div className="text-[10px] text-zinc-400 max-w-xs text-center">
-                                            Extracted from previous selection
+                                <div className="relative z-10 flex flex-col items-center py-12">
+                                    <div className="relative">
+                                        <div className="hidden md:block">
+                                            <Annotation side="right" verticalOffset={0} isCurved>
+                                                <div className="flex flex-col gap-1 text-zinc-400">
+                                                    <span className="text-xl font-bold text-zinc-300">Semantic Focus</span>
+                                                    <span className="text-sm opacity-70">Classification</span>
+                                                </div>
+                                            </Annotation>
                                         </div>
-                                    )}
+                                        <div className="relative cursor-default">
+                                            <div className="absolute inset-0 bg-zinc-500/10 blur-xl rounded-full" />
+                                            <div className="relative bg-zinc-900/90 backdrop-blur-md border border-zinc-700 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10">
+                                                <Hash size={20} className="text-zinc-400" />
+                                                <span className="text-3xl font-hand text-white tracking-wide">{step.meta?.label}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Tag Filter</span>
                                 </div>
                             )}
 
-                            {step.mode === 'COLOR' && (
-                                <div className="relative z-10 flex flex-col items-center gap-4">
-                                    <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest bg-zinc-900 px-2 py-1 border border-zinc-700 rounded-full">
-                                        Chromatic Bridge
-                                    </span>
-                                    <div 
-                                        className="w-24 h-24 rounded-full border-4 border-white/10 flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.1)]"
-                                        style={{ backgroundColor: step.id }}
-                                    >
-                                        <span className="text-[10px] font-mono font-bold text-white mix-blend-difference">{step.id}</span>
+                            {step.mode === 'COLOR' && (() => {
+                                const rgb = hexToRgbVals(step.id);
+                                return (
+                                    <div className="relative z-10 flex flex-col items-center py-12">
+                                        <div className="relative">
+                                            <div className="hidden md:block">
+                                                <Annotation side="left" verticalOffset={0} isCurved>
+                                                    <div className="flex flex-col gap-1 items-end text-zinc-400">
+                                                        <span className="text-xl font-bold text-zinc-200 font-mono">{step.id}</span>
+                                                        <span className="text-sm opacity-60 font-mono">R{rgb[0]} G{rgb[1]} B{rgb[2]}</span>
+                                                        <span className="text-xs italic opacity-40 mt-1 font-hand">Dominant wavelength</span>
+                                                    </div>
+                                                </Annotation>
+                                            </div>
+                                            <div className="relative cursor-default">
+                                                <div className="absolute inset-0 blur-2xl opacity-40 rounded-full" style={{ backgroundColor: step.id }} />
+                                                <div className="w-32 h-32 rounded-[2rem] border-4 border-white/10 shadow-2xl relative z-10 flex items-center justify-center overflow-hidden rotate-3" style={{ backgroundColor: step.id }}>
+                                                    <div className="absolute inset-0 bg-gradient-to-tr from-black/20 to-transparent pointer-events-none" />
+                                                    <div className="absolute inset-0 bg-gradient-to-bl from-white/20 to-transparent pointer-events-none" />
+                                                    <Palette size={24} className="text-white mix-blend-overlay opacity-50" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                         <span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Color Filter</span>
                                     </div>
+                                );
+                            })()}
+
+                            {step.mode === 'DATE' && (
+                                <div className="relative z-10 flex flex-col items-center py-12">
+                                    <div className="relative">
+                                        <div className="hidden md:block">
+                                            <Annotation side="right" verticalOffset={0} isCurved>
+                                                <div className="flex flex-col gap-1 text-zinc-400">
+                                                    <span className="text-xl font-bold text-zinc-300">Temporal Pivot</span>
+                                                    <span className="text-sm opacity-70">30-day Window</span>
+                                                </div>
+                                            </Annotation>
+                                        </div>
+                                        <div className="relative cursor-default">
+                                            <div className="absolute inset-0 bg-blue-500/10 blur-xl rounded-full" />
+                                            <div className="relative bg-zinc-900/90 backdrop-blur-md border border-blue-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10">
+                                                <Calendar size={20} className="text-blue-400" />
+                                                <span className="text-3xl font-hand text-white tracking-wide">
+                                                    {new Date(parseInt(step.id)).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Date Filter</span>
+                                </div>
+                            )}
+
+                            {step.mode === 'SEASON' && (
+                                <div className="relative z-10 flex flex-col items-center py-12">
+                                    <div className="relative">
+                                        <div className="hidden md:block">
+                                            <Annotation side="left" verticalOffset={0} isCurved>
+                                                <div className="flex flex-col gap-1 items-end text-zinc-400">
+                                                    <span className="text-xl font-bold text-zinc-300">Cyclical Time</span>
+                                                    <span className="text-sm opacity-70">Seasonal Grid</span>
+                                                </div>
+                                            </Annotation>
+                                        </div>
+                                        <div className="relative cursor-default">
+                                            <div className="absolute inset-0 bg-amber-500/10 blur-xl rounded-full" />
+                                            <div className="relative bg-zinc-900/90 backdrop-blur-md border border-amber-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10">
+                                                {step.id === 'Winter' ? <Snowflake size={24} className="text-cyan-200" /> : 
+                                                 step.id === 'Summer' ? <Sun size={24} className="text-amber-400" /> : 
+                                                 <Cloud size={24} className="text-zinc-400" />}
+                                                <span className="text-3xl font-hand text-white tracking-wide">{step.id}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Seasonal Filter</span>
+                                </div>
+                            )}
+
+                            {step.mode === 'CAMERA' && (
+                                <div className="relative z-10 flex flex-col items-center py-12">
+                                    <div className="relative">
+                                        <div className="hidden md:block">
+                                            <Annotation side="left" verticalOffset={0} isCurved>
+                                                <div className="flex flex-col gap-1 items-end text-zinc-400">
+                                                    <span className="text-xl font-bold text-zinc-300">Mechanical Eye</span>
+                                                    <span className="text-sm opacity-70">Equipment Match</span>
+                                                </div>
+                                            </Annotation>
+                                        </div>
+                                        <div className="relative cursor-default">
+                                            <div className="absolute inset-0 bg-emerald-500/10 blur-xl rounded-full" />
+                                            <div className="relative bg-zinc-900/90 backdrop-blur-md border border-emerald-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10">
+                                                <Camera size={20} className="text-emerald-400" />
+                                                <span className="text-3xl font-hand text-white tracking-wide">{step.id}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Camera Filter</span>
+                                </div>
+                            )}
+
+                            {step.mode === 'LENS' && (
+                                <div className="relative z-10 flex flex-col items-center py-12">
+                                    <div className="relative">
+                                        <div className="hidden md:block">
+                                            <Annotation side="right" verticalOffset={0} isCurved>
+                                                <div className="flex flex-col gap-1 text-zinc-400">
+                                                    <span className="text-xl font-bold text-zinc-300">Glass Signature</span>
+                                                    <span className="text-sm opacity-70">Optic Match</span>
+                                                </div>
+                                            </Annotation>
+                                        </div>
+                                        <div className="relative cursor-default">
+                                            <div className="absolute inset-0 bg-amber-500/10 blur-xl rounded-full" />
+                                            <div className="relative bg-zinc-900/90 backdrop-blur-md border border-amber-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10">
+                                                <Aperture size={20} className="text-amber-400" />
+                                                <span className="text-2xl font-hand text-white tracking-wide">{step.id}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Lens Filter</span>
                                 </div>
                             )}
 
@@ -352,9 +731,9 @@ const HistoryTimeline: React.FC<{
                 })}
 
                 {/* End of History */}
-                <div className="mt-20 flex flex-col items-center gap-2 opacity-30">
+                <div className="mt-20 flex flex-col items-center gap-3 opacity-30">
                     <div className="w-2 h-2 bg-zinc-600 rounded-full" />
-                    <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">Origin Point</span>
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">Session Origin</span>
                 </div>
             </div>
         </div>
@@ -503,7 +882,29 @@ const Experience: React.FC<ExperienceProps> = ({
              } else if (anchor.mode === 'COLOR') {
                  const minD = node.original.palette.reduce((min, c) => Math.min(min, getColorDistSq(c, anchor.id)), Infinity);
                  if (minD < 1500) score = 100;
+             } else if (anchor.mode === 'DATE') {
+                 // Date clustering: +/- 30 days around selected date
+                 const anchorTime = parseInt(anchor.id);
+                 const diff = Math.abs(node.original.captureTimestamp - anchorTime);
+                 const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+                 
+                 if (diff < thirtyDaysMs) {
+                     // Score higher the closer it is
+                     score = 100 - (diff / thirtyDaysMs) * 50; 
+                 } else {
+                     score = 0;
+                 }
+             } else if (anchor.mode === 'CAMERA') {
+                 if (node.original.cameraModel === anchor.id) score = 100;
+                 else score = 0;
+             } else if (anchor.mode === 'LENS') {
+                 if (node.original.lensModel === anchor.id) score = 100;
+                 else score = 0;
+             } else if (anchor.mode === 'SEASON') {
+                 if (node.original.inferredSeason === anchor.id) score = 100;
+                 else score = 0;
              }
+
              return { ...node, relevanceScore: score };
         });
 
@@ -555,24 +956,26 @@ const Experience: React.FC<ExperienceProps> = ({
             calculatedPalette = anchorImg ? anchorImg.palette : [];
             calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 6, undefined, nsfwTagId, nsfwFilterActive);
 
-        } else if (anchor.mode === 'TAG') {
+        } else if (['TAG', 'COLOR', 'DATE', 'CAMERA', 'LENS', 'SEASON'].includes(anchor.mode)) {
+             // General clustering modes
              scoredNodes.forEach(n => {
                  if (n.relevanceScore <= -5000) { n.isVisible = false; return; }
                  n.isVisible = n.relevanceScore > 0;
                  if (n.isVisible) visibleSubset.push(n);
              });
-             calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 5, anchor.id, nsfwTagId, nsfwFilterActive);
-             calculatedPalette = []; 
-
-        } else if (anchor.mode === 'COLOR') {
-             scoredNodes.forEach(n => {
-                 if (n.relevanceScore <= -5000) { n.isVisible = false; return; }
-                 n.isVisible = n.relevanceScore > 0;
-                 if (n.isVisible) visibleSubset.push(n);
-             });
-             const adjacent = getDominantColorsFromNodes(visibleSubset, 5, anchor.id);
-             calculatedPalette = [anchor.id, ...adjacent].slice(0, 5);
-             calculatedTags = []; 
+             
+             // Recalculate context based on subset
+             if (anchor.mode === 'TAG') {
+                 calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 5, anchor.id, nsfwTagId, nsfwFilterActive);
+                 calculatedPalette = [];
+             } else if (anchor.mode === 'COLOR') {
+                 const adjacent = getDominantColorsFromNodes(visibleSubset, 5, anchor.id);
+                 calculatedPalette = [anchor.id, ...adjacent].slice(0, 5);
+                 calculatedTags = [];
+             } else {
+                 calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 5, undefined, nsfwTagId, nsfwFilterActive);
+                 calculatedPalette = getDominantColorsFromNodes(visibleSubset, 5);
+             }
 
         } else {
             scoredNodes.forEach(n => {
@@ -713,7 +1116,7 @@ const Experience: React.FC<ExperienceProps> = ({
             simNodes.forEach((node, i) => {
                 const isAnchor = anchor.mode === 'IMAGE' && node.id === anchor.id;
 
-                if (node.isVisible && !isAnchor && anchor.mode !== 'NONE' && anchor.mode !== 'TAG' && anchor.mode !== 'COLOR') {
+                if (node.isVisible && !isAnchor && anchor.mode !== 'NONE' && !['TAG', 'COLOR', 'SEASON', 'DATE', 'CAMERA', 'LENS'].includes(anchor.mode)) {
                      const floatSpeed = 0.5;
                      const floatAmp = 0.05; 
                      node.vx = (node.vx || 0) + Math.sin(time * floatSpeed + i) * floatAmp;
@@ -780,7 +1183,7 @@ const Experience: React.FC<ExperienceProps> = ({
                         }
                     }
                 }
-                else if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') {
+                else if (['TAG', 'COLOR', 'DATE', 'CAMERA', 'LENS', 'SEASON'].includes(anchor.mode)) {
                     if (node.isVisible) {
                         const idx = activeNodes.indexOf(node);
                         const total = activeNodes.length;
@@ -957,180 +1360,194 @@ const Experience: React.FC<ExperienceProps> = ({
                 nsfwTagId={nsfwTagId}
             />
 
-            {/* --- DETAILED CONTEXTUAL MODAL (Only in Explore Mode) --- */}
+            {/* --- DETAILED CONTEXTUAL MODAL (Explore Mode Overlay) --- */}
             {isDetailOpen && activeNode && experienceMode === 'EXPLORE' && (
                 <div 
-                    className="absolute inset-0 z-50 flex items-center justify-center bg-zinc-900/10 backdrop-blur-sm p-8 animate-in fade-in duration-300"
+                    className="fixed inset-0 z-50 bg-zinc-900/95 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in duration-300 overflow-hidden"
                     onClick={() => setIsDetailOpen(false)}
                 >
+                    {/* Close Button - Floating Fixed */}
+                    <button 
+                        className="absolute top-6 right-6 text-zinc-500 hover:text-zinc-300 transition-colors z-50 p-2"
+                        onClick={(e) => { e.stopPropagation(); setIsDetailOpen(false); }}
+                    >
+                        <X size={32} />
+                    </button>
+
                     <div 
-                        className="bg-white/95 backdrop-blur-xl w-full max-w-5xl h-[80vh] rounded-2xl shadow-2xl border border-white/50 flex overflow-hidden relative animate-in zoom-in-95 duration-300"
+                        className="w-full h-full max-w-[1920px] grid grid-cols-[1fr_auto_1fr] md:grid-cols-[minmax(250px,350px)_1fr_minmax(250px,350px)] gap-12 p-12 items-center"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <button 
-                            onClick={() => setIsDetailOpen(false)}
-                            className="absolute top-4 right-4 p-2 bg-white/50 hover:bg-zinc-100 rounded-full text-zinc-500 hover:text-zinc-800 transition-colors z-20"
-                        >
-                            <X size={20} />
-                        </button>
-
-                        {/* Left: Hero Image */}
-                        <div className="w-1/2 h-full bg-zinc-50 flex items-center justify-center p-8 border-r border-zinc-100 relative group">
-                            <img 
-                                src={activeNode.original.fileUrl} 
-                                alt="" 
-                                className="w-full h-full object-contain shadow-lg rounded cursor-zoom-in transition-transform duration-300 group-hover:scale-[1.02]"
-                                onClick={() => setIsGalleryOpen(true)}
-                            />
-                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-xs font-medium text-zinc-400 bg-white/80 px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                Click to Expand
+                        {/* LEFT COLUMN: Context & Semantics */}
+                        <div className="hidden md:flex flex-col items-end gap-16 h-full justify-center">
+                            
+                            {/* Date & Time */}
+                            <div className="flex items-center gap-4">
+                                <div className="flex flex-col items-end gap-1 text-zinc-400">
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onAnchorChange({ 
+                                                mode: 'SEASON', 
+                                                id: activeNode.original.inferredSeason 
+                                            });
+                                            setIsDetailOpen(false);
+                                        }}
+                                        className="text-4xl text-zinc-200 font-bold flex items-center gap-3 font-hand hover:text-amber-300 transition-colors text-right"
+                                    >
+                                        {activeNode.original.inferredSeason}
+                                        {activeNode.original.inferredSeason === 'Summer' ? <Sun size={28} /> : activeNode.original.inferredSeason === 'Winter' ? <Thermometer size={28} /> : <Cloud size={28} />}
+                                    </button>
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onAnchorChange({ 
+                                                mode: 'DATE', 
+                                                id: activeNode.original.captureTimestamp.toString(), 
+                                                meta: activeNode.original.captureTimestamp 
+                                            });
+                                            setIsDetailOpen(false);
+                                        }}
+                                        className="text-2xl flex items-center gap-2 font-hand text-zinc-300 hover:text-blue-300 transition-colors text-right"
+                                    >
+                                        {new Date(activeNode.original.captureTimestamp).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
+                                    </button>
+                                    <span className="text-xl italic opacity-70 font-hand pointer-events-none">
+                                        {new Date(activeNode.original.captureTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                </div>
+                                <ScribbleConnector direction="right" width="60px" />
                             </div>
-                        </div>
 
-                        {/* Right: Context */}
-                        <div className="w-1/2 h-full p-10 overflow-y-auto">
-                            <div className="space-y-8">
-                                
-                                {/* Timeline Section */}
-                                <div className="mb-8">
-                                    <div className="flex items-end justify-between mb-2">
-                                         <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                                            <Activity size={12} />
-                                            Temporal Distribution
-                                        </h3>
-                                        <span className="text-xs font-mono text-zinc-500 font-medium">
-                                            {new Date(activeNode.original.captureTimestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                        </span>
-                                    </div>
-                                    
-                                    <div className="relative h-12 w-full flex items-center select-none group/timeline">
-                                        <div className="absolute inset-x-0 h-px bg-zinc-200" />
-                                        {images.map(img => {
-                                            const pct = ((img.captureTimestamp - minTime) / timeRange) * 100;
-                                            return (
-                                                <div 
-                                                    key={img.id}
-                                                    className={`absolute top-1/2 -translate-y-1/2 w-px h-3 transition-all duration-300 ${img.id === activeNode.id ? 'opacity-0' : 'bg-zinc-300 opacity-40'}`}
-                                                    style={{ left: `${pct}%` }}
-                                                />
-                                            )
-                                        })}
-                                        <div 
-                                            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-zinc-800 rounded-full border-2 border-white shadow-md z-10 flex items-center justify-center transition-all hover:scale-110 cursor-help"
-                                            style={{ left: `${((activeNode.original.captureTimestamp - minTime) / timeRange) * 100}%`, transform: 'translate(-50%, -50%)' }}
-                                        >
-                                             <div className="w-1.5 h-1.5 bg-white rounded-full" />
-                                        </div>
-                                        <div className="absolute -bottom-4 left-0 text-[9px] text-zinc-400 font-mono">
-                                            {new Date(minTime).getFullYear()}
-                                        </div>
-                                        <div className="absolute -bottom-4 right-0 text-[9px] text-zinc-400 font-mono">
-                                             {new Date(maxTime).getFullYear()}
-                                        </div>
-                                    </div>
-                                </div>
+                            {/* Esoteric Sprite (Visual Anchor) */}
+                            <div className="relative group w-32 h-32 mr-8">
+                                <div className="absolute inset-0 bg-white/5 rounded-full blur-xl animate-pulse" />
+                                <EsotericSprite node={activeNode} />
+                                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-lg font-hand text-zinc-500 opacity-60 whitespace-nowrap">
+                                    Spectral ID
+                                </span>
+                            </div>
 
-                                <div className="h-px w-full bg-zinc-100" />
-
-                                {/* Tech Specs */}
-                                <div>
-                                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                        <Aperture size={12} />
-                                        Technical Specifications
+                            {/* Semantic Tags */}
+                            <div className="flex items-start gap-4">
+                                <div className="flex flex-col items-end gap-2">
+                                    <h3 className="text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 mb-2">
+                                        <Hash size={20} /> Concepts
                                     </h3>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-zinc-50 rounded-lg p-3 border border-zinc-100">
-                                            <span className="block text-[10px] text-zinc-400 uppercase mb-1">Camera</span>
-                                            <span className="font-medium text-zinc-700">{activeNode.original.cameraModel}</span>
-                                        </div>
-                                        <div className="bg-zinc-50 rounded-lg p-3 border border-zinc-100">
-                                            <span className="block text-[10px] text-zinc-400 uppercase mb-1">Lens</span>
-                                            <span className="font-medium text-zinc-700">{activeNode.original.lensModel}</span>
-                                        </div>
-                                        <div className="bg-zinc-50 rounded-lg p-3 border border-zinc-100 flex justify-between">
-                                            <div>
-                                                <span className="block text-[10px] text-zinc-400 uppercase mb-1">Aperture</span>
-                                                <span className="font-mono text-zinc-700">{activeNode.original.aperture}</span>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="block text-[10px] text-zinc-400 uppercase mb-1">ISO</span>
-                                                <span className="font-mono text-zinc-700">{activeNode.original.iso}</span>
-                                            </div>
-                                        </div>
-                                        <div className="bg-zinc-50 rounded-lg p-3 border border-zinc-100">
-                                            <span className="block text-[10px] text-zinc-400 uppercase mb-1">Shutter</span>
-                                            <span className="font-mono text-zinc-700">{activeNode.original.shutterSpeed}s</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="h-px w-full bg-zinc-100" />
-
-                                {/* Tags */}
-                                <div>
-                                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                        <Hash size={12} />
-                                        Semantic Tags
-                                    </h3>
-                                    <div className="flex flex-wrap gap-2">
-                                        {[...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])].map(tid => {
+                                    <div className="flex flex-col items-end gap-1 text-right">
+                                        {[...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])].slice(0, 12).map(tid => {
                                             const tag = tags.find(t => t.id === tid);
                                             if (!tag) return null;
                                             
-                                            // Always hide NSFW tag in modal regardless of filter state, treating it as system metadata in this view
-                                            if (nsfwFilterActive && (tid === nsfwTagId || tag.label.trim().toLowerCase() === 'nsfw')) return null;
-
-                                            const isAI = tag.type === TagType.AI_GENERATED;
+                                            // STRICT FILTER: Only show AI Generated Tags
+                                            if (tag.type !== TagType.AI_GENERATED) return null;
+                                            if (tag.label.trim().toLowerCase() === 'nsfw') return null;
+                                            
                                             return (
-                                                <button 
-                                                    key={tid} 
+                                                <button
+                                                    key={tid}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         onAnchorChange({ mode: 'TAG', id: tag.id, meta: tag });
                                                         setIsDetailOpen(false);
                                                     }}
-                                                    className={`
-                                                        px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5
-                                                        ${isAI 
-                                                            ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100 hover:border-violet-300' 
-                                                            : 'bg-zinc-100 text-zinc-600 border-zinc-200 hover:bg-zinc-200 hover:text-zinc-900'}
-                                                    `}
+                                                    className="font-hand text-xl text-zinc-400 hover:text-zinc-100 hover:scale-105 transition-all duration-200"
                                                 >
-                                                    {isAI && <Sparkles size={10} className="opacity-70" />}
                                                     {tag.label}
                                                 </button>
                                             );
                                         })}
+                                        {[...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])].length > 12 && (
+                                            <span className="font-hand text-zinc-600 text-lg">...and more</span>
+                                        )}
                                     </div>
                                 </div>
+                                <ScribbleConnector direction="right" width="40px" />
+                            </div>
+                        </div>
 
-                                {/* Palette */}
-                                <div>
-                                    <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                        <Palette size={12} />
-                                        Color Palette
+                        {/* CENTER COLUMN: Hero Image */}
+                        <div className="flex items-center justify-center h-full relative group">
+                            <div 
+                                className="relative bg-white p-3 rounded-sm shadow-2xl transition-transform duration-500 group-hover:scale-[1.01] cursor-zoom-in rotate-1"
+                                onClick={() => setIsGalleryOpen(true)}
+                            >
+                                <img 
+                                    src={activeNode.original.fileUrl} 
+                                    alt="" 
+                                    className="max-h-[85vh] w-auto max-w-[50vw] object-contain bg-zinc-100" 
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 pointer-events-none">
+                                    <Maximize2 size={48} className="text-white drop-shadow-md" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* RIGHT COLUMN: Tech & Colors */}
+                        <div className="hidden md:flex flex-col items-start gap-16 h-full justify-center">
+                            
+                            {/* Tech Specs */}
+                            <div className="flex items-center gap-4">
+                                <ScribbleConnector direction="left" width="60px" />
+                                <div className="flex flex-col items-start gap-1 text-zinc-400">
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onAnchorChange({ mode: 'CAMERA', id: activeNode.original.cameraModel });
+                                            setIsDetailOpen(false);
+                                        }}
+                                        className="text-3xl text-zinc-200 font-bold flex items-center gap-3 font-hand hover:text-emerald-300 transition-colors"
+                                    >
+                                        <Camera size={24} className="opacity-70" />
+                                        {activeNode.original.cameraModel} 
+                                    </button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onAnchorChange({ mode: 'LENS', id: activeNode.original.lensModel });
+                                            setIsDetailOpen(false);
+                                        }}
+                                        className="text-2xl italic opacity-80 font-hand text-zinc-500 ml-1 hover:text-amber-300 transition-colors text-left"
+                                    >
+                                        {activeNode.original.lensModel}
+                                    </button>
+                                    <div className="flex flex-col gap-1 mt-3 ml-2 font-hand text-xl text-zinc-400 opacity-80 pointer-events-none">
+                                        <span className="flex items-center gap-2"><Aperture size={16} /> {activeNode.original.aperture}</span>
+                                        <span className="flex items-center gap-2"><Timer size={16} /> {activeNode.original.shutterSpeed}s</span>
+                                        <span className="flex items-center gap-2"><Gauge size={16} /> ISO {activeNode.original.iso}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Chromatic DNA */}
+                            <div className="flex items-start gap-4">
+                                <ScribbleConnector direction="left" width="40px" />
+                                <div className="flex flex-col items-start gap-4">
+                                    <h3 className="text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2">
+                                        <Palette size={20} /> Palette
                                     </h3>
-                                    <div className="flex h-12 w-full rounded-lg overflow-hidden border border-zinc-200 shadow-sm">
+                                    <div className="flex flex-col gap-3">
                                         {activeNode.original.palette.map((color, i) => (
-                                            <button 
-                                                key={i} 
+                                            <div key={i} className="flex items-center gap-3 group cursor-pointer"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     onAnchorChange({ mode: 'COLOR', id: color, meta: color });
                                                     setIsDetailOpen(false);
                                                 }}
-                                                className="flex-1 h-full group relative hover:opacity-90 transition-opacity" 
-                                                style={{ backgroundColor: color }}
-                                                title="Click to explore color"
                                             >
-                                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 text-white text-[10px] font-mono transition-opacity">
+                                                <div 
+                                                    className="w-8 h-8 rounded-full border border-white/20 group-hover:scale-110 transition-transform shadow-md"
+                                                    style={{ backgroundColor: color }}
+                                                />
+                                                <span className="font-hand text-xl text-zinc-500 group-hover:text-zinc-300 transition-colors">
                                                     {color}
-                                                </div>
-                                            </button>
+                                                </span>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
+
                         </div>
                     </div>
                 </div>

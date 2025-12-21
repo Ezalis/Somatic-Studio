@@ -73,11 +73,11 @@ export interface InsightSnapshot {
 export type ViewMode = 'WORKBENCH' | 'EXPERIENCE';
 export type ExperienceMode = 'EXPLORE' | 'HISTORY';
 
-export type AnchorMode = 'NONE' | 'IMAGE' | 'TAG' | 'COLOR';
+export type AnchorMode = 'NONE' | 'IMAGE' | 'TAG' | 'COLOR' | 'DATE' | 'CAMERA' | 'LENS' | 'SEASON';
 
 export interface AnchorState {
     mode: AnchorMode;
-    id: string; // UUID, TagID, or Hex Color
+    id: string; // UUID, TagID, Hex Color, Timestamp (string), or Model Name
     meta?: any; // Tag object, Color string, etc.
 }
 
