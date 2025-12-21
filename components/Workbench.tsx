@@ -410,13 +410,13 @@ const Workbench: React.FC<WorkbenchProps> = ({
             <div className="flex-1 overflow-y-auto pb-32" onClick={() => setSelectedIds(new Set())}>
                 {/* Fix: Explicitly type img as ImageNode to resolve unknown inference issues */}
                 {filteredImages.map((img: ImageNode) => {
-                    const isSelected = selectedIds.has(img.id);
-                    const dateObj = new Date(img.captureTimestamp);
+                    const isSelected = selectedIds.has(img.id as string);
+                    const dateObj = new Date(img.captureTimestamp as number);
                     const isHarmonized = img.tagVersion === 1;
 
                     return (
                         <div 
-                            key={img.id}
+                            key={img.id as string}
                             onClick={(e) => { e.stopPropagation(); handleSelect(img.id as string, e); }}
                             className={`
                                 grid grid-cols-[40px_60px_140px_1fr_1fr_200px] gap-4 px-6 py-3 border-b border-zinc-100 

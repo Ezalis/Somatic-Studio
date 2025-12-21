@@ -21,7 +21,7 @@ import {
 import { processBatchAIAnalysis } from './services/aiService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
-import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash, Eye, Sparkles as SparklesIcon, History, Globe } from 'lucide-react';
+import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash, Eye, Sparkles as SparklesIcon, History, Globe, Shield, ShieldAlert } from 'lucide-react';
 import exifr from 'exifr';
 
 const App: React.FC = () => {
@@ -40,6 +40,9 @@ const App: React.FC = () => {
     const [experienceAnchor, setExperienceAnchor] = useState<AnchorState>({ mode: 'NONE', id: '' });
     const [experienceContext, setExperienceContext] = useState<ExperienceContext>({ commonTags: [], activePalette: [] });
     
+    // Filter State
+    const [nsfwFilterActive, setNsfwFilterActive] = useState(false);
+
     // History Log (Newest first)
     const [history, setHistory] = useState<AnchorState[]>([]);
 
@@ -396,6 +399,16 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-3 w-[150px] justify-end">
                     {viewMode === 'WORKBENCH' && (
                         <>
+                            {/* NSFW Filter Toggle */}
+                            <button
+                                onClick={() => setNsfwFilterActive(!nsfwFilterActive)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md border transition-colors text-xs font-medium ${nsfwFilterActive ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-white text-zinc-400 border-zinc-200 hover:text-zinc-600'}`}
+                                title={nsfwFilterActive ? "Filter Active (NSFW Hidden)" : "Filter Inactive (NSFW Visible)"}
+                            >
+                                {nsfwFilterActive ? <Shield size={14} /> : <ShieldAlert size={14} />}
+                                <span className="hidden sm:inline">{nsfwFilterActive ? 'SAFE' : 'UNSAFE'}</span>
+                            </button>
+
                             <button
                                 onClick={exportDatabase}
                                 className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 transition-colors text-xs font-medium"
@@ -451,6 +464,7 @@ const App: React.FC = () => {
                         onAnchorChange={setExperienceAnchor}
                         onContextUpdate={handleExperienceContextUpdate}
                         onViewChange={setViewMode}
+                        nsfwFilterActive={nsfwFilterActive}
                     />
                 )}
             </main>

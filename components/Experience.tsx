@@ -13,6 +13,7 @@ interface ExperienceProps {
     onAnchorChange: (anchor: AnchorState) => void;
     onContextUpdate: (ctx: ExperienceContext) => void;
     onViewChange: (mode: ViewMode) => void;
+    nsfwFilterActive: boolean;
 }
 
 // --- Procedural Sprite Component ---
@@ -145,7 +146,14 @@ const getDominantColorsFromNodes = (nodes: SimNode[], count: number = 5, exclude
         .map(entry => entry[0]);
 };
 
-const getRelatedTagsFromNodes = (nodes: SimNode[], tags: Tag[], count: number = 6, excludeTagId?: string): Tag[] => {
+const getRelatedTagsFromNodes = (
+    nodes: SimNode[], 
+    tags: Tag[], 
+    count: number = 6, 
+    excludeTagId?: string, 
+    nsfwTagId?: string,
+    nsfwFilterActive: boolean = false
+): Tag[] => {
     const tagCounts: Record<string, number> = {};
     
     nodes.forEach(node => {
@@ -153,6 +161,7 @@ const getRelatedTagsFromNodes = (nodes: SimNode[], tags: Tag[], count: number = 
         const allTags = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
         allTags.forEach(tId => {
             if (tId === excludeTagId) return;
+            if (nsfwFilterActive && tId === nsfwTagId) return; // Only omit NSFW if filter is active
             tagCounts[tId] = (tagCounts[tId] || 0) + 1;
         });
     });
@@ -161,7 +170,12 @@ const getRelatedTagsFromNodes = (nodes: SimNode[], tags: Tag[], count: number = 
         .sort((a, b) => b[1] - a[1])
         .slice(0, count)
         .map(([id]) => tags.find(t => t.id === id))
-        .filter((t): t is Tag => !!t);
+        .filter((t): t is Tag => {
+            // Extra safety check: Filter out any tag labeled 'nsfw' ONLY if filter is active
+            if (!t) return false;
+            if (nsfwFilterActive && t.label.trim().toLowerCase() === 'nsfw') return false;
+            return true;
+        });
 };
 
 // --- HISTORY SUB-COMPONENT ---
@@ -171,7 +185,9 @@ const HistoryTimeline: React.FC<{
     images: ImageNode[]; 
     tags: Tag[];
     activeMode: ExperienceMode;
-}> = ({ history, images, tags, activeMode }) => {
+    nsfwFilterActive: boolean;
+    nsfwTagId?: string;
+}> = ({ history, images, tags, activeMode, nsfwFilterActive, nsfwTagId }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
 
     // Auto-scroll to top when re-entering History view
@@ -206,6 +222,20 @@ const HistoryTimeline: React.FC<{
                     const prevStep = history[index + 1]; // Technically the "next" item in the visual list (which is older in time)
                     
                     const isDirectLink = step.mode === 'IMAGE' && prevStep?.mode === 'IMAGE';
+
+                    // --- FILTERING LOGIC ---
+                    if (step.mode === 'IMAGE' && nsfwFilterActive) {
+                        const img = images.find(i => i.id === step.id);
+                        if (img) {
+                            // Check via ID and Label for safety
+                            const hasNsfwTag = [...img.tagIds, ...(img.aiTagIds || [])].some(tid => {
+                                if (tid === nsfwTagId) return true;
+                                const t = tags.find(tag => tag.id === tid);
+                                return t && t.label.trim().toLowerCase() === 'nsfw';
+                            });
+                            if (hasNsfwTag) return null; // Omit NSFW steps
+                        }
+                    }
 
                     return (
                         <div key={index} className="w-full max-w-2xl flex flex-col items-center snap-center shrink-0 py-12 relative group">
@@ -244,7 +274,11 @@ const HistoryTimeline: React.FC<{
                                         <div className="flex gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
                                             {img.tagIds.slice(0, 3).map(tid => {
                                                 const t = tags.find(tag => tag.id === tid);
-                                                return t ? <span key={tid} className="text-[9px] text-zinc-400 border border-zinc-700 px-1.5 py-0.5 rounded-full">{t.label}</span> : null;
+                                                if (!t) return null;
+                                                // Only hide NSFW tag if filter is active
+                                                if (nsfwFilterActive && (tid === nsfwTagId || t.label.trim().toLowerCase() === 'nsfw')) return null;
+                                                
+                                                return <span key={tid} className="text-[9px] text-zinc-400 border border-zinc-700 px-1.5 py-0.5 rounded-full">{t.label}</span>;
                                             })}
                                         </div>
 
@@ -338,7 +372,8 @@ const Experience: React.FC<ExperienceProps> = ({
     experienceMode,
     onAnchorChange,
     onContextUpdate,
-    onViewChange 
+    onViewChange,
+    nsfwFilterActive
 }) => {
     // Refs
     const containerRef = useRef<HTMLDivElement>(null);
@@ -359,6 +394,9 @@ const Experience: React.FC<ExperienceProps> = ({
     const [activePalette, setActivePalette] = useState<string[]>([]);
 
     const getTagById = useCallback((id: string) => tags.find(t => t.id === id), [tags]);
+
+    // Identify NSFW tag (memoized)
+    const nsfwTagId = useMemo(() => tags.find(t => t.label.trim().toLowerCase() === 'nsfw')?.id, [tags]);
 
     // Timeline Calculation
     const { minTime, maxTime, timeRange } = useMemo(() => {
@@ -385,6 +423,20 @@ const Experience: React.FC<ExperienceProps> = ({
 
         // --- A. Scoring Nodes ---
         const scoredNodes = simNodes.map(node => {
+             // FILTER CHECK: Omit node if NSFW filter is active
+             if (nsfwFilterActive) {
+                 const allNodeTagIds = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
+                 const isNsfw = allNodeTagIds.some(tid => {
+                     if (tid === nsfwTagId) return true;
+                     const t = getTagById(tid);
+                     return t && t.label.trim().toLowerCase() === 'nsfw';
+                 });
+                 
+                 if (isNsfw) {
+                     return { ...node, relevanceScore: -9999, isVisible: false }; // Effectively hidden
+                 }
+             }
+
              let score = 0;
              
              if (anchor.mode === 'IMAGE') {
@@ -460,7 +512,8 @@ const Experience: React.FC<ExperienceProps> = ({
         const visibleSubset: SimNode[] = [];
 
         if (anchor.mode === 'IMAGE') {
-            const neighbors = scoredNodes.filter(n => n.id !== anchor.id);
+            // Only consider nodes that weren't forcefully hidden by NSFW filter
+            const neighbors = scoredNodes.filter(n => n.id !== anchor.id && n.relevanceScore > -5000);
             neighbors.sort((a, b) => b.relevanceScore - a.relevanceScore);
             
             const RELEVANCE_THRESHOLD = 50; 
@@ -469,6 +522,12 @@ const Experience: React.FC<ExperienceProps> = ({
             const visibleNeighborIds = new Set(neighbors.slice(0, visibleCount).map(n => n.id));
             
             scoredNodes.forEach(n => {
+                // Keep filter hidden nodes hidden
+                if (n.relevanceScore <= -5000) {
+                    n.isVisible = false;
+                    return;
+                }
+
                 const isAnchor = n.id === anchor.id;
                 const isNeighbor = visibleNeighborIds.has(n.id);
                 const shouldBeVisible = isAnchor || (isNeighbor && n.relevanceScore > -500);
@@ -494,18 +553,20 @@ const Experience: React.FC<ExperienceProps> = ({
 
             const anchorImg = images.find(i => i.id === anchor.id);
             calculatedPalette = anchorImg ? anchorImg.palette : [];
-            calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 6);
+            calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 6, undefined, nsfwTagId, nsfwFilterActive);
 
         } else if (anchor.mode === 'TAG') {
              scoredNodes.forEach(n => {
+                 if (n.relevanceScore <= -5000) { n.isVisible = false; return; }
                  n.isVisible = n.relevanceScore > 0;
                  if (n.isVisible) visibleSubset.push(n);
              });
-             calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 5, anchor.id);
+             calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 5, anchor.id, nsfwTagId, nsfwFilterActive);
              calculatedPalette = []; 
 
         } else if (anchor.mode === 'COLOR') {
              scoredNodes.forEach(n => {
+                 if (n.relevanceScore <= -5000) { n.isVisible = false; return; }
                  n.isVisible = n.relevanceScore > 0;
                  if (n.isVisible) visibleSubset.push(n);
              });
@@ -514,7 +575,10 @@ const Experience: React.FC<ExperienceProps> = ({
              calculatedTags = []; 
 
         } else {
-            scoredNodes.forEach(n => n.isVisible = true);
+            scoredNodes.forEach(n => {
+                if (n.relevanceScore <= -5000) { n.isVisible = false; return; }
+                n.isVisible = true;
+            });
             calculatedPalette = [];
             calculatedTags = [];
         }
@@ -523,7 +587,7 @@ const Experience: React.FC<ExperienceProps> = ({
         setActivePalette(calculatedPalette);
         setCommonTags(calculatedTags);
 
-    }, [anchor, images, getTagById]);
+    }, [anchor, images, getTagById, nsfwFilterActive, nsfwTagId]); // Depend on filter state
 
     // Report context changes to parent
     useEffect(() => {
@@ -554,6 +618,18 @@ const Experience: React.FC<ExperienceProps> = ({
                 const startX = centerX + initR * Math.cos(initTheta);
                 const startY = centerY + initR * Math.sin(initTheta);
 
+                // Initial NSFW check to prevent flash of content
+                let isVisible = true;
+                if (nsfwFilterActive) {
+                    const allTags = [...img.tagIds, ...(img.aiTagIds || [])];
+                    const isNsfw = allTags.some(tid => {
+                        if (tid === nsfwTagId) return true;
+                        const t = tags.find(tag => tag.id === tid);
+                        return t && t.label.trim().toLowerCase() === 'nsfw';
+                    });
+                    if (isNsfw) isVisible = false;
+                }
+
                 return {
                     id: img.id,
                     original: img,
@@ -566,14 +642,14 @@ const Experience: React.FC<ExperienceProps> = ({
                     currentOpacity: existing ? existing.currentOpacity : 0,
                     targetOpacity: 0.8,
                     relevanceScore: 0,
-                    isVisible: true,
+                    isVisible, // Apply initial visibility
                     orbitSpeed,
                     orbitOffset,
                     orbitRadiusBase
                 };
             });
         });
-    }, [images]); 
+    }, [images, nsfwFilterActive]); // Re-run when filter active changes to update initial state
 
     // 3. PHYSICS LOOP
     useEffect(() => {
@@ -645,15 +721,21 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
 
                 if (anchor.mode === 'NONE') {
-                    node.targetScale = 0.4;
-                    node.targetOpacity = 0.8;
-                    const r = HOME_SPREAD * Math.sqrt(i); 
-                    const theta = i * goldenAngle;
-                    const homeX = cx + r * Math.cos(theta);
-                    const homeY = cy + r * Math.sin(theta);
-                    const pull = 0.05;
-                    node.vx = (node.vx || 0) + (homeX - node.x) * pull;
-                    node.vy = (node.vy || 0) + (homeY - node.y) * pull;
+                    if (node.isVisible) {
+                        node.targetScale = 0.4;
+                        node.targetOpacity = 0.8;
+                        const r = HOME_SPREAD * Math.sqrt(i); 
+                        const theta = i * goldenAngle;
+                        const homeX = cx + r * Math.cos(theta);
+                        const homeY = cy + r * Math.sin(theta);
+                        const pull = 0.05;
+                        node.vx = (node.vx || 0) + (homeX - node.x) * pull;
+                        node.vy = (node.vy || 0) + (homeY - node.y) * pull;
+                    } else {
+                        // Ensure hidden nodes fade out in 'Explore' mode too
+                        node.targetScale = 0;
+                        node.targetOpacity = 0;
+                    }
                 }
                 else if (anchor.mode === 'IMAGE') {
                     if (isAnchor) {
@@ -871,6 +953,8 @@ const Experience: React.FC<ExperienceProps> = ({
                 images={images} 
                 tags={tags} 
                 activeMode={experienceMode}
+                nsfwFilterActive={nsfwFilterActive}
+                nsfwTagId={nsfwTagId}
             />
 
             {/* --- DETAILED CONTEXTUAL MODAL (Only in Explore Mode) --- */}
@@ -992,6 +1076,10 @@ const Experience: React.FC<ExperienceProps> = ({
                                         {[...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])].map(tid => {
                                             const tag = tags.find(t => t.id === tid);
                                             if (!tag) return null;
+                                            
+                                            // Always hide NSFW tag in modal regardless of filter state, treating it as system metadata in this view
+                                            if (nsfwFilterActive && (tid === nsfwTagId || tag.label.trim().toLowerCase() === 'nsfw')) return null;
+
                                             const isAI = tag.type === TagType.AI_GENERATED;
                                             return (
                                                 <button 
