@@ -5,14 +5,21 @@ import exifr from 'exifr';
 
 // --- CONFIGURATION ---
 // REPLACE THESE VALUES WITH YOUR GITHUB DETAILS
-const REPO_OWNER = 'YOUR_GITHUB_USERNAME'; 
-const REPO_NAME = 'YOUR_REPO_NAME';
+const REPO_OWNER = 'Ezalis'; 
+const REPO_NAME = 'Somatic-Studio';
 const BRANCH = 'main'; // or 'master'
 
 // Constructs the raw URL: https://raw.githubusercontent.com/User/Repo/main/public/gallery/
 const GALLERY_BASE_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/public/gallery/`;
 
 // --- Utilities ---
+
+// Strict encoding that handles parentheses which encodeURIComponent misses
+const strictEncodeURIComponent = (str: string) => {
+  return encodeURIComponent(str).replace(/[!'()*]/g, (c) => {
+    return '%' + c.charCodeAt(0).toString(16);
+  });
+};
 
 export const generateUUID = (): string => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -108,9 +115,6 @@ export const processImageFile = async (
         return id;
     };
 
-    // If fetch returned a Blob, create object URL. If already URL (from remote), handle logic? 
-    // Actually processImageFile expects a Blob/File.
-    // For remote assets, we fetch them as Blobs in hydrateGalleryAssets so this logic holds.
     const objectUrl = URL.createObjectURL(fileOrBlob);
     
     let exifData: any = {};
@@ -184,49 +188,99 @@ export const processImageFile = async (
 export const hydrateGalleryAssets = async (
     filenames: string[],
     existingTags: Tag[],
-    onProgress: (completed: number, total: number) => void
+    onProgress: (completed: number, total: number) => void,
+    onBatchLoaded?: (nodes: ImageNode[]) => void
 ): Promise<ImageNode[]> => {
     const nodes: ImageNode[] = [];
     let processed = 0;
     const BATCH_SIZE = 4;
 
-    console.log(`Hydrating from: ${GALLERY_BASE_URL}`);
+    console.groupCollapsed("Hydration Debug");
+    console.log(`Target: ${GALLERY_BASE_URL}`);
+    console.log(`Total Files: ${filenames.length}`);
+
+    if (filenames.length === 0) {
+        console.warn("No filenames provided for hydration.");
+        console.groupEnd();
+        return [];
+    }
 
     for (let i = 0; i < filenames.length; i += BATCH_SIZE) {
         const batch = filenames.slice(i, i + BATCH_SIZE);
+        const batchNodes: ImageNode[] = [];
         
         await Promise.all(batch.map(async (fileName) => {
             try {
-                // Fetch from the REMOTE GitHub raw URL
-                // Ensure the filename is encoded correctly (e.g. spaces -> %20)
-                const url = `${GALLERY_BASE_URL}${encodeURIComponent(fileName)}`;
-                const response = await fetch(url);
+                let res: Response | null = null;
+                let fetchUrl = '';
+
+                // Attempt 1: Standard encoding
+                fetchUrl = `${GALLERY_BASE_URL}${encodeURIComponent(fileName)}`;
+                res = await fetch(fetchUrl);
                 
-                if (!response.ok) {
-                    // Fallback: Try local if remote fails (dev mode)
-                    console.warn(`Remote fetch failed for ${fileName}, trying local...`);
-                    const localResp = await fetch(`/gallery/${fileName}`);
-                    if (!localResp.ok) throw new Error(`Status ${response.status}`);
-                    const blob = await localResp.blob();
-                    const { image } = await processImageFile(blob, fileName, existingTags);
-                    nodes.push(image);
+                // Attempt 2: Strict encoding (handles parentheses)
+                if (!res.ok) {
+                    fetchUrl = `${GALLERY_BASE_URL}${strictEncodeURIComponent(fileName)}`;
+                    res = await fetch(fetchUrl);
+                }
+
+                // Attempt 3: Case insensitivity fallback (jpg <-> JPG)
+                if (!res.ok) {
+                    const ext = fileName.split('.').pop();
+                    if (ext) {
+                        let altName = '';
+                        if (ext === 'jpg') altName = fileName.replace(/\.jpg$/, '.JPG');
+                        else if (ext === 'JPG') altName = fileName.replace(/\.JPG$/, '.jpg');
+                        else if (ext === 'jpeg') altName = fileName.replace(/\.jpeg$/, '.JPEG');
+                        else if (ext === 'png') altName = fileName.replace(/\.png$/, '.PNG');
+                        
+                        if (altName) {
+                            fetchUrl = `${GALLERY_BASE_URL}${encodeURIComponent(altName)}`;
+                            res = await fetch(fetchUrl);
+                        }
+                    }
+                }
+
+                // Attempt 4: Local Fallback (Dev environment)
+                if (!res.ok) {
+                    fetchUrl = `/gallery/${fileName}`;
+                    res = await fetch(fetchUrl);
+                }
+
+                // Final Failure Check
+                if (!res.ok) {
+                    console.warn(`[Skipping] Failed to load: ${fileName} (404/Error)`);
                     return;
                 }
-                
-                const blob = await response.blob();
-                
+
+                const blob = await res.blob();
+                if (blob.size === 0) {
+                     console.warn(`[Skipping] Empty blob received: ${fileName}`);
+                     return;
+                }
+
                 const { image } = await processImageFile(blob, fileName, existingTags);
-                nodes.push(image);
+                batchNodes.push(image);
+
             } catch (e) {
-                console.warn(`Failed to hydrate ${fileName}:`, e);
+                console.error(`[Error] Processing ${fileName}:`, e);
             }
         }));
+
+        nodes.push(...batchNodes);
+        if (onBatchLoaded && batchNodes.length > 0) {
+            onBatchLoaded(batchNodes);
+        }
 
         processed += batch.length;
         onProgress(Math.min(processed, filenames.length), filenames.length);
         
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Slightly faster delay to feel snappier but still breathe
+        await new Promise(resolve => setTimeout(resolve, 20));
     }
+
+    console.log(`Hydration Complete. Loaded ${nodes.length} images.`);
+    console.groupEnd();
 
     return nodes.sort((a, b) => a.captureTimestamp - b.captureTimestamp);
 };

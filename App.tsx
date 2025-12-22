@@ -27,7 +27,7 @@ import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, C
 import exifr from 'exifr';
 
 const App: React.FC = () => {
-    const [viewMode, setViewMode] = useState<ViewMode>('WORKBENCH');
+    const [viewMode, setViewMode] = useState<ViewMode>('EXPERIENCE');
     const [experienceMode, setExperienceMode] = useState<ExperienceMode>('EXPLORE');
     
     const [images, setImages] = useState<ImageNode[]>([]);
@@ -63,10 +63,22 @@ const App: React.FC = () => {
             if (mappedFiles.length > 0) {
                 setLoadingProgress({ current: 0, total: mappedFiles.length });
                 try {
-                    const nodes = await hydrateGalleryAssets(mappedFiles, loadedTags, (current, total) => {
-                        setLoadingProgress({ current, total });
-                    });
-                    setImages(nodes);
+                    await hydrateGalleryAssets(
+                        mappedFiles, 
+                        loadedTags, 
+                        (current, total) => {
+                            setLoadingProgress({ current, total });
+                        },
+                        (newBatch) => {
+                            // Incrementally add images as they load for the live preview
+                            setImages(prev => {
+                                // De-duplicate just in case (React StrictMode double invocation protection)
+                                const ids = new Set(prev.map(i => i.id));
+                                const uniqueNew = newBatch.filter(i => !ids.has(i.id));
+                                return [...prev, ...uniqueNew].sort((a, b) => a.captureTimestamp - b.captureTimestamp);
+                            });
+                        }
+                    );
                 } catch (e) {
                     console.error("Failed to hydrate gallery", e);
                 } finally {
@@ -80,14 +92,13 @@ const App: React.FC = () => {
     // --- HISTORY TRACKING ENGINE ---
     useEffect(() => {
         setHistory(prev => {
-            // Prevent duplicate adjacent entries (e.g. React double-invokes or accidental multi-clicks)
+            // Prevent duplicate adjacent entries
             if (prev.length > 0) {
                 const last = prev[0];
                 if (last.mode === experienceAnchor.mode && last.id === experienceAnchor.id) {
                     return prev;
                 }
             }
-            // Add new step to the TOP of the stack
             return [experienceAnchor, ...prev];
         });
     }, [experienceAnchor]);
@@ -237,20 +248,17 @@ const App: React.FC = () => {
 
 
     // --- RENDERING ---
-    const activeImage = experienceAnchor.mode === 'IMAGE' ? images.find(i => i.id === experienceAnchor.id) : undefined;
-
     return (
         <div className="flex flex-col h-screen w-screen bg-[#faf9f6] overflow-hidden relative">
             
-            {/* --- LOADING OVERLAY --- */}
-            {loadingProgress && (
+            {/* --- LOADING OVERLAY (Generic fallback, mostly unused now as Experience handles it) --- */}
+            {loadingProgress && viewMode === 'WORKBENCH' && (
                 <div className="absolute inset-0 z-[100] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 animate-in fade-in duration-500">
                     <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
                     <div className="flex flex-col items-center gap-1">
                         <span className="font-mono text-sm font-bold text-zinc-600 tracking-wider">RESTORING ASSETS</span>
                         <span className="font-mono text-xs text-zinc-400">{loadingProgress.current} / {loadingProgress.total}</span>
                     </div>
-                    {/* Progress Bar */}
                     <div className="w-64 h-1 bg-zinc-100 rounded-full overflow-hidden mt-2">
                         <div 
                             className="h-full bg-indigo-600 transition-all duration-300 ease-out" 
@@ -317,7 +325,6 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-3 w-[150px] justify-end">
                     {viewMode === 'WORKBENCH' && (
                         <>
-                            {/* NSFW Filter Toggle */}
                             <button
                                 onClick={() => setNsfwFilterActive(!nsfwFilterActive)}
                                 className={`flex items-center gap-2 px-3 py-1.5 rounded-md border transition-colors text-xs font-medium ${nsfwFilterActive ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-white text-zinc-400 border-zinc-200 hover:text-zinc-600'}`}
@@ -383,6 +390,7 @@ const App: React.FC = () => {
                         onContextUpdate={handleExperienceContextUpdate}
                         onViewChange={setViewMode}
                         nsfwFilterActive={nsfwFilterActive}
+                        loadingProgress={loadingProgress}
                     />
                 )}
             </main>
