@@ -3,6 +3,15 @@ import { ImageNode, Tag, TagType } from '../types';
 import { getSavedTagsForFile, getSavedAITagsForFile, getSavedImageMetadata } from './resourceService';
 import exifr from 'exifr';
 
+// --- CONFIGURATION ---
+// REPLACE THESE VALUES WITH YOUR GITHUB DETAILS
+const REPO_OWNER = 'YOUR_GITHUB_USERNAME'; 
+const REPO_NAME = 'YOUR_REPO_NAME';
+const BRANCH = 'main'; // or 'master'
+
+// Constructs the raw URL: https://raw.githubusercontent.com/User/Repo/main/public/gallery/
+const GALLERY_BASE_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/public/gallery/`;
+
 // --- Utilities ---
 
 export const generateUUID = (): string => {
@@ -99,6 +108,9 @@ export const processImageFile = async (
         return id;
     };
 
+    // If fetch returned a Blob, create object URL. If already URL (from remote), handle logic? 
+    // Actually processImageFile expects a Blob/File.
+    // For remote assets, we fetch them as Blobs in hydrateGalleryAssets so this logic holds.
     const objectUrl = URL.createObjectURL(fileOrBlob);
     
     let exifData: any = {};
@@ -110,6 +122,7 @@ export const processImageFile = async (
 
     const imgElem = await new Promise<HTMLImageElement>((resolve, reject) => {
         const img = new Image();
+        img.crossOrigin = "Anonymous"; // Essential for remote images (GitHub) to allow canvas extraction
         img.onload = () => resolve(img);
         img.onerror = () => reject(new Error("Failed to load image"));
         img.src = objectUrl;
@@ -168,8 +181,57 @@ export const processImageFile = async (
     };
 };
 
+export const hydrateGalleryAssets = async (
+    filenames: string[],
+    existingTags: Tag[],
+    onProgress: (completed: number, total: number) => void
+): Promise<ImageNode[]> => {
+    const nodes: ImageNode[] = [];
+    let processed = 0;
+    const BATCH_SIZE = 4;
+
+    console.log(`Hydrating from: ${GALLERY_BASE_URL}`);
+
+    for (let i = 0; i < filenames.length; i += BATCH_SIZE) {
+        const batch = filenames.slice(i, i + BATCH_SIZE);
+        
+        await Promise.all(batch.map(async (fileName) => {
+            try {
+                // Fetch from the REMOTE GitHub raw URL
+                // Ensure the filename is encoded correctly (e.g. spaces -> %20)
+                const url = `${GALLERY_BASE_URL}${encodeURIComponent(fileName)}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    // Fallback: Try local if remote fails (dev mode)
+                    console.warn(`Remote fetch failed for ${fileName}, trying local...`);
+                    const localResp = await fetch(`/gallery/${fileName}`);
+                    if (!localResp.ok) throw new Error(`Status ${response.status}`);
+                    const blob = await localResp.blob();
+                    const { image } = await processImageFile(blob, fileName, existingTags);
+                    nodes.push(image);
+                    return;
+                }
+                
+                const blob = await response.blob();
+                
+                const { image } = await processImageFile(blob, fileName, existingTags);
+                nodes.push(image);
+            } catch (e) {
+                console.warn(`Failed to hydrate ${fileName}:`, e);
+            }
+        }));
+
+        processed += batch.length;
+        onProgress(Math.min(processed, filenames.length), filenames.length);
+        
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    return nodes.sort((a, b) => a.captureTimestamp - b.captureTimestamp);
+};
+
 export const generateMockImages = (count: number, availableTags: Tag[]): ImageNode[] => {
-    // Mock data generator kept simple for brevity
     const images: ImageNode[] = [];
     return images; 
 };
