@@ -9,14 +9,16 @@ import {
     exportDatabase,
     getSavedTagsForFile,
     saveAITagsForFile,
-    exportAITagsDatabase
+    exportAITagsDatabase,
+    getAllMappings
 } from './services/resourceService';
 import { 
     processImageFile, 
     generateUUID, 
     getSeason, 
     extractColorPalette, 
-    formatShutterSpeed 
+    formatShutterSpeed,
+    hydrateGalleryAssets
 } from './services/dataService';
 import { processBatchAIAnalysis } from './services/aiService';
 import Workbench from './components/Workbench';
@@ -31,6 +33,7 @@ const App: React.FC = () => {
     const [images, setImages] = useState<ImageNode[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [loadingProgress, setLoadingProgress] = useState<{current: number, total: number} | null>(null);
     
     // AI State
     const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
@@ -51,6 +54,25 @@ const App: React.FC = () => {
         const init = async () => {
             const loadedTags = await initDatabase();
             setTags(loadedTags);
+
+            // Check if we need to hydrate the gallery from static assets
+            const mappings = getAllMappings();
+            const mappedFiles = Object.keys(mappings);
+            
+            // If we have mappings in the JSON but no images loaded in memory yet, start hydration
+            if (mappedFiles.length > 0) {
+                setLoadingProgress({ current: 0, total: mappedFiles.length });
+                try {
+                    const nodes = await hydrateGalleryAssets(mappedFiles, loadedTags, (current, total) => {
+                        setLoadingProgress({ current, total });
+                    });
+                    setImages(nodes);
+                } catch (e) {
+                    console.error("Failed to hydrate gallery", e);
+                } finally {
+                    setLoadingProgress(null);
+                }
+            }
         };
         init();
     }, []);
@@ -218,7 +240,26 @@ const App: React.FC = () => {
     const activeImage = experienceAnchor.mode === 'IMAGE' ? images.find(i => i.id === experienceAnchor.id) : undefined;
 
     return (
-        <div className="flex flex-col h-screen w-screen bg-[#faf9f6] overflow-hidden">
+        <div className="flex flex-col h-screen w-screen bg-[#faf9f6] overflow-hidden relative">
+            
+            {/* --- LOADING OVERLAY --- */}
+            {loadingProgress && (
+                <div className="absolute inset-0 z-[100] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 animate-in fade-in duration-500">
+                    <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+                    <div className="flex flex-col items-center gap-1">
+                        <span className="font-mono text-sm font-bold text-zinc-600 tracking-wider">RESTORING ASSETS</span>
+                        <span className="font-mono text-xs text-zinc-400">{loadingProgress.current} / {loadingProgress.total}</span>
+                    </div>
+                    {/* Progress Bar */}
+                    <div className="w-64 h-1 bg-zinc-100 rounded-full overflow-hidden mt-2">
+                        <div 
+                            className="h-full bg-indigo-600 transition-all duration-300 ease-out" 
+                            style={{ width: `${(loadingProgress.current / loadingProgress.total) * 100}%` }} 
+                        />
+                    </div>
+                </div>
+            )}
+
             {/* --- PERSISTENT NAVIGATION --- */}
             <div className="h-14 flex-none bg-white/80 backdrop-blur-md border-b border-zinc-200 flex items-center px-6 justify-between z-50 transition-all duration-300">
                 {/* Left: View Switcher */}
