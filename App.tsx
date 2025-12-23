@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { ViewMode, ExperienceMode, ImageNode, Tag, TagType, AnchorState, ExperienceContext } from './types';
 import { 
@@ -249,10 +248,10 @@ const App: React.FC = () => {
 
     // --- RENDERING ---
     return (
-        <div className="flex flex-col h-screen w-screen bg-[#faf9f6] overflow-hidden relative">
+        <div className="flex flex-col h-[100dvh] w-screen bg-[#faf9f6] overflow-hidden relative">
             
             {/* --- LOADING OVERLAY (Generic fallback, mostly unused now as Experience handles it) --- */}
-            {loadingProgress && viewMode === 'WORKBENCH' && (
+            {loadingProgress && (viewMode as string) === 'WORKBENCH' && (
                 <div className="absolute inset-0 z-[100] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 animate-in fade-in duration-500">
                     <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
                     <div className="flex flex-col items-center gap-1">
@@ -268,105 +267,79 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            {/* --- PERSISTENT NAVIGATION --- */}
-            <div className="h-14 flex-none bg-white/80 backdrop-blur-md border-b border-zinc-200 flex items-center px-6 justify-between z-50 transition-all duration-300">
-                {/* Left: View Switcher */}
-                <div className="flex items-center gap-6">
-                    <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
-                        <button 
-                            onClick={() => setViewMode('WORKBENCH')} 
-                            className={`px-3 py-1 text-xs font-medium flex items-center gap-2 transition-all rounded-md ${viewMode === 'WORKBENCH' ? 'bg-white shadow-sm text-teal-700 font-bold' : 'text-zinc-500 hover:text-zinc-800'}`}
-                        >
-                            <LayoutGrid size={14} />
-                            WORKBENCH
-                        </button>
-                        <button 
-                            onClick={() => setViewMode('EXPERIENCE')} 
-                            className={`px-3 py-1 text-xs font-medium flex items-center gap-2 transition-all rounded-md ${viewMode === 'EXPERIENCE' ? 'bg-white shadow-sm text-indigo-600 font-bold' : 'text-zinc-500 hover:text-zinc-800'}`}
-                        >
-                            <Network size={14} />
-                            EXPERIENCE
-                        </button>
-                    </div>
+            {/* --- PERSISTENT NAVIGATION (WORKBENCH ONLY) --- */}
+            {(viewMode as string) === 'WORKBENCH' && (
+                <div className="h-14 flex-none bg-white/80 backdrop-blur-md border-b border-zinc-200 flex items-center px-6 justify-between z-50 transition-all duration-300">
+                    {/* Left: View Switcher */}
+                    <div className="flex items-center gap-6">
+                        <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                            <button 
+                                onClick={() => setViewMode('WORKBENCH')} 
+                                className={`px-3 py-1 text-xs font-medium flex items-center gap-2 transition-all rounded-md ${(viewMode as string) === 'WORKBENCH' ? 'bg-white shadow-sm text-teal-700 font-bold' : 'text-zinc-500 hover:text-zinc-800'}`}
+                            >
+                                <LayoutGrid size={14} />
+                                WORKBENCH
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('EXPERIENCE')} 
+                                className={`px-3 py-1 text-xs font-medium flex items-center gap-2 transition-all rounded-md ${viewMode === 'EXPERIENCE' ? 'bg-white shadow-sm text-indigo-600 font-bold' : 'text-zinc-500 hover:text-zinc-800'}`}
+                            >
+                                <Network size={14} />
+                                EXPERIENCE
+                            </button>
+                        </div>
 
-                    {viewMode === 'WORKBENCH' && (
                         <div className="hidden md:flex items-center gap-2 text-xs text-zinc-400 border-l border-zinc-200 pl-4 h-6">
                             <div className="flex items-center gap-2">
                                 <HardDrive size={12} />
                                 <span>{images.length} Assets</span>
                             </div>
                         </div>
-                    )}
-                    
-                    {viewMode === 'EXPERIENCE' && (
-                         <div className="flex items-center gap-2 text-xs text-zinc-400 border-l border-zinc-200 pl-4 h-6">
-                            <span className="font-bold text-zinc-300 uppercase tracking-widest text-[10px]">View Mode</span>
-                            <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 ml-2">
-                                <button 
-                                    onClick={() => setExperienceMode('EXPLORE')}
-                                    className={`px-2 py-0.5 text-[10px] font-bold flex items-center gap-1.5 transition-all rounded-md ${experienceMode === 'EXPLORE' ? 'bg-white shadow-sm text-indigo-600' : 'text-zinc-400 hover:text-zinc-600'}`}
-                                >
-                                    <Globe size={12} />
-                                    EXPLORE
-                                </button>
-                                <button 
-                                    onClick={() => setExperienceMode('HISTORY')}
-                                    className={`px-2 py-0.5 text-[10px] font-bold flex items-center gap-1.5 transition-all rounded-md ${experienceMode === 'HISTORY' ? 'bg-white shadow-sm text-rose-600' : 'text-zinc-400 hover:text-zinc-600'}`}
-                                >
-                                    <History size={12} />
-                                    HISTORY
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                    </div>
+
+                    {/* Right: Global Actions (Workbench Only) */}
+                    <div className="flex items-center gap-3 w-[150px] justify-end">
+                        <button
+                            onClick={() => setNsfwFilterActive(!nsfwFilterActive)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-md border transition-colors text-xs font-medium ${nsfwFilterActive ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-white text-zinc-400 border-zinc-200 hover:text-zinc-600'}`}
+                            title={nsfwFilterActive ? "Filter Active (NSFW Hidden)" : "Filter Inactive (NSFW Visible)"}
+                        >
+                            {nsfwFilterActive ? <Shield size={14} /> : <ShieldAlert size={14} />}
+                            <span className="hidden sm:inline">{nsfwFilterActive ? 'SAFE' : 'UNSAFE'}</span>
+                        </button>
+
+                        <button
+                            onClick={exportDatabase}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 transition-colors text-xs font-medium"
+                            title="Download Tags JSON"
+                        >
+                            <DownloadCloud size={14} />
+                            <span className="hidden sm:inline">EXPORT</span>
+                        </button>
+
+                        <button
+                            onClick={handleResetDatabase}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-red-100 bg-red-50 text-red-600 hover:bg-red-100 transition-colors text-xs font-medium"
+                            title="Reset Workspace"
+                        >
+                            <Trash2 size={14} />
+                            <span className="hidden sm:inline">RESET</span>
+                        </button>
+
+                        <div className="w-px h-6 bg-zinc-200 mx-2" />
+
+                        <label className={`cursor-pointer bg-zinc-900 hover:bg-zinc-800 text-white px-4 py-1.5 rounded-md font-medium transition-colors text-xs tracking-wider flex items-center gap-2 shadow-sm ${isProcessing ? 'opacity-50' : ''}`}>
+                            {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                            <span className="hidden sm:inline">INGEST</span>
+                            <input type="file" multiple className="hidden" onChange={handleFileUpload} accept="image/jpeg,image/png,image/webp" />
+                        </label>
+                    </div>
                 </div>
-
-                {/* Right: Global Actions (Workbench Only) */}
-                <div className="flex items-center gap-3 w-[150px] justify-end">
-                    {viewMode === 'WORKBENCH' && (
-                        <>
-                            <button
-                                onClick={() => setNsfwFilterActive(!nsfwFilterActive)}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md border transition-colors text-xs font-medium ${nsfwFilterActive ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-white text-zinc-400 border-zinc-200 hover:text-zinc-600'}`}
-                                title={nsfwFilterActive ? "Filter Active (NSFW Hidden)" : "Filter Inactive (NSFW Visible)"}
-                            >
-                                {nsfwFilterActive ? <Shield size={14} /> : <ShieldAlert size={14} />}
-                                <span className="hidden sm:inline">{nsfwFilterActive ? 'SAFE' : 'UNSAFE'}</span>
-                            </button>
-
-                            <button
-                                onClick={exportDatabase}
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 transition-colors text-xs font-medium"
-                                title="Download Tags JSON"
-                            >
-                                <DownloadCloud size={14} />
-                                <span className="hidden sm:inline">EXPORT</span>
-                            </button>
-
-                            <button
-                                onClick={handleResetDatabase}
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-red-100 bg-red-50 text-red-600 hover:bg-red-100 transition-colors text-xs font-medium"
-                                title="Reset Workspace"
-                            >
-                                <Trash2 size={14} />
-                                <span className="hidden sm:inline">RESET</span>
-                            </button>
-
-                            <div className="w-px h-6 bg-zinc-200 mx-2" />
-
-                            <label className={`cursor-pointer bg-zinc-900 hover:bg-zinc-800 text-white px-4 py-1.5 rounded-md font-medium transition-colors text-xs tracking-wider flex items-center gap-2 shadow-sm ${isProcessing ? 'opacity-50' : ''}`}>
-                                {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                                <span className="hidden sm:inline">INGEST</span>
-                                <input type="file" multiple className="hidden" onChange={handleFileUpload} accept="image/jpeg,image/png,image/webp" />
-                            </label>
-                        </>
-                    )}
-                </div>
-            </div>
+            )}
 
             {/* --- MAIN CONTENT --- */}
             <main className="flex-1 w-full relative overflow-hidden">
-                {viewMode === 'WORKBENCH' ? (
+                {(viewMode as string) === 'WORKBENCH' ? (
                     <Workbench 
                         images={images} 
                         tags={tags} 
@@ -389,6 +362,7 @@ const App: React.FC = () => {
                         onAnchorChange={setExperienceAnchor}
                         onContextUpdate={handleExperienceContextUpdate}
                         onViewChange={setViewMode}
+                        onExperienceModeChange={setExperienceMode}
                         nsfwFilterActive={nsfwFilterActive}
                         loadingProgress={loadingProgress}
                     />

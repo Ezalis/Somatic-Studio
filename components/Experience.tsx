@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { ImageNode, Tag, TagType, SimulationNodeDatum, ViewMode, ExperienceMode, AnchorState, ExperienceContext } from '../types';
-import { X, Camera, Activity, Maximize2, Calendar, Aperture, Info, Hash, Palette, Sparkles, MoveDown, ArrowDown, Clock, Sun, Cloud, Thermometer, MapPin, Gauge, Timer, Layers, Snowflake } from 'lucide-react';
+import { X, Camera, Activity, Maximize2, Calendar, Aperture, Info, Hash, Palette, Sparkles, MoveDown, ArrowDown, Clock, Sun, Cloud, Thermometer, MapPin, Gauge, Timer, Layers, Snowflake, LayoutGrid, Globe, History as HistoryIcon } from 'lucide-react';
 
 interface ExperienceProps {
     images: ImageNode[];
@@ -12,6 +12,7 @@ interface ExperienceProps {
     onAnchorChange: (anchor: AnchorState) => void;
     onContextUpdate: (ctx: ExperienceContext) => void;
     onViewChange: (mode: ViewMode) => void;
+    onExperienceModeChange: (mode: ExperienceMode) => void;
     nsfwFilterActive: boolean;
     loadingProgress?: { current: number, total: number } | null;
 }
@@ -19,7 +20,11 @@ interface ExperienceProps {
 // --- Procedural Sprite Component (Optimized) ---
 
 const EsotericSprite = React.memo(({ node }: { node: SimNode }) => {
-    const palette = node.original.palette;
+    // Robust fallback for palette to prevent render errors during initialization
+    const palette = (node.original.palette && node.original.palette.length > 0) 
+        ? node.original.palette 
+        : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
+        
     const tagCount = (node.original.tagIds?.length || 0) + (node.original.aiTagIds?.length || 0);
     
     // Use the node id to generate deterministic "randomness"
@@ -191,7 +196,7 @@ const LoadingOverlay: React.FC<{
         <div className="absolute inset-0 z-[100] bg-zinc-950 flex flex-col items-center justify-center font-hand text-zinc-200 overflow-hidden">
              <div className="absolute inset-0 pointer-events-none overflow-hidden">
                  {floatingItems.map(item => (
-                     <div key={item.id} className="absolute text-white/20 text-xl md:text-2xl animate-in fade-in zoom-in duration-1000 fill-mode-forwards" style={{ left: `${item.x}%`, top: `${item.y}%`, transform: `rotate(${item.rotation}deg)`, animationDelay: `${item.delay}s` }}>
+                     <div key={item.id} className="absolute text-white/20 text-xl md:text-2xl animate-in fade-in zoom-in duration-1000 fill-mode-forwards pr-4" style={{ left: `${item.x}%`, top: `${item.y}%`, transform: `rotate(${item.rotation}deg)`, animationDelay: `${item.delay}s` }}>
                          {item.type === 'COLOR' ? (<div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full" style={{backgroundColor: item.text}} /><span className="font-mono text-sm">{item.text}</span></div>) : (item.text)}
                      </div>
                  ))}
@@ -199,10 +204,7 @@ const LoadingOverlay: React.FC<{
             <div className="absolute inset-0 opacity-[0.08] pointer-events-none mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")` }} />
             <div className="relative z-10 flex flex-col items-center gap-12 max-w-lg w-full px-6">
                 <div className="flex flex-col items-center gap-1">
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tighter opacity-90 drop-shadow-md">Somatic Studio</h1>
-                    <div className="flex items-center gap-3 opacity-60 text-2xl italic mt-2 text-zinc-400">
-                         <span className="animate-pulse">Restoring Benjamin's visual cortex...</span>
-                    </div>
+                    <h1 className="text-5xl md:text-7xl font-bold tracking-tighter opacity-90 drop-shadow-md pr-4">Somatic Studio</h1>
                 </div>
                 <div className="relative w-72 h-80 md:w-80 md:h-96 flex flex-col items-center justify-center transition-all duration-500 ease-out" style={{ transform: `rotate(${polaroidRotation}deg)` }}>
                     <div className="absolute inset-0 bg-[#f8f8f8] shadow-2xl rounded-sm transform translate-y-1" />
@@ -232,12 +234,60 @@ const LoadingOverlay: React.FC<{
                 </div>
             </div>
             <div className="fixed bottom-8 right-8 flex items-center gap-3 opacity-80 z-[110]">
-                <div className="text-right"><div className="font-hand text-xl text-zinc-300">Captured on</div><div className="font-mono text-xs text-zinc-400 uppercase tracking-widest">Fujifilm X-Series</div></div>
+                <div className="text-right"><div className="font-hand text-xl text-zinc-300 pr-4">Captured on</div><div className="font-mono text-xs text-zinc-400 uppercase tracking-widest">Fujifilm X-Series</div></div>
                 <Camera size={24} className="text-zinc-300" strokeWidth={1.5} />
             </div>
         </div>
     );
 }
+
+// --- ROUGH CONTAINER ---
+const RoughContainer: React.FC<{ 
+    children?: React.ReactNode; 
+    title: string; 
+    description?: string;
+    alignText: 'left' | 'right';
+    onTitleClick?: () => void;
+}> = ({ children, title, description, alignText, onTitleClick }) => {
+    return (
+        <div className="relative group pointer-events-auto p-6">
+            {/* Hand-drawn Box Background - Expanding to contain text + children */}
+            <div className="absolute -inset-4 bg-white/80 backdrop-blur-xl rounded-xl -z-10 shadow-lg border border-zinc-400/20" 
+                 style={{ 
+                     borderRadius: '255px 15px 225px 15px / 15px 225px 15px 255px',
+                 }}
+            />
+            
+            {/* Sketch Outline Overlay */}
+            <div className="absolute -inset-4 -z-10 pointer-events-none text-zinc-400/40">
+                 <svg className="w-full h-full overflow-visible">
+                    <rect x="0" y="0" width="100%" height="100%" rx="15" ry="15" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="300 8" vectorEffect="non-scaling-stroke" style={{ filter: 'url(#sketch-filter)' }} />
+                 </svg>
+            </div>
+
+            <div className={`flex flex-col gap-4 min-w-[120px] ${children ? 'min-w-[200px] max-w-[calc(100vw-5rem)]' : ''} ${alignText === 'right' ? 'items-end text-right' : 'items-start text-left'}`}>
+                {/* Title & Description moved inside */}
+                <div className="flex flex-col gap-0.5">
+                    <div 
+                        onClick={onTitleClick}
+                        className={`font-hand text-3xl font-bold text-zinc-700 leading-none tracking-wide pr-4 select-none ${onTitleClick ? 'cursor-pointer active:scale-95 transition-transform' : ''}`}
+                    >
+                        {title}
+                    </div>
+                    {description && <div className="font-hand text-lg text-zinc-500 leading-tight pr-4">{description}</div>}
+                    {children && <div className={`h-px bg-zinc-300 w-12 mt-2 ${alignText === 'right' ? 'ml-auto' : 'mr-auto'}`} />}
+                </div>
+
+                {/* Children content */}
+                {children && (
+                    <div className="relative z-10">
+                        {children}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 // --- SATELLITE NAVIGATION LAYER ---
 
@@ -257,24 +307,33 @@ const SatelliteLayer: React.FC<{
     }, [node, tags]);
 
     return (
-        <div className="absolute inset-0 pointer-events-none z-[60] overflow-hidden">
-            <div className="absolute top-1/2 left-[5%] -translate-y-1/2 flex items-center gap-4 pointer-events-auto">
-                <div className="flex flex-col gap-3">
-                    {node.palette.map((color, i) => (
-                        <button key={i} className="w-10 h-10 rounded-full border-2 border-white/20 shadow-md hover:scale-110 transition-transform relative group" style={{ backgroundColor: color }} onClick={() => onNavigate({ mode: 'COLOR', id: color })} title={color}>
-                            <span className="absolute left-full ml-2 text-xs font-mono text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-black/50 px-2 py-1 rounded backdrop-blur-sm">{color}</span>
-                        </button>
-                    ))}
-                </div>
+        <div className="absolute inset-0 pointer-events-none z-[60]">
+            {/* Left: Palette */}
+            <div className="absolute bottom-12 left-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <RoughContainer title="Spectral ID" description="Pivot via color space" alignText="left">
+                    <div className="flex flex-col gap-3 min-w-[140px]">
+                        {node.palette.map((color, i) => (
+                            <button key={i} className="flex items-center gap-3 group/color cursor-pointer transition-transform hover:translate-x-1" onClick={() => onNavigate({ mode: 'COLOR', id: color })} title={color}>
+                                <div className="w-8 h-8 rounded-full border-2 border-white/80 shadow-sm" style={{ backgroundColor: color }} />
+                                <span className="font-hand text-xl text-zinc-500 group-hover/color:text-zinc-800 transition-colors uppercase tracking-widest pr-4">{color}</span>
+                            </button>
+                        ))}
+                    </div>
+                </RoughContainer>
             </div>
-            <div className="absolute top-1/2 right-[5%] -translate-y-1/2 flex items-center pointer-events-auto max-h-[85vh] overflow-y-auto no-scrollbar pr-2">
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 items-center">
-                    {uniqueTags.map(tag => (
-                        <button key={tag.id} className="text-lg md:text-xl font-hand text-zinc-400 hover:text-violet-400 hover:translate-x-1 transition-all text-left flex items-center gap-2 group whitespace-nowrap" onClick={() => onNavigate({ mode: 'TAG', id: tag.id, meta: tag })}>
-                            <Hash size={14} className="opacity-30 group-hover:opacity-100 flex-shrink-0" /><span className="truncate max-w-[160px]">{tag.label}</span>
-                        </button>
-                    ))}
-                </div>
+
+            {/* Right: Tags */}
+            <div className="absolute bottom-12 right-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
+                <RoughContainer title="Semantic Web" description="Traverse concept clusters" alignText="right">
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 items-center max-h-[300px] overflow-y-auto no-scrollbar pr-2">
+                        {uniqueTags.map(tag => (
+                            <button key={tag.id} className="text-xl font-hand text-zinc-600 hover:text-indigo-600 hover:translate-x-1 transition-all text-left flex items-center gap-2 group/tag whitespace-nowrap cursor-pointer pr-2" onClick={() => onNavigate({ mode: 'TAG', id: tag.id, meta: tag })}>
+                                <Hash size={14} className="opacity-30 group-hover/tag:opacity-100 flex-shrink-0 text-indigo-400" />
+                                <span className="truncate max-w-[160px] pr-3">{tag.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </RoughContainer>
             </div>
         </div>
     );
@@ -284,6 +343,7 @@ const SatelliteLayer: React.FC<{
 
 interface SimNode extends SimulationNodeDatum {
     id: string;
+// ... (Rest of file unchanged)
     original: ImageNode;
     x: number;
     y: number;
@@ -408,7 +468,7 @@ const Annotation: React.FC<{ side: 'left' | 'right'; children: React.ReactNode; 
     const offsetClass = isLeft ? (compact ? 'right-full mr-4 md:mr-6 text-right' : 'right-full mr-8 md:mr-12 text-right') : (compact ? 'left-full ml-4 md:ml-6 text-left' : 'left-full ml-8 md:ml-12 text-left');
     return (
         <div className={`absolute top-1/2 ${widthClass} ${offsetClass}`} style={{ marginTop: `${verticalOffset}px`, transform: 'translateY(-50%)' }}>
-            <div className={`relative font-hand text-zinc-600 ${compact ? 'text-sm md:text-base' : 'text-lg md:text-xl'} leading-snug`}>
+            <div className={`relative font-hand text-zinc-600 ${compact ? 'text-sm md:text-base' : 'text-lg md:text-xl'} leading-snug pr-4`}>
                 <svg className={`absolute top-1/2 text-zinc-400 pointer-events-none opacity-60 ${isLeft ? '-right-8 translate-x-2' : '-left-8 -translate-x-2'} ${compact ? 'w-8 h-4' : 'w-12 h-8'}`} style={{ transform: `translateY(-50%) ${isLeft ? '' : 'scaleX(-1)'}` }} viewBox="0 0 48 32" overflow="visible">
                     {isCurved ? (<path d="M0,16 Q24,4 48,16" fill="none" stroke="currentColor" strokeWidth={compact ? 1 : 1.5} strokeLinecap="round" />) : (<line x1="0" y1="16" x2="48" y2="16" stroke="currentColor" strokeWidth={compact ? 1 : 1.5} strokeLinecap="round" />)}
                     <circle cx="48" cy="16" r={compact ? 1.5 : 2.5} fill="currentColor" />
@@ -419,91 +479,174 @@ const Annotation: React.FC<{ side: 'left' | 'right'; children: React.ReactNode; 
     );
 };
 
-// --- HISTORY SUB-COMPONENT --- (Kept as is)
-const HistoryTimeline: React.FC<{ history: AnchorState[]; images: ImageNode[]; tags: Tag[]; activeMode: ExperienceMode; nsfwFilterActive: boolean; nsfwTagId?: string; }> = ({ history, images, tags, activeMode, nsfwFilterActive, nsfwTagId }) => {
+// --- REUSABLE HISTORY STREAM ---
+const HistoryStream: React.FC<{ 
+    history: AnchorState[]; 
+    images: ImageNode[]; 
+    tags: Tag[]; 
+    nsfwFilterActive: boolean; 
+    nsfwTagId?: string; 
+    currentHero?: ImageNode;
+}> = ({ history, images, tags, nsfwFilterActive, nsfwTagId, currentHero }) => {
+    
+    // VISUALIZE CONNECTION BETWEEN HERO AND FIRST HISTORY ITEM
+    let heroConnection = null;
+    if (currentHero && history.length > 0) {
+        const prevItem = history[0];
+        const isRichLink = prevItem.mode === 'IMAGE';
+        let richContent = null;
+
+        if (isRichLink) {
+            const prevImg = images.find(i => i.id === prevItem.id);
+            if (prevImg) {
+                 const { commonTags, colorMatches, techMatches } = getIntersectionAttributes(currentHero, prevImg, tags);
+                 if (commonTags.length > 0 || colorMatches.length > 0 || techMatches.length > 0) {
+                     richContent = (
+                        <div className="relative flex flex-col items-center">
+                            <div className="w-16 h-16 rounded-full border border-white/10 bg-zinc-800/50 backdrop-blur-sm p-1.5 flex items-center justify-center relative z-20 shadow-[0_0_20px_rgba(139,92,246,0.1)]">
+                                <EsotericSprite node={{ id: currentHero.id, original: currentHero, x: 0, y: 0, currentScale: 1, targetScale: 1, currentOpacity: 1, targetOpacity: 1, relevanceScore: 100, isVisible: true }} />
+                            </div>
+                            <div className="hidden md:block"><Annotation side="left" compact verticalOffset={0} isCurved={true}><div className="flex flex-col gap-2 items-end">{colorMatches.slice(0, 3).map((pair, idx) => (<div key={idx} className="flex items-center gap-2"><span className="text-xs font-mono opacity-50 uppercase">{pair.cA}</span><div className="flex -space-x-1"><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cA}} /><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cB}} /></div></div>))}{techMatches.length > 0 && (<div className="mt-1 text-right">{techMatches.map((t, idx) => (<span key={idx} className="block text-zinc-400 text-sm">{t}</span>))}</div>)}</div></Annotation></div>
+                            <div className="hidden md:block"><Annotation side="right" compact verticalOffset={0} isCurved={false}><div className="flex flex-col gap-1 items-start text-zinc-400">{commonTags.slice(0, 4).map((tag, idx) => (<div key={tag.id} className="flex items-center gap-2"><Hash size={12} className="opacity-50" /><span>{tag.label}</span></div>))}{commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}</div></Annotation></div>
+                        </div>
+                     );
+                 }
+            }
+        }
+
+        if (richContent) {
+            heroConnection = (
+                <div className="w-full max-w-4xl flex flex-col items-center pb-6 relative z-10 animate-in fade-in slide-in-from-top-4 duration-700">
+                    {richContent}
+                </div>
+            );
+        } else {
+            // Generic Arrow connection for non-image or weak-image connections
+            heroConnection = (
+                <div className="w-full max-w-4xl flex flex-col items-center pb-6 relative z-10 animate-in fade-in slide-in-from-top-4 duration-700 opacity-60">
+                     <GreasePencilArrow seed={500} className="text-zinc-500 w-8 h-16 drop-shadow-sm" />
+                </div>
+            );
+        }
+    }
+
+    return (
+        <div className="flex flex-col items-center min-h-full pt-0 pb-20 relative">
+            <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-transparent via-zinc-800 to-transparent" />
+            
+            {/* Render the connection from Hero to first item */}
+            {heroConnection}
+
+            {history.map((step, index) => {
+                const isFirst = index === 0;
+                const prevStep = history[index + 1]; 
+                const isDirectLink = step.mode === 'IMAGE' && prevStep?.mode === 'IMAGE';
+                
+                if (step.mode === 'IMAGE' && nsfwFilterActive) {
+                    const img = images.find(i => i.id === step.id);
+                    if (img) {
+                        const hasNsfwTag = [...img.tagIds, ...(img.aiTagIds || [])].some(tid => {
+                            if (tid === nsfwTagId) return true;
+                            const t = tags.find(tag => tag.id === tid);
+                            return t && t.label.trim().toLowerCase() === 'nsfw';
+                        });
+                        if (hasNsfwTag) return null;
+                    }
+                }
+                if (step.mode === 'TAG') {
+                    if (step.meta?.label?.toLowerCase() === 'nsfw') return null;
+                }
+
+                return (
+                    <div key={index} className="w-full max-w-4xl flex flex-col items-center snap-center shrink-0 py-16 relative group perspective-1000">
+                        {!isFirst && !isDirectLink && (<div className="absolute -top-16 left-1/2 -translate-x-1/2 z-0 flex flex-col items-center pointer-events-none opacity-50"><GreasePencilArrow seed={index * 123} className="text-zinc-500 w-8 h-16 drop-shadow-sm" /></div>)}
+                        {step.mode === 'IMAGE' && (() => {
+                            const img = images.find(i => i.id === step.id);
+                            if (!img) return null;
+                            const { dateSide, techSide, tilt, verticalOffset, isCurved, seed } = getAnnotationLayout(img.id);
+                            const dateObj = new Date(img.captureTimestamp);
+                            const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            const dateStr = dateObj.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+                            const seasonStr = img.inferredSeason;
+                            return (
+                                <div className="relative z-10 w-full flex flex-col items-center gap-12">
+                                    <div className="relative">
+                                        <div className="hidden md:block">
+                                            <Annotation side={techSide as 'left' | 'right'} verticalOffset={-20} isCurved={isCurved}>
+                                                <div className="flex flex-col gap-1 text-zinc-400"><span className="text-2xl text-zinc-300 font-bold flex items-center gap-2 justify-end flex-row-reverse">{img.cameraModel} <Camera size={20} strokeWidth={2} className="opacity-70" /></span><span className="text-xl italic opacity-80">{img.lensModel}</span><div className="flex items-center gap-3 justify-end mt-2 text-lg opacity-60"><span>ISO {img.iso}</span><span>•</span><span>{img.aperture}</span><span>•</span><span>{img.shutterSpeed}s</span></div></div>
+                                            </Annotation>
+                                            <Annotation side={dateSide as 'left' | 'right'} verticalOffset={40} isCurved={!isCurved}>
+                                                <div className="flex flex-col gap-1 text-zinc-400"><span className="text-3xl text-zinc-200 font-bold flex items-center gap-2">{seasonStr}{seasonStr === 'Summer' ? <Sun size={24} /> : seasonStr === 'Winter' ? <Thermometer size={24} /> : <Cloud size={24} />}</span><span className="text-xl flex items-center gap-2"><Calendar size={18} /> {dateStr}</span><span className="text-xl flex items-center gap-2 italic opacity-70"><Clock size={18} /> {timeStr}</span></div>
+                                            </Annotation>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-sm shadow-2xl transition-transform duration-700 max-w-[80vw] md:max-w-[400px] relative z-20 group-hover:scale-[1.01]" style={{ transform: `rotate(${tilt}deg)` }}>
+                                            <img src={img.fileUrl} alt="" className="w-full h-auto object-contain bg-zinc-100" />
+                                            <div className="md:hidden mt-3 pt-3 border-t border-dashed border-zinc-200 font-hand text-zinc-600 text-lg flex justify-between items-start"><div className="flex flex-col"><span className="font-bold">{dateStr}</span><span className="text-sm opacity-70">{timeStr}</span></div><div className="flex flex-col items-end text-sm"><span>{img.cameraModel}</span><span className="opacity-70">{img.aperture}, ISO{img.iso}</span></div></div>
+                                        </div>
+                                    </div>
+                                    {isDirectLink && (() => {
+                                        const prevImg = images.find(i => i.id === prevStep.id);
+                                        if (!prevImg) return null;
+                                        const { commonTags, colorMatches, techMatches } = getIntersectionAttributes(img, prevImg, tags);
+                                        if(commonTags.length === 0 && colorMatches.length === 0 && techMatches.length === 0) return (<div className="absolute -top-16 left-1/2 -translate-x-1/2 z-0 flex flex-col items-center pointer-events-none opacity-50"><GreasePencilArrow seed={index * 99} className="text-zinc-500 w-8 h-16" /></div>);
+                                        return (
+                                            <div className="relative flex flex-col items-center animate-in fade-in zoom-in duration-700 delay-300">
+                                                <div className="w-20 h-20 rounded-full border border-white/10 bg-zinc-800/50 backdrop-blur-sm p-2 flex items-center justify-center relative z-20 shadow-[0_0_30px_rgba(139,92,246,0.1)]">
+                                                    <EsotericSprite node={{ id: img.id, original: img, x: 0, y: 0, currentScale: 1, targetScale: 1, currentOpacity: 1, targetOpacity: 1, relevanceScore: 100, isVisible: true }} />
+                                                </div>
+                                                <div className="hidden md:block"><Annotation side="left" compact verticalOffset={0} isCurved={true}><div className="flex flex-col gap-2 items-end">{colorMatches.slice(0, 3).map((pair, idx) => (<div key={idx} className="flex items-center gap-2"><span className="text-xs font-mono opacity-50 uppercase">{pair.cA}</span><div className="flex -space-x-1"><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cA}} /><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cB}} /></div></div>))}{techMatches.length > 0 && (<div className="mt-1 text-right">{techMatches.map((t, idx) => (<span key={idx} className="block text-zinc-400 text-sm">{t}</span>))}</div>)}</div></Annotation></div>
+                                                <div className="hidden md:block"><Annotation side="right" compact verticalOffset={0} isCurved={false}><div className="flex flex-col gap-1 items-start text-zinc-400">{commonTags.slice(0, 4).map((tag, idx) => (<div key={tag.id} className="flex items-center gap-2"><Hash size={12} className="opacity-50" /><span>{tag.label}</span></div>))}{commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}</div></Annotation></div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            );
+                        })()}
+                        {step.mode === 'TAG' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="right" verticalOffset={0} isCurved><div className="flex flex-col gap-1 text-zinc-400"><span className="text-xl font-bold text-zinc-300">Semantic Focus</span><span className="text-sm opacity-70">Classification</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-zinc-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-zinc-700 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10"><Hash size={20} className="text-zinc-400" /><span className="text-3xl font-hand text-white tracking-wide pr-4">{step.meta?.label}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Tag Filter</span></div>)}
+                        {step.mode === 'COLOR' && (() => { const rgb = hexToRgbVals(step.id); return (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="left" verticalOffset={0} isCurved><div className="flex flex-col gap-1 items-end text-zinc-400"><span className="text-xl font-bold text-zinc-200 font-mono">{step.id}</span><span className="text-sm opacity-60 font-mono">R{rgb[0]} G{rgb[1]} B{rgb[2]}</span><span className="text-xs italic opacity-40 mt-1 font-hand pr-4">Dominant wavelength</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 blur-2xl opacity-40 rounded-full" style={{ backgroundColor: step.id }} /><div className="w-32 h-32 rounded-[2rem] border-4 border-white/10 shadow-2xl relative z-10 flex items-center justify-center overflow-hidden rotate-3" style={{ backgroundColor: step.id }}><div className="absolute inset-0 bg-gradient-to-tr from-black/20 to-transparent pointer-events-none" /><div className="absolute inset-0 bg-gradient-to-bl from-white/20 to-transparent pointer-events-none" /><Palette size={24} className="text-white mix-blend-overlay opacity-50" /></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Color Filter</span></div>); })()}
+                        {step.mode === 'DATE' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="right" verticalOffset={0} isCurved><div className="flex flex-col gap-1 text-zinc-400"><span className="text-xl font-bold text-zinc-300">Temporal Pivot</span><span className="text-sm opacity-70">30-day Window</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-blue-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-blue-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10"><Calendar size={20} className="text-blue-400" /><span className="text-3xl font-hand text-white tracking-wide pr-4">{new Date(parseInt(step.id)).toLocaleDateString()}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Date Filter</span></div>)}
+                        {step.mode === 'SEASON' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="left" verticalOffset={0} isCurved><div className="flex flex-col gap-1 items-end text-zinc-400"><span className="text-xl font-bold text-zinc-300">Cyclical Time</span><span className="text-sm opacity-70">Seasonal Grid</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-amber-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-amber-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10">{step.id === 'Winter' ? <Snowflake size={24} className="text-cyan-200" /> : step.id === 'Summer' ? <Sun size={24} className="text-amber-400" /> : <Cloud size={24} className="text-zinc-400" />}<span className="text-3xl font-hand text-white tracking-wide pr-4">{step.id}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Seasonal Filter</span></div>)}
+                        {step.mode === 'CAMERA' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="left" verticalOffset={0} isCurved><div className="flex flex-col gap-1 items-end text-zinc-400"><span className="text-xl font-bold text-zinc-300">Mechanical Eye</span><span className="text-sm opacity-70">Equipment Match</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-emerald-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-emerald-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10"><Camera size={20} className="text-emerald-400" /><span className="text-3xl font-hand text-white tracking-wide pr-4">{step.id}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Camera Filter</span></div>)}
+                        {step.mode === 'LENS' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="right" verticalOffset={0} isCurved><div className="flex flex-col gap-1 text-zinc-400"><span className="text-xl font-bold text-zinc-300">Glass Signature</span><span className="text-sm opacity-70">Optic Match</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-amber-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-amber-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10"><Aperture size={20} className="text-amber-400" /><span className="text-2xl font-hand text-white tracking-wide pr-4">{step.id}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Lens Filter</span></div>)}
+                        {step.mode === 'NONE' && (
+                            <div className="relative z-10 flex flex-col items-center py-12">
+                                <div className="relative">
+                                    <div className="hidden md:block">
+                                        <Annotation side="left" verticalOffset={0} isCurved>
+                                            <div className="flex flex-col gap-1 items-end text-zinc-400">
+                                                <span className="text-xl font-bold text-zinc-300">Visual Index</span>
+                                                <span className="text-sm opacity-70">Grid Origin</span>
+                                            </div>
+                                        </Annotation>
+                                    </div>
+                                    <div className="relative cursor-default">
+                                        <div className="absolute inset-0 bg-zinc-500/10 blur-xl rounded-full" />
+                                        <div className="relative bg-zinc-900/90 backdrop-blur-md border border-zinc-700 px-8 py-5 rounded-2xl flex items-center gap-4 shadow-lg ring-1 ring-white/10">
+                                            <LayoutGrid size={24} className="text-zinc-400" />
+                                            <span className="text-2xl font-hand text-white tracking-wide pr-2">Gallery</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Gallery Origin</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+            <div className="mt-20 flex flex-col items-center gap-3 opacity-30"><div className="w-2 h-2 bg-zinc-600 rounded-full" /><span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">Session Origin</span></div>
+        </div>
+    );
+};
+
+// --- HISTORY SUB-COMPONENT --- 
+const HistoryTimeline: React.FC<{ history: AnchorState[]; images: ImageNode[]; tags: Tag[]; activeMode: ExperienceMode; nsfwFilterActive: boolean; nsfwTagId?: string; currentHero?: ImageNode; }> = ({ history, images, tags, activeMode, nsfwFilterActive, nsfwTagId, currentHero }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     useEffect(() => { if (activeMode === 'HISTORY' && scrollRef.current) scrollRef.current.scrollTo({ top: 0, behavior: 'instant' }); }, [activeMode]);
     useEffect(() => { if (activeMode === 'EXPLORE' && scrollRef.current) scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' }); }, [activeMode]);
 
     return (
         <div ref={scrollRef} className={`absolute inset-0 z-40 bg-zinc-900/95 backdrop-blur-md overflow-y-auto snap-y snap-mandatory scroll-smooth no-scrollbar transition-opacity duration-500 ${activeMode === 'HISTORY' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-            <div className="flex flex-col items-center min-h-full py-20 relative">
-                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-transparent via-zinc-800 to-transparent" />
-                {history.map((step, index) => {
-                    const isFirst = index === 0;
-                    const prevStep = history[index + 1]; 
-                    const isDirectLink = step.mode === 'IMAGE' && prevStep?.mode === 'IMAGE';
-                    if (step.mode === 'IMAGE' && nsfwFilterActive) {
-                        const img = images.find(i => i.id === step.id);
-                        if (img) {
-                            const hasNsfwTag = [...img.tagIds, ...(img.aiTagIds || [])].some(tid => {
-                                if (tid === nsfwTagId) return true;
-                                const t = tags.find(tag => tag.id === tid);
-                                return t && t.label.trim().toLowerCase() === 'nsfw';
-                            });
-                            if (hasNsfwTag) return null;
-                        }
-                    }
-                    if (step.mode === 'TAG') {
-                        if (step.meta?.label?.toLowerCase() === 'nsfw') return null;
-                        if (step.meta?.type === TagType.CATEGORICAL || step.meta?.type === TagType.QUALITATIVE) return null;
-                    }
-                    return (
-                        <div key={index} className="w-full max-w-4xl flex flex-col items-center snap-center shrink-0 py-24 relative group perspective-1000">
-                            {!isFirst && !isDirectLink && (<div className="absolute -top-16 left-1/2 -translate-x-1/2 z-0 flex flex-col items-center pointer-events-none opacity-50"><GreasePencilArrow seed={index * 123} className="text-zinc-500 w-8 h-16 drop-shadow-sm" /></div>)}
-                            {step.mode === 'IMAGE' && (() => {
-                                const img = images.find(i => i.id === step.id);
-                                if (!img) return null;
-                                const { dateSide, techSide, tilt, verticalOffset, isCurved, seed } = getAnnotationLayout(img.id);
-                                const dateObj = new Date(img.captureTimestamp);
-                                const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                const dateStr = dateObj.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
-                                const seasonStr = img.inferredSeason;
-                                return (
-                                    <div className="relative z-10 w-full flex flex-col items-center gap-12">
-                                        <div className="relative">
-                                            <div className="hidden md:block">
-                                                <Annotation side={techSide as 'left' | 'right'} verticalOffset={-20} isCurved={isCurved}>
-                                                    <div className="flex flex-col gap-1 text-zinc-400"><span className="text-2xl text-zinc-300 font-bold flex items-center gap-2 justify-end flex-row-reverse">{img.cameraModel} <Camera size={20} strokeWidth={2} className="opacity-70" /></span><span className="text-xl italic opacity-80">{img.lensModel}</span><div className="flex items-center gap-3 justify-end mt-2 text-lg opacity-60"><span>ISO {img.iso}</span><span>•</span><span>{img.aperture}</span><span>•</span><span>{img.shutterSpeed}s</span></div></div>
-                                                </Annotation>
-                                                <Annotation side={dateSide as 'left' | 'right'} verticalOffset={40} isCurved={!isCurved}>
-                                                    <div className="flex flex-col gap-1 text-zinc-400"><span className="text-3xl text-zinc-200 font-bold flex items-center gap-2">{seasonStr}{seasonStr === 'Summer' ? <Sun size={24} /> : seasonStr === 'Winter' ? <Thermometer size={24} /> : <Cloud size={24} />}</span><span className="text-xl flex items-center gap-2"><Calendar size={18} /> {dateStr}</span><span className="text-xl flex items-center gap-2 italic opacity-70"><Clock size={18} /> {timeStr}</span></div>
-                                                </Annotation>
-                                            </div>
-                                            <div className="bg-white p-3 rounded-sm shadow-2xl transition-transform duration-700 max-w-[80vw] md:max-w-[400px] relative z-20 group-hover:scale-[1.01]" style={{ transform: `rotate(${tilt}deg)` }}>
-                                                <img src={img.fileUrl} alt="" className="w-full h-auto object-contain bg-zinc-100" />
-                                                <div className="md:hidden mt-3 pt-3 border-t border-dashed border-zinc-200 font-hand text-zinc-600 text-lg flex justify-between items-start"><div className="flex flex-col"><span className="font-bold">{dateStr}</span><span className="text-sm opacity-70">{timeStr}</span></div><div className="flex flex-col items-end text-sm"><span>{img.cameraModel}</span><span className="opacity-70">{img.aperture}, ISO{img.iso}</span></div></div>
-                                            </div>
-                                        </div>
-                                        {isDirectLink && (() => {
-                                            const prevImg = images.find(i => i.id === prevStep.id);
-                                            if (!prevImg) return null;
-                                            const { commonTags, colorMatches, techMatches } = getIntersectionAttributes(img, prevImg, tags);
-                                            if(commonTags.length === 0 && colorMatches.length === 0 && techMatches.length === 0) return (<div className="absolute -top-16 left-1/2 -translate-x-1/2 z-0 flex flex-col items-center pointer-events-none opacity-50"><GreasePencilArrow seed={index * 99} className="text-zinc-500 w-8 h-16" /></div>);
-                                            return (
-                                                <div className="relative flex flex-col items-center animate-in fade-in zoom-in duration-700 delay-300">
-                                                    <div className="w-20 h-20 rounded-full border border-white/10 bg-zinc-800/50 backdrop-blur-sm p-2 flex items-center justify-center relative z-20 shadow-[0_0_30px_rgba(139,92,246,0.1)]">
-                                                        <EsotericSprite node={{ id: img.id, original: img, x: 0, y: 0, currentScale: 1, targetScale: 1, currentOpacity: 1, targetOpacity: 1, relevanceScore: 100, isVisible: true }} />
-                                                    </div>
-                                                    <div className="hidden md:block"><Annotation side="left" compact verticalOffset={0} isCurved={true}><div className="flex flex-col gap-2 items-end">{colorMatches.slice(0, 3).map((pair, idx) => (<div key={idx} className="flex items-center gap-2"><span className="text-xs font-mono opacity-50 uppercase">{pair.cA}</span><div className="flex -space-x-1"><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cA}} /><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cB}} /></div></div>))}{techMatches.length > 0 && (<div className="mt-1 text-right">{techMatches.map((t, idx) => (<span key={idx} className="block text-zinc-400 text-sm">{t}</span>))}</div>)}</div></Annotation></div>
-                                                    <div className="hidden md:block"><Annotation side="right" compact verticalOffset={0} isCurved={false}><div className="flex flex-col gap-1 items-start text-zinc-400">{commonTags.slice(0, 4).map((tag, idx) => (<div key={tag.id} className="flex items-center gap-2"><Hash size={12} className="opacity-50" /><span>{tag.label}</span></div>))}{commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}</div></Annotation></div>
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
-                                );
-                            })()}
-                            {step.mode === 'TAG' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="right" verticalOffset={0} isCurved><div className="flex flex-col gap-1 text-zinc-400"><span className="text-xl font-bold text-zinc-300">Semantic Focus</span><span className="text-sm opacity-70">Classification</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-zinc-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-zinc-700 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10"><Hash size={20} className="text-zinc-400" /><span className="text-3xl font-hand text-white tracking-wide">{step.meta?.label}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Tag Filter</span></div>)}
-                            {step.mode === 'COLOR' && (() => { const rgb = hexToRgbVals(step.id); return (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="left" verticalOffset={0} isCurved><div className="flex flex-col gap-1 items-end text-zinc-400"><span className="text-xl font-bold text-zinc-200 font-mono">{step.id}</span><span className="text-sm opacity-60 font-mono">R{rgb[0]} G{rgb[1]} B{rgb[2]}</span><span className="text-xs italic opacity-40 mt-1 font-hand">Dominant wavelength</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 blur-2xl opacity-40 rounded-full" style={{ backgroundColor: step.id }} /><div className="w-32 h-32 rounded-[2rem] border-4 border-white/10 shadow-2xl relative z-10 flex items-center justify-center overflow-hidden rotate-3" style={{ backgroundColor: step.id }}><div className="absolute inset-0 bg-gradient-to-tr from-black/20 to-transparent pointer-events-none" /><div className="absolute inset-0 bg-gradient-to-bl from-white/20 to-transparent pointer-events-none" /><Palette size={24} className="text-white mix-blend-overlay opacity-50" /></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Color Filter</span></div>); })()}
-                            {step.mode === 'DATE' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="right" verticalOffset={0} isCurved><div className="flex flex-col gap-1 text-zinc-400"><span className="text-xl font-bold text-zinc-300">Temporal Pivot</span><span className="text-sm opacity-70">30-day Window</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-blue-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-blue-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10"><Calendar size={20} className="text-blue-400" /><span className="text-3xl font-hand text-white tracking-wide">{new Date(parseInt(step.id)).toLocaleDateString()}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Date Filter</span></div>)}
-                            {step.mode === 'SEASON' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="left" verticalOffset={0} isCurved><div className="flex flex-col gap-1 items-end text-zinc-400"><span className="text-xl font-bold text-zinc-300">Cyclical Time</span><span className="text-sm opacity-70">Seasonal Grid</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-amber-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-amber-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10">{step.id === 'Winter' ? <Snowflake size={24} className="text-cyan-200" /> : step.id === 'Summer' ? <Sun size={24} className="text-amber-400" /> : <Cloud size={24} className="text-zinc-400" />}<span className="text-3xl font-hand text-white tracking-wide">{step.id}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Seasonal Filter</span></div>)}
-                            {step.mode === 'CAMERA' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="left" verticalOffset={0} isCurved><div className="flex flex-col gap-1 items-end text-zinc-400"><span className="text-xl font-bold text-zinc-300">Mechanical Eye</span><span className="text-sm opacity-70">Equipment Match</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-emerald-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-emerald-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10"><Camera size={20} className="text-emerald-400" /><span className="text-3xl font-hand text-white tracking-wide">{step.id}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Camera Filter</span></div>)}
-                            {step.mode === 'LENS' && (<div className="relative z-10 flex flex-col items-center py-12"><div className="relative"><div className="hidden md:block"><Annotation side="right" verticalOffset={0} isCurved><div className="flex flex-col gap-1 text-zinc-400"><span className="text-xl font-bold text-zinc-300">Glass Signature</span><span className="text-sm opacity-70">Optic Match</span></div></Annotation></div><div className="relative cursor-default"><div className="absolute inset-0 bg-amber-500/10 blur-xl rounded-full" /><div className="relative bg-zinc-900/90 backdrop-blur-md border border-amber-900/30 px-10 py-5 rounded-full flex items-center gap-4 shadow-lg ring-1 ring-white/10"><Aperture size={20} className="text-amber-400" /><span className="text-2xl font-hand text-white tracking-wide">{step.id}</span></div></div></div><span className="md:hidden mt-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">Lens Filter</span></div>)}
-                        </div>
-                    );
-                })}
-                <div className="mt-20 flex flex-col items-center gap-3 opacity-30"><div className="w-2 h-2 bg-zinc-600 rounded-full" /><span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">Session Origin</span></div>
-            </div>
+            <HistoryStream history={history} images={images} tags={tags} nsfwFilterActive={nsfwFilterActive} nsfwTagId={nsfwTagId} currentHero={currentHero} />
         </div>
     );
 };
@@ -520,6 +663,7 @@ const Experience: React.FC<ExperienceProps> = ({
     onAnchorChange,
     onContextUpdate,
     onViewChange,
+    onExperienceModeChange,
     nsfwFilterActive,
     loadingProgress
 }) => {
@@ -529,15 +673,55 @@ const Experience: React.FC<ExperienceProps> = ({
     const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const hoveredNodeIdRef = useRef<string | null>(null);
     const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
+    const detailScrollRef = useRef<HTMLDivElement>(null);
     
     // State
     const [simNodes, setSimNodes] = useState<SimNode[]>([]);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+    const [titleClicks, setTitleClicks] = useState(0);
     
     // Derived Data State
     const [commonTags, setCommonTags] = useState<Tag[]>([]);
     const [activePalette, setActivePalette] = useState<string[]>([]);
+
+    const handleTitleClick = () => {
+        const next = titleClicks + 1;
+        setTitleClicks(next);
+        if (next >= 5) {
+            onViewChange('WORKBENCH');
+            setTitleClicks(0);
+        }
+    };
+
+    // --- EFFECT: DYNAMIC THEME COLOR FOR SAFARI ---
+    useEffect(() => {
+        const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+        if (!metaThemeColor) return;
+
+        let color = '#faf9f6'; // Default Light
+
+        if (isGalleryOpen) {
+            color = '#000000'; // Black for full screen
+        } else if (isDetailOpen || experienceMode === 'HISTORY') {
+            color = '#18181b'; // Zinc-900 for Detail or History
+        }
+
+        metaThemeColor.setAttribute('content', color);
+
+        // Cleanup: Reset to default when unmounting or switching views might be handled by other logic, 
+        // but ensuring it resets on unmount is good practice.
+        return () => {
+            metaThemeColor.setAttribute('content', '#faf9f6');
+        };
+    }, [isGalleryOpen, isDetailOpen, experienceMode]);
+
+    // Reset scroll when opening detail view with new node
+    useEffect(() => {
+        if (isDetailOpen && detailScrollRef.current) {
+            detailScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }, [anchor.id, isDetailOpen]);
 
     const getTagById = useCallback((id: string) => tags.find(t => t.id === id), [tags]);
     const nsfwTagId = useMemo(() => tags.find(t => t.label.trim().toLowerCase() === 'nsfw')?.id, [tags]);
@@ -825,8 +1009,8 @@ const Experience: React.FC<ExperienceProps> = ({
                 const visibleNodes = newNodes.filter(n => n.isVisible);
                 visibleNodes.sort((a, b) => (a.gridSortIndex || 0) - (b.gridSortIndex || 0));
                 const COLS = Math.ceil(Math.sqrt(visibleNodes.length));
-                const CELL_W = 250; 
-                const CELL_H = 250;
+                const CELL_W = 120; 
+                const CELL_H = 120;
                 const gridW = (COLS - 1) * CELL_W;
                 const ROWS = Math.ceil(visibleNodes.length / COLS);
                 const gridH = (ROWS - 1) * CELL_H;
@@ -906,7 +1090,6 @@ const Experience: React.FC<ExperienceProps> = ({
             const cx = width / 2;
             const cy = height / 2;
             const time = Date.now() / 1000;
-            const lerpFactor = 0.1; 
 
             simNodes.forEach((node, i) => {
                 // VISIBILITY OPTIMIZATION:
@@ -922,6 +1105,10 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
 
                 const isAnchor = anchor.mode === 'IMAGE' && node.id === anchor.id;
+                
+                // Define dynamic lerp factor based on state
+                // If invisible (fading out), go fast (0.3). If visible (moving/scaling in), go smooth (0.1).
+                const lerpFactor = !node.isVisible ? 0.3 : 0.1;
 
                 // Ambient float for non-grid modes
                 if (node.isVisible && !isAnchor && anchor.mode !== 'NONE' && !['TAG', 'COLOR', 'SEASON', 'DATE', 'CAMERA', 'LENS'].includes(anchor.mode)) {
@@ -940,8 +1127,8 @@ const Experience: React.FC<ExperienceProps> = ({
                         if (idx !== -1) {
                             const total = activeNodes.length;
                             const COLS = Math.ceil(Math.sqrt(total));
-                            const CELL_W = 250; 
-                            const CELL_H = 250; 
+                            const CELL_W = 120; 
+                            const CELL_H = 120; 
                             const col = idx % COLS;
                             const row = Math.floor(idx / COLS);
                             const gridW = (COLS - 1) * CELL_W;
@@ -1095,6 +1282,26 @@ const Experience: React.FC<ExperienceProps> = ({
     // 6. RENDER
     return (
         <div className="relative w-full h-full bg-[#faf9f6] overflow-hidden font-mono select-none">
+            <svg className="absolute w-0 h-0">
+                <defs>
+                    <filter id="sketch-filter">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="2" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" />
+                    </filter>
+                </defs>
+            </svg>
+            
+            {/* Top-Left Navigation Control */}
+            {!isDetailOpen && !isGalleryOpen && (
+                <div className="absolute top-8 left-8 z-[70] animate-in fade-in slide-in-from-top-4 duration-700">
+                    <RoughContainer 
+                        title="Somatic Studio" 
+                        alignText="left" 
+                        onTitleClick={handleTitleClick}
+                    />
+                </div>
+            )}
+
             {loadingProgress && loadingProgress.current < loadingProgress.total && (<LoadingOverlay progress={loadingProgress} images={images} tags={tags} />)}
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-in-out" style={{ background: anchor.mode !== 'NONE' && activePalette.length > 0 ? `radial-gradient(circle at 50% 30%, ${activePalette[0]}1A, transparent 70%), radial-gradient(circle at 85% 85%, ${activePalette[1] || activePalette[0]}15, transparent 60%), radial-gradient(circle at 15% 75%, ${activePalette[2] || activePalette[0]}10, transparent 60%)` : '#faf9f6' }} />)}
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-multiply" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />)}
@@ -1105,10 +1312,28 @@ const Experience: React.FC<ExperienceProps> = ({
                         if (!node.isVisible && node.currentOpacity <= 0.05) return null;
                         
                         const isHero = anchor.mode === 'IMAGE' && node.id === anchor.id;
-                        const isEsotericSprite = anchor.mode === 'IMAGE' && !isHero;
+                        
+                        // Determine if we should show the Esoteric Sprite or the full Image
+                        // 1. Initial Grid (NONE): Use Sprites
+                        // 2. Image Mode Satellite (IMAGE & !Hero): Use Sprites
+                        // 3. Other modes (TAG, COLOR, etc) and Hero Image: Use Full Images
+                        const isEsotericSprite = anchor.mode === 'NONE' || (anchor.mode === 'IMAGE' && !isHero);
+                        
+                        // Dynamic Sizing based on Context
+                        let sizeClasses = 'w-48';
+                        if (isEsotericSprite) {
+                            // If Grid mode (NONE), use larger sprites for visibility
+                            if (anchor.mode === 'NONE') {
+                                sizeClasses = 'w-24 h-24';
+                            } else {
+                                // Satellite sprites remain smaller
+                                sizeClasses = 'w-24 h-24';
+                            }
+                        }
+
                         return (
                             <div key={node.id} ref={(el) => { if (el) nodeRefs.current.set(node.id, el); else nodeRefs.current.delete(node.id); }} className="absolute top-0 left-0 w-0 h-0">
-                                <div onClick={(e) => handleNodeClick(node.id, e)} onMouseEnter={() => handleMouseEnter(node)} onMouseLeave={() => handleMouseLeave(node)} className={`absolute -translate-x-1/2 -translate-y-1/2 ${isEsotericSprite ? 'w-24 h-24' : 'w-48'} transition-all duration-300 cursor-pointer ${isHero ? '' : 'hover:scale-105'}`}>
+                                <div onClick={(e) => handleNodeClick(node.id, e)} onMouseEnter={() => handleMouseEnter(node)} onMouseLeave={() => handleMouseLeave(node)} className={`absolute -translate-x-1/2 -translate-y-1/2 ${sizeClasses} transition-all duration-300 cursor-pointer ${isHero ? '' : 'hover:scale-105'}`}>
                                     {isEsotericSprite ? (<EsotericSprite node={node} />) : (<img src={node.original.fileUrl} alt="" className={`w-full h-auto rounded-md pointer-events-none bg-white transition-all duration-500 ${isHero ? 'ring-4 ring-white/50' : 'ring-1 ring-black/5'}`} loading="lazy" />)}
                                 </div>
                             </div>
@@ -1116,26 +1341,52 @@ const Experience: React.FC<ExperienceProps> = ({
                     })}
                 </div>
             </div>
+            
+            {/* Initial Guidance Overlay */}
+            {anchor.mode === 'NONE' && experienceMode === 'EXPLORE' && images.length > 0 && !loadingProgress && (
+                <div className="absolute bottom-12 right-12 z-[60] animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500">
+                     <RoughContainer title="Visual Index" description="Start your journey" alignText="right">
+                         <div className="text-zinc-600 font-hand text-xl leading-relaxed text-right max-w-[280px]">
+                             <p className="pr-4">Every pattern encodes a unique image.</p>
+                             <p className="mt-2 pr-4">Select a node to reveal the photograph and explore the collection through shared colors, concepts, and time.</p>
+                         </div>
+                     </RoughContainer>
+                </div>
+            )}
+
             {anchor.mode === 'IMAGE' && activeNode && !isDetailOpen && experienceMode === 'EXPLORE' && (<SatelliteLayer node={activeNode.original} tags={tags} onNavigate={onAnchorChange} />)}
             <HistoryTimeline history={history} images={images} tags={tags} activeMode={experienceMode} nsfwFilterActive={nsfwFilterActive} nsfwTagId={nsfwTagId} />
             {isDetailOpen && activeNode && experienceMode === 'EXPLORE' && (
-                <div className="fixed inset-0 z-50 bg-zinc-900/95 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in duration-300 overflow-hidden" onClick={() => setIsDetailOpen(false)}>
-                    <button className="absolute top-6 right-6 text-zinc-500 hover:text-zinc-300 transition-colors z-50 p-2" onClick={(e) => { e.stopPropagation(); setIsDetailOpen(false); }}><X size={32} /></button>
-                    <div className="w-full h-full max-w-[1920px] grid grid-cols-[1fr_auto_1fr] md:grid-cols-[minmax(250px,350px)_1fr_minmax(250px,350px)] gap-12 p-12 items-center" onClick={(e) => e.stopPropagation()}>
-                        <div className="hidden md:flex flex-col items-end gap-16 h-full justify-center">
-                            <div className="flex items-center gap-4"><div className="flex flex-col items-end gap-1 text-zinc-400"><button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'SEASON', id: activeNode.original.inferredSeason }); setIsDetailOpen(false); }} className="text-4xl text-zinc-200 font-bold flex items-center gap-3 font-hand hover:text-amber-300 transition-colors text-right">{activeNode.original.inferredSeason}{activeNode.original.inferredSeason === 'Summer' ? <Sun size={28} /> : activeNode.original.inferredSeason === 'Winter' ? <Thermometer size={28} /> : <Cloud size={28} />}</button><button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'DATE', id: activeNode.original.captureTimestamp.toString(), meta: activeNode.original.captureTimestamp }); setIsDetailOpen(false); }} className="text-2xl flex items-center gap-2 font-hand text-zinc-300 hover:text-blue-300 transition-colors text-right">{new Date(activeNode.original.captureTimestamp).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</button><span className="text-xl italic opacity-70 font-hand pointer-events-none">{new Date(activeNode.original.captureTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div><ScribbleConnector direction="right" length="60px" /></div>
-                            <div className="relative group w-32 h-32 mr-8"><div className="absolute inset-0 bg-white/5 rounded-full blur-xl animate-pulse" /><EsotericSprite node={activeNode} /><span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-lg font-hand text-zinc-500 opacity-60 whitespace-nowrap">Spectral ID</span></div>
-                            <div className="flex items-start gap-4"><div className="flex flex-col items-end gap-4"><h3 className="text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 flex-row-reverse"><Palette size={20} /> Palette</h3><div className="flex flex-col gap-3">{activeNode.original.palette.map((color, i) => (<div key={i} className="flex items-center gap-3 group cursor-pointer flex-row-reverse" onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'COLOR', id: color, meta: color }); setIsDetailOpen(false); }}><div className="w-8 h-8 rounded-full border border-white/20 group-hover:scale-110 transition-transform shadow-md" style={{ backgroundColor: color }} /><span className="font-hand text-xl text-zinc-500 group-hover:text-zinc-300 transition-colors">{color}</span></div>))}</div></div><ScribbleConnector direction="right" length="40px" /></div>
+                <div ref={detailScrollRef} className="fixed inset-0 z-50 bg-zinc-900/95 backdrop-blur-md overflow-y-auto custom-scrollbar" onClick={() => setIsDetailOpen(false)}>
+                    <button className="fixed top-6 right-6 text-zinc-500 hover:text-zinc-300 transition-colors z-[60] p-2" onClick={(e) => { e.stopPropagation(); setIsDetailOpen(false); }}><X size={32} /></button>
+                    
+                    <div className="flex flex-col items-center w-full min-h-screen">
+                        <div className="w-full max-w-[1920px] min-h-[78vh] grid grid-cols-[1fr_auto_1fr] md:grid-cols-[minmax(250px,350px)_1fr_minmax(250px,350px)] gap-12 p-12 items-center mx-auto" onClick={(e) => e.stopPropagation()}>
+                            <div className="hidden md:flex flex-col items-end gap-16 h-full justify-center">
+                                <div className="flex items-center gap-4"><div className="flex flex-col items-end gap-1 text-zinc-400"><button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'SEASON', id: activeNode.original.inferredSeason }); setIsDetailOpen(false); }} className="text-4xl text-zinc-200 font-bold flex items-center gap-3 font-hand hover:text-amber-300 transition-colors text-right pr-4">{activeNode.original.inferredSeason}{activeNode.original.inferredSeason === 'Summer' ? <Sun size={28} /> : activeNode.original.inferredSeason === 'Winter' ? <Thermometer size={28} /> : <Cloud size={28} />}</button><button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'DATE', id: activeNode.original.captureTimestamp.toString(), meta: activeNode.original.captureTimestamp }); setIsDetailOpen(false); }} className="text-2xl flex items-center gap-2 font-hand text-zinc-300 hover:text-blue-300 transition-colors text-right pr-4">{new Date(activeNode.original.captureTimestamp).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</button><span className="text-xl italic opacity-70 font-hand pointer-events-none pr-4">{new Date(activeNode.original.captureTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div><ScribbleConnector direction="right" length="60px" /></div>
+                                <div className="relative group w-32 h-32 mr-8"><div className="absolute inset-0 bg-white/5 rounded-full blur-xl animate-pulse" /><EsotericSprite node={activeNode} /><span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-lg font-hand text-zinc-500 opacity-60 whitespace-nowrap pr-4">Spectral ID</span></div>
+                                <div className="flex items-start gap-4"><div className="flex flex-col items-end gap-4"><h3 className="text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 flex-row-reverse pr-4"><Palette size={20} /> Palette</h3><div className="flex flex-col gap-3">{activeNode.original.palette.map((color, i) => (<div key={i} className="flex items-center gap-3 group cursor-pointer flex-row-reverse" onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'COLOR', id: color, meta: color }); setIsDetailOpen(false); }}><div className="w-8 h-8 rounded-full border border-white/20 group-hover:scale-110 transition-transform shadow-md" style={{ backgroundColor: color }} /><span className="font-hand text-xl text-zinc-500 group-hover:text-zinc-300 transition-colors pr-4">{color}</span></div>))}</div></div><ScribbleConnector direction="right" length="40px" /></div>
+                            </div>
+                            <div className="flex items-center justify-center h-full relative group"><div className="relative bg-white p-3 rounded-sm shadow-2xl transition-transform duration-500 group-hover:scale-[1.01] cursor-zoom-in rotate-1" onClick={() => setIsGalleryOpen(true)}><img src={activeNode.original.fileUrl} alt="" className="max-h-[65vh] w-auto max-w-[50vw] object-contain bg-zinc-100" /><div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 pointer-events-none"><Maximize2 size={48} className="text-white drop-shadow-md" /></div></div></div>
+                            <div className="hidden md:flex flex-col items-start gap-16 h-full justify-center">
+                                <div className="flex items-center gap-4"><ScribbleConnector direction="left" length="60px" /><div className="flex flex-col items-start gap-1 text-zinc-400"><button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'CAMERA', id: activeNode.original.cameraModel }); setIsDetailOpen(false); }} className="text-3xl text-zinc-200 font-bold flex items-center gap-3 font-hand hover:text-emerald-300 transition-colors pr-4"><Camera size={24} className="opacity-70" />{activeNode.original.cameraModel}</button><button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'LENS', id: activeNode.original.lensModel }); setIsDetailOpen(false); }} className="text-2xl italic opacity-80 font-hand text-zinc-500 ml-1 hover:text-amber-300 transition-colors text-left pr-4">{activeNode.original.lensModel}</button><div className="flex flex-col gap-1 mt-3 ml-2 font-hand text-xl text-zinc-400 opacity-80 pointer-events-none pr-4"><span className="flex items-center gap-2"><Aperture size={16} /> {activeNode.original.aperture}</span><span className="flex items-center gap-2"><Timer size={16} /> {activeNode.original.shutterSpeed}s</span><span className="flex items-center gap-2"><Gauge size={16} /> ISO {activeNode.original.iso}</span></div></div></div>
+                                <div className="flex items-start gap-4 max-h-[60vh]"><ScribbleConnector direction="left" length="40px" /><div className="flex flex-col items-start gap-2 w-full"><h3 className="text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 mb-2 pr-4"><Hash size={20} /> Concepts</h3><div className="grid grid-cols-2 gap-x-6 gap-y-2 text-left overflow-y-auto max-h-[400px] pr-4 w-full no-scrollbar">{(() => { const allTagIds = Array.from(new Set([...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])])); const candidates = allTagIds.map(tid => tags.find(t => t.id === tid)).filter((t): t is Tag => { if (!t) return false; if (t.type === TagType.TECHNICAL || t.type === TagType.SEASONAL) return false; if (t.label.trim().toLowerCase() === 'nsfw') return false; return true; }); const seenLabels = new Set<string>(); const visibleTags: Tag[] = []; candidates.forEach(t => { const key = t.label.toLowerCase().trim(); if (!seenLabels.has(key)) { seenLabels.add(key); visibleTags.push(t); } }); return visibleTags.map(tag => (<button key={tag.id} onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'TAG', id: tag.id, meta: tag }); setIsDetailOpen(false); }} className="font-hand text-xl text-zinc-400 hover:text-zinc-100 hover:scale-105 transition-all duration-200 truncate justify-self-start w-full text-left pr-4" title={tag.label}>{tag.label}</button>)); })()}</div></div></div>
+                            </div>
                         </div>
-                        <div className="flex items-center justify-center h-full relative group"><div className="relative bg-white p-3 rounded-sm shadow-2xl transition-transform duration-500 group-hover:scale-[1.01] cursor-zoom-in rotate-1" onClick={() => setIsGalleryOpen(true)}><img src={activeNode.original.fileUrl} alt="" className="max-h-[85vh] w-auto max-w-[50vw] object-contain bg-zinc-100" /><div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 pointer-events-none"><Maximize2 size={48} className="text-white drop-shadow-md" /></div></div></div>
-                        <div className="hidden md:flex flex-col items-start gap-16 h-full justify-center">
-                            <div className="flex items-center gap-4"><ScribbleConnector direction="left" length="60px" /><div className="flex flex-col items-start gap-1 text-zinc-400"><button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'CAMERA', id: activeNode.original.cameraModel }); setIsDetailOpen(false); }} className="text-3xl text-zinc-200 font-bold flex items-center gap-3 font-hand hover:text-emerald-300 transition-colors"><Camera size={24} className="opacity-70" />{activeNode.original.cameraModel}</button><button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'LENS', id: activeNode.original.lensModel }); setIsDetailOpen(false); }} className="text-2xl italic opacity-80 font-hand text-zinc-500 ml-1 hover:text-amber-300 transition-colors text-left">{activeNode.original.lensModel}</button><div className="flex flex-col gap-1 mt-3 ml-2 font-hand text-xl text-zinc-400 opacity-80 pointer-events-none"><span className="flex items-center gap-2"><Aperture size={16} /> {activeNode.original.aperture}</span><span className="flex items-center gap-2"><Timer size={16} /> {activeNode.original.shutterSpeed}s</span><span className="flex items-center gap-2"><Gauge size={16} /> ISO {activeNode.original.iso}</span></div></div></div>
-                            <div className="flex items-start gap-4 max-h-[60vh]"><ScribbleConnector direction="left" length="40px" /><div className="flex flex-col items-start gap-2 w-full"><h3 className="text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 mb-2"><Hash size={20} /> Concepts</h3><div className="grid grid-cols-2 gap-x-6 gap-y-2 text-left overflow-y-auto max-h-[400px] pr-2 w-full no-scrollbar">{(() => { const allTagIds = Array.from(new Set([...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])])); const candidates = allTagIds.map(tid => tags.find(t => t.id === tid)).filter((t): t is Tag => { if (!t) return false; if (t.type === TagType.TECHNICAL || t.type === TagType.SEASONAL) return false; if (t.label.trim().toLowerCase() === 'nsfw') return false; return true; }); const seenLabels = new Set<string>(); const visibleTags: Tag[] = []; candidates.forEach(t => { const key = t.label.toLowerCase().trim(); if (!seenLabels.has(key)) { seenLabels.add(key); visibleTags.push(t); } }); return visibleTags.map(tag => (<button key={tag.id} onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'TAG', id: tag.id, meta: tag }); setIsDetailOpen(false); }} className="font-hand text-xl text-zinc-400 hover:text-zinc-100 hover:scale-105 transition-all duration-200 truncate justify-self-start w-full text-left" title={tag.label}>{tag.label}</button>)); })()}</div></div></div>
-                        </div>
+
+                        {history.length > 1 && (
+                            <div className="w-full relative pb-32" onClick={(e) => e.stopPropagation()}>
+                                 <div className="flex flex-col items-center justify-center pt-2 pb-4 opacity-40">
+                                    <ArrowDown className="text-zinc-500" size={32} strokeWidth={1.5} />
+                                    <span className="font-hand text-zinc-500 text-2xl mt-2">History Trail</span>
+                                 </div>
+                                 <HistoryStream history={history.slice(1)} images={images} tags={tags} nsfwFilterActive={nsfwFilterActive} nsfwTagId={nsfwTagId} currentHero={activeNode.original} />
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
-            {isGalleryOpen && activeNode && experienceMode === 'EXPLORE' && (<div className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-in fade-in duration-500 cursor-zoom-out" onClick={() => setIsGalleryOpen(false)}><img src={activeNode.original.fileUrl} alt="" className="max-w-full max-h-full object-contain p-4 shadow-2xl" /><div className="absolute top-6 right-6 text-white/50 text-sm font-medium bg-white/10 px-4 py-2 rounded-full backdrop-blur-md">Press ESC or Click to Close</div></div>)}
+            {isGalleryOpen && activeNode && experienceMode === 'EXPLORE' && (<div className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-in fade-in duration-500 cursor-zoom-out" onClick={() => setIsGalleryOpen(false)}><img src={activeNode.original.fileUrl} alt="" className="max-w-full max-h-full object-contain p-4 shadow-2xl" /><div className="absolute top-6 right-6 text-white/60 text-2xl font-hand bg-white/10 px-6 py-2 rounded-full backdrop-blur-md pointer-events-none">Click to Close</div></div>)}
         </div>
     );
 };
