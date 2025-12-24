@@ -1,20 +1,16 @@
-
-import { ImageNode, Tag, TagType } from '../types';
+import { ImageNode, Tag, TagType, ExperienceNode } from '../types';
 import { getSavedTagsForFile, getSavedAITagsForFile, getSavedImageMetadata } from './resourceService';
 import exifr from 'exifr';
 
 // --- CONFIGURATION ---
-// REPLACE THESE VALUES WITH YOUR GITHUB DETAILS
 const REPO_OWNER = 'Ezalis'; 
 const REPO_NAME = 'Somatic-Studio';
-const BRANCH = 'main'; // or 'master'
+const BRANCH = 'main';
 
-// Constructs the raw URL: https://raw.githubusercontent.com/User/Repo/main/public/gallery/
 const GALLERY_BASE_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/public/gallery/`;
 
 // --- Utilities ---
 
-// Strict encoding that handles parentheses which encodeURIComponent misses
 const strictEncodeURIComponent = (str: string) => {
   return encodeURIComponent(str).replace(/[!'()*]/g, (c) => {
     return '%' + c.charCodeAt(0).toString(16);
@@ -30,7 +26,6 @@ export const generateUUID = (): string => {
 
 export const getSeason = (date: Date): string => {
     const month = date.getMonth(); // 0-11
-    // Simple Northern Hemisphere logic
     if (month >= 2 && month <= 4) return 'Spring';
     if (month >= 5 && month <= 7) return 'Summer';
     if (month >= 8 && month <= 10) return 'Autumn';
@@ -41,6 +36,32 @@ export const formatShutterSpeed = (val?: number) => {
     if (!val) return '--';
     if (val >= 1) return val.toString();
     return `1/${Math.round(1 / val)}`;
+};
+
+// --- COLOR MATH UTILS ---
+
+export const hexToRgbVals = (hex: string): [number, number, number] => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [220, 220, 220];
+}
+
+export const hexToRgb = (hex: string) => { const [r, g, b] = hexToRgbVals(hex); return { r, g, b }; }
+
+export const getColorDistSq = (hex1: string, hex2: string) => {
+    const c1 = hexToRgb(hex1);
+    const c2 = hexToRgb(hex2);
+    return (c1.r - c2.r) ** 2 + (c1.g - c2.g) ** 2 + (c1.b - c2.b) ** 2;
+};
+
+export const getMinPaletteDistance = (p1: string[], p2: string[]): number => {
+    let min = Infinity;
+    for (const c1 of p1) {
+        for (const c2 of p2) {
+            const d = getColorDistSq(c1, c2);
+            if (d < min) min = d;
+        }
+    }
+    return min;
 };
 
 export const extractColorPalette = (img: HTMLImageElement): string[] => {
@@ -76,24 +97,94 @@ export const extractColorPalette = (img: HTMLImageElement): string[] => {
             return { r, g, b, hex: `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}` };
         });
     const palette: string[] = [];
-    const getDistSq = (c1: {r:number, g:number, b:number}, hex2: string) => {
-        const r2 = parseInt(hex2.slice(1, 3), 16);
-        const g2 = parseInt(hex2.slice(3, 5), 16);
-        const b2 = parseInt(hex2.slice(5, 7), 16);
-        return Math.pow(c1.r - r2, 2) + Math.pow(c1.g - g2, 2) + Math.pow(c1.b - b2, 2);
-    };
     const thresholds = [3600, 2500, 900, 100, 0]; 
     for (const threshold of thresholds) {
         if (palette.length >= 5) break;
         for (const candidate of sortedCandidates) {
             if (palette.length >= 5) break;
-            const isDistinct = palette.every(selectedHex => getDistSq(candidate, selectedHex) >= threshold);
+            const isDistinct = palette.every(selectedHex => getColorDistSq(candidate.hex, selectedHex) >= threshold);
             if (isDistinct) palette.push(candidate.hex);
         }
     }
     while (palette.length < 5) palette.push('#e4e4e7'); 
     return palette.slice(0, 5);
 };
+
+// --- RELATIONSHIP ANALYSIS ---
+
+export const getIntersectionAttributes = (imgA: ImageNode, imgB: ImageNode, allTags: Tag[]) => {
+    const tagsA = new Set([...imgA.tagIds, ...(imgA.aiTagIds||[])]);
+    const tagsB = new Set([...imgB.tagIds, ...(imgB.aiTagIds||[])]);
+    const commonTagIds = [...tagsA].filter(x => tagsB.has(x));
+    const commonTags = commonTagIds.map(id => allTags.find(t => t.id === id)).filter(Boolean) as Tag[];
+    
+    const colorMatches: {cA: string, cB: string}[] = [];
+    const usedB = new Set<string>();
+    imgA.palette.forEach(cA => {
+        let bestMatch = null;
+        let minDist = 3000;
+        imgB.palette.forEach(cB => {
+            if (usedB.has(cB)) return;
+            const dist = getColorDistSq(cA, cB);
+            if (dist < minDist) { minDist = dist; bestMatch = cB; }
+        });
+        if (bestMatch) { colorMatches.push({ cA, cB: bestMatch }); usedB.add(bestMatch); }
+    });
+    
+    const techMatches: string[] = [];
+    if (imgA.cameraModel === imgB.cameraModel && imgA.cameraModel !== 'Unknown Camera') techMatches.push(imgA.cameraModel);
+    if (imgA.iso === imgB.iso) techMatches.push(`ISO ${imgA.iso}`);
+    if (imgA.inferredSeason === imgB.inferredSeason) techMatches.push(imgA.inferredSeason);
+    
+    const d1 = new Date(imgA.captureTimestamp);
+    const d2 = new Date(imgB.captureTimestamp);
+    if (d1.toDateString() === d2.toDateString()) techMatches.push("Same Day");
+    else if (Math.abs(imgA.captureTimestamp - imgB.captureTimestamp) < 3600000) techMatches.push("Within 1 Hour");
+    
+    return { commonTags, colorMatches, techMatches };
+};
+
+export const MONO_KEYWORDS = ['b&w', 'black and white', 'monochrome', 'grayscale', 'noir', 'silver gelatin'];
+
+export const isMonochrome = (tags: Tag[], tagIds: string[]) => {
+    return tagIds.some(id => {
+        const tag = tags.find(t => t.id === id);
+        return tag && MONO_KEYWORDS.some(k => tag.label.toLowerCase().includes(k));
+    });
+};
+
+export const getDominantColorsFromNodes = (nodes: ExperienceNode[], count: number = 5, excludeColor?: string): string[] => {
+    const colorCounts: Record<string, number> = {};
+    nodes.forEach(node => {
+        node.original.palette.forEach(color => {
+            if (excludeColor && color === excludeColor) return;
+            colorCounts[color] = (colorCounts[color] || 0) + 1;
+        });
+    });
+    return Object.entries(colorCounts).sort((a, b) => b[1] - a[1]).slice(0, count).map(entry => entry[0]);
+};
+
+export const getRelatedTagsFromNodes = (nodes: ExperienceNode[], tags: Tag[], count: number = 6, excludeTagId?: string, nsfwTagId?: string, nsfwFilterActive: boolean = false): Tag[] => {
+    const tagCounts: Record<string, number> = {};
+    nodes.forEach(node => {
+        const allTags = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
+        allTags.forEach(tId => {
+            if (tId === excludeTagId) return;
+            const t = tags.find(tag => tag.id === tId);
+            if (!t) return;
+            if (t.type !== TagType.AI_GENERATED) return;
+            if (t.label.toLowerCase().trim() === 'nsfw') return;
+            tagCounts[tId] = (tagCounts[tId] || 0) + 1;
+        });
+    });
+    return Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, count).map(([id]) => tags.find(t => t.id === id)).filter((t): t is Tag => {
+        if (!t) return false;
+        if (nsfwFilterActive && t.label.trim().toLowerCase() === 'nsfw') return false;
+        return true;
+    });
+};
+
+// --- FILE PROCESSING ---
 
 export const processImageFile = async (
     fileOrBlob: Blob, 
@@ -126,7 +217,7 @@ export const processImageFile = async (
 
     const imgElem = await new Promise<HTMLImageElement>((resolve, reject) => {
         const img = new Image();
-        img.crossOrigin = "Anonymous"; // Essential for remote images (GitHub) to allow canvas extraction
+        img.crossOrigin = "Anonymous";
         img.onload = () => resolve(img);
         img.onerror = () => reject(new Error("Failed to load image"));
         img.src = objectUrl;
@@ -196,11 +287,8 @@ export const hydrateGalleryAssets = async (
     const BATCH_SIZE = 4;
 
     console.groupCollapsed("Hydration Debug");
-    console.log(`Target: ${GALLERY_BASE_URL}`);
-    console.log(`Total Files: ${filenames.length}`);
-
+    
     if (filenames.length === 0) {
-        console.warn("No filenames provided for hydration.");
         console.groupEnd();
         return [];
     }
@@ -218,13 +306,13 @@ export const hydrateGalleryAssets = async (
                 fetchUrl = `${GALLERY_BASE_URL}${encodeURIComponent(fileName)}`;
                 res = await fetch(fetchUrl);
                 
-                // Attempt 2: Strict encoding (handles parentheses)
+                // Attempt 2: Strict encoding
                 if (!res.ok) {
                     fetchUrl = `${GALLERY_BASE_URL}${strictEncodeURIComponent(fileName)}`;
                     res = await fetch(fetchUrl);
                 }
 
-                // Attempt 3: Case insensitivity fallback (jpg <-> JPG)
+                // Attempt 3: Case insensitivity
                 if (!res.ok) {
                     const ext = fileName.split('.').pop();
                     if (ext) {
@@ -241,23 +329,16 @@ export const hydrateGalleryAssets = async (
                     }
                 }
 
-                // Attempt 4: Local Fallback (Dev environment)
+                // Attempt 4: Local Fallback
                 if (!res.ok) {
                     fetchUrl = `/gallery/${fileName}`;
                     res = await fetch(fetchUrl);
                 }
 
-                // Final Failure Check
-                if (!res.ok) {
-                    console.warn(`[Skipping] Failed to load: ${fileName} (404/Error)`);
-                    return;
-                }
+                if (!res.ok) return;
 
                 const blob = await res.blob();
-                if (blob.size === 0) {
-                     console.warn(`[Skipping] Empty blob received: ${fileName}`);
-                     return;
-                }
+                if (blob.size === 0) return;
 
                 const { image } = await processImageFile(blob, fileName, existingTags);
                 batchNodes.push(image);
@@ -275,17 +356,10 @@ export const hydrateGalleryAssets = async (
         processed += batch.length;
         onProgress(Math.min(processed, filenames.length), filenames.length);
         
-        // Slightly faster delay to feel snappier but still breathe
         await new Promise(resolve => setTimeout(resolve, 20));
     }
 
-    console.log(`Hydration Complete. Loaded ${nodes.length} images.`);
     console.groupEnd();
 
     return nodes.sort((a, b) => a.captureTimestamp - b.captureTimestamp);
-};
-
-export const generateMockImages = (count: number, availableTags: Tag[]): ImageNode[] => {
-    const images: ImageNode[] = [];
-    return images; 
 };
