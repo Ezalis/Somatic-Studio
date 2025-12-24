@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { ImageNode, Tag, TagType, ViewMode } from '../types';
 import { 
@@ -408,7 +407,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
 
             {/* --- LIST VIEW --- */}
             <div className="flex-1 overflow-y-auto pb-32" onClick={() => setSelectedIds(new Set())}>
-                {filteredImages.map((img: any) => {
+                {filteredImages.map((img) => {
                     const isSelected = selectedIds.has(img.id);
                     const dateObj = new Date(img.captureTimestamp);
                     const isHarmonized = img.tagVersion === 1;

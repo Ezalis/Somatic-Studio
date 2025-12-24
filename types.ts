@@ -61,6 +61,31 @@ export interface ImageNode extends SimulationNode {
     selected?: boolean;
 }
 
+// Extended Node for Experience/Simulation View
+export interface ExperienceNode extends SimulationNodeDatum {
+    id: string;
+    original: ImageNode;
+    // D3 coordinates (made explicit)
+    x: number; 
+    y: number;
+    vx?: number;
+    vy?: number;
+    
+    // Visual State
+    currentScale: number;
+    targetScale: number;
+    currentOpacity: number;
+    targetOpacity: number;
+    relevanceScore: number;
+    isVisible: boolean;
+    
+    // Orbit/Grid Props (Procedural Layouts)
+    orbitSpeed?: number;
+    orbitOffset?: number;
+    orbitRadiusBase?: number;
+    gridSortIndex?: number;
+}
+
 export interface InsightSnapshot {
     id: string;
     timestamp: number;
