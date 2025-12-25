@@ -38,6 +38,125 @@ interface ExperienceProps {
     loadingProgress?: { current: number, total: number } | null;
 }
 
+// --- FULLSCREEN VERTICAL GALLERY COMPONENT ---
+const FullscreenVerticalGallery: React.FC<{
+    history: AnchorState[];
+    images: ImageNode[];
+    tags: Tag[];
+    startHistoryIndex: number;
+    onClose: (finalHistoryIndex: number) => void;
+    nsfwFilterActive: boolean;
+    nsfwTagId?: string;
+}> = ({ history, images, tags, startHistoryIndex, onClose, nsfwFilterActive, nsfwTagId }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    
+    // 1. Filter history to strictly images for the gallery view.
+    // We store the original index to snap back correctly in the history stream on close.
+    // Also respect NSFW filter to ensure 1:1 parity with the visible stream.
+    const galleryItems = useMemo(() => {
+        return history
+            .map((step, idx) => ({ step, originalIndex: idx }))
+            .filter(x => {
+                if (x.step.mode !== 'IMAGE') return false;
+                
+                if (nsfwFilterActive) {
+                    const img = images.find(i => i.id === x.step.id);
+                    if (img) {
+                        const hasNsfwTag = [...img.tagIds, ...(img.aiTagIds || [])].some(tid => {
+                            if (tid === nsfwTagId) return true;
+                            const t = tags.find(tag => tag.id === tid);
+                            return t && t.label.trim().toLowerCase() === 'nsfw';
+                        });
+                        if (hasNsfwTag) return false;
+                    }
+                }
+                return true;
+            });
+    }, [history, images, tags, nsfwFilterActive, nsfwTagId]);
+
+    // 2. Find the starting index in our filtered list based on the history index passed in.
+    const initialGalleryIndex = useMemo(() => {
+        const found = galleryItems.findIndex(x => x.originalIndex === startHistoryIndex);
+        return found >= 0 ? found : 0;
+    }, [galleryItems, startHistoryIndex]);
+
+    const [currentIndex, setCurrentIndex] = useState(initialGalleryIndex);
+
+    // 3. Initial scroll to the clicked image
+    // Using scrollTop is more reliable than scrollIntoView for a 100vh snap container on mount
+    useEffect(() => {
+        if (scrollRef.current && galleryItems.length > 0) {
+            // Use clientHeight for robustness against mobile browser chrome resizing
+            const h = scrollRef.current.clientHeight || window.innerHeight;
+            scrollRef.current.scrollTop = initialGalleryIndex * h;
+        }
+    }, []); // Only run on mount
+
+    // 4. Track scroll to update current index (so we know where we are when we close)
+    const handleScroll = () => {
+        if (scrollRef.current) {
+            const h = scrollRef.current.clientHeight;
+            if (h > 0) {
+                const index = Math.round(scrollRef.current.scrollTop / h);
+                if (index !== currentIndex && index >= 0 && index < galleryItems.length) {
+                    setCurrentIndex(index);
+                }
+            }
+        }
+    };
+
+    const handleClose = () => {
+        const finalHistoryIndex = galleryItems[currentIndex]?.originalIndex ?? 0;
+        onClose(finalHistoryIndex);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] bg-black animate-in fade-in duration-300">
+            {/* Close Button */}
+            <button 
+                onClick={handleClose}
+                className="absolute top-6 right-6 z-50 p-3 text-white/50 hover:text-white bg-black/20 hover:bg-white/10 backdrop-blur-md rounded-full transition-all duration-200"
+            >
+                <X size={28} />
+            </button>
+
+            {/* Vertical Swipe Container */}
+            <div 
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="w-full h-full overflow-y-auto snap-y snap-mandatory scroll-smooth no-scrollbar"
+                style={{ scrollBehavior: 'smooth' }} // Enforce smooth in CSS, though JS manual set above overrides it for init
+            >
+                {galleryItems.map((item, idx) => {
+                    const img = images.find(i => i.id === item.step.id);
+                    if (!img) return null;
+                    
+                    return (
+                        <div key={idx} className="w-full h-full flex items-center justify-center snap-center relative shrink-0">
+                            <img 
+                                src={img.fileUrl} 
+                                alt="" 
+                                className="max-w-full max-h-full object-contain p-2 md:p-8 select-none shadow-2xl"
+                                draggable={false}
+                            />
+                        </div>
+                    );
+                })}
+            </div>
+            
+            {/* Minimal Page Indicator */}
+            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-none">
+                {galleryItems.map((_, i) => (
+                    <div 
+                        key={i} 
+                        className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${i === currentIndex ? 'bg-white scale-150' : 'bg-white/20'}`} 
+                    />
+                ))}
+            </div>
+        </div>
+    );
+};
+
 // --- SATELLITE NAVIGATION LAYER ---
 const SatelliteLayer: React.FC<{
     node: ImageNode;
@@ -95,7 +214,15 @@ const HistoryTimeline: React.FC<{ history: AnchorState[]; images: ImageNode[]; t
 
     return (
         <div ref={scrollRef} className={`absolute inset-0 z-40 bg-zinc-900/95 backdrop-blur-md overflow-y-auto snap-y snap-mandatory scroll-smooth no-scrollbar transition-opacity duration-500 ${activeMode === 'HISTORY' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-            <HistoryStream history={history} images={images} tags={tags} nsfwFilterActive={nsfwFilterActive} nsfwTagId={nsfwTagId} currentHero={currentHero} />
+            <HistoryStream 
+                history={history} 
+                images={images} 
+                tags={tags} 
+                nsfwFilterActive={nsfwFilterActive} 
+                nsfwTagId={nsfwTagId} 
+                currentHero={currentHero} 
+                idPrefix="timeline-history-"
+            />
         </div>
     );
 };
@@ -125,7 +252,7 @@ const Experience: React.FC<ExperienceProps> = ({
     // State
     const [simNodes, setSimNodes] = useState<ExperienceNode[]>([]);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
-    const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+    const [galleryState, setGalleryState] = useState<{ isOpen: boolean, startIndex: number }>({ isOpen: false, startIndex: 0 });
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [titleClicks, setTitleClicks] = useState(0);
     
@@ -149,8 +276,8 @@ const Experience: React.FC<ExperienceProps> = ({
 
         let color = '#faf9f6'; // Default Light
 
-        if (isGalleryOpen) {
-            color = '#000000'; // Black for full screen
+        if (galleryState.isOpen) {
+            color = '#000000'; // Black for gallery
         } else if (isDetailOpen || experienceMode === 'HISTORY') {
             color = '#18181b'; // Zinc-900 for Detail or History
         }
@@ -159,7 +286,7 @@ const Experience: React.FC<ExperienceProps> = ({
         return () => {
             metaThemeColor.setAttribute('content', '#faf9f6');
         };
-    }, [isGalleryOpen, isDetailOpen, experienceMode]);
+    }, [galleryState.isOpen, isDetailOpen, experienceMode]);
 
     // Reset scroll when opening detail view with new node
     useEffect(() => {
@@ -175,7 +302,7 @@ const Experience: React.FC<ExperienceProps> = ({
     useEffect(() => {
         if (anchor.mode !== 'IMAGE') {
             setIsDetailOpen(false);
-            setIsGalleryOpen(false);
+            setGalleryState({ isOpen: false, startIndex: 0 });
             setShowScrollTop(false);
         } else {
             // When entering image mode, ensure button is reset
@@ -198,9 +325,6 @@ const Experience: React.FC<ExperienceProps> = ({
     const handleCloseDetail = (e: React.MouseEvent) => {
         e.stopPropagation();
         setIsDetailOpen(false);
-        /*if (anchor.mode === 'IMAGE') {
-            onAnchorChange({ mode: 'NONE', id: '' });
-        }*/
     };
 
     // 1. SCORING & RELATIONSHIP ENGINE (Visibility Logic)
@@ -698,7 +822,7 @@ const Experience: React.FC<ExperienceProps> = ({
             </svg>
             
             {/* Top-Left Navigation Control */}
-            {!isDetailOpen && !isGalleryOpen && (
+            {!isDetailOpen && !galleryState.isOpen && (
                 <div className="absolute top-8 left-8 z-[70] animate-in fade-in slide-in-from-top-4 duration-700">
                     <RoughContainer 
                         title="Somatic Studio" 
@@ -811,9 +935,12 @@ const Experience: React.FC<ExperienceProps> = ({
                                     </div>
                                 </div>
 
-                                {/* Center Image */}
+                                {/* Center Image (Hero) */}
                                 <div className="flex items-center justify-center h-full relative group order-1 xl:order-2 col-span-1 md:col-span-2 xl:col-span-1">
-                                    <div className="relative bg-white p-3 rounded-sm shadow-2xl transition-transform duration-500 group-hover:scale-[1.01] cursor-zoom-in rotate-1" onClick={() => setIsGalleryOpen(true)}>
+                                    <div 
+                                        className="relative bg-white p-3 rounded-sm shadow-2xl transition-transform duration-500 group-hover:scale-[1.01] cursor-zoom-in rotate-1" 
+                                        onClick={() => setGalleryState({ isOpen: true, startIndex: 0 })}
+                                    >
                                         <img src={activeNode.original.fileUrl} alt="" className="max-h-[50vh] xl:max-h-[65vh] w-auto max-w-[85vw] xl:max-w-[50vw] object-contain bg-zinc-100" />
                                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 pointer-events-none">
                                             <Maximize2 size={48} className="text-white drop-shadow-md" />
@@ -868,7 +995,17 @@ const Experience: React.FC<ExperienceProps> = ({
                                         <ArrowDown className="text-zinc-500" size={32} strokeWidth={1.5} />
                                         <span className="font-hand text-zinc-500 text-2xl mt-2">History Trail</span>
                                      </div>
-                                     <HistoryStream history={history.slice(1)} images={images} tags={tags} nsfwFilterActive={nsfwFilterActive} nsfwTagId={nsfwTagId} currentHero={activeNode.original} />
+                                     <HistoryStream 
+                                        history={history.slice(1)} 
+                                        images={images} 
+                                        tags={tags} 
+                                        nsfwFilterActive={nsfwFilterActive} 
+                                        nsfwTagId={nsfwTagId} 
+                                        currentHero={activeNode.original} 
+                                        onItemClick={(index) => setGalleryState({ isOpen: true, startIndex: index })}
+                                        baseIndexOffset={1}
+                                        idPrefix="detail-history-"
+                                     />
                                 </div>
                             )}
                         </div>
@@ -876,12 +1013,32 @@ const Experience: React.FC<ExperienceProps> = ({
                 </>
             )}
             
-            {/* FULLSCREEN LIGHTBOX */}
-            {isGalleryOpen && activeNode && experienceMode === 'EXPLORE' && (
-                <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-in fade-in duration-500 cursor-zoom-out" onClick={() => setIsGalleryOpen(false)}>
-                    <img src={activeNode.original.fileUrl} alt="" className="max-w-full max-h-full object-contain p-4 shadow-2xl" />
-                    <div className="absolute top-6 right-6 text-white/60 text-2xl font-hand bg-white/10 px-6 py-2 rounded-full backdrop-blur-md pointer-events-none">Click to Close</div>
-                </div>
+            {/* FULLSCREEN GALLERY OVERLAY */}
+            {galleryState.isOpen && (
+                <FullscreenVerticalGallery
+                    history={history}
+                    images={images}
+                    tags={tags}
+                    startHistoryIndex={galleryState.startIndex}
+                    nsfwFilterActive={nsfwFilterActive}
+                    nsfwTagId={nsfwTagId}
+                    onClose={(finalHistoryIndex) => {
+                        setGalleryState({ isOpen: false, startIndex: 0 });
+                        
+                        // SNAP LOGIC
+                        // We use a small timeout to ensure the state update renders before we attempt to scroll
+                        setTimeout(() => {
+                            // If index is 0, we snap to top (Hero)
+                            if (finalHistoryIndex <= 0) {
+                                 detailScrollRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+                            } else {
+                                 // Target the DETAIL view item, not the timeline one
+                                 const el = document.getElementById(`detail-history-item-${finalHistoryIndex}`);
+                                 if (el) el.scrollIntoView({ behavior: 'auto', block: 'center' });
+                            }
+                        }, 0);
+                    }}
+                />
             )}
         </div>
     );
