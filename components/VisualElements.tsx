@@ -177,46 +177,58 @@ export const LoadingOverlay: React.FC<{
         <div className="absolute inset-0 z-[100] bg-zinc-950 flex flex-col items-center justify-center font-hand text-zinc-200 overflow-hidden">
              <div className="absolute inset-0 pointer-events-none overflow-hidden">
                  {floatingItems.map(item => (
-                     <div key={item.id} className="absolute text-white/20 text-xl md:text-2xl animate-in fade-in zoom-in duration-1000 fill-mode-forwards pr-4" style={{ left: `${item.x}%`, top: `${item.y}%`, transform: `rotate(${item.rotation}deg)`, animationDelay: `${item.delay}s` }}>
+                     <div key={item.id} className="absolute text-white/20 text-lg md:text-2xl animate-in fade-in zoom-in duration-1000 fill-mode-forwards pr-4" style={{ left: `${item.x}%`, top: `${item.y}%`, transform: `rotate(${item.rotation}deg)`, animationDelay: `${item.delay}s` }}>
                          {item.type === 'COLOR' ? (<div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full" style={{backgroundColor: item.text}} /><span className="font-mono text-sm">{item.text}</span></div>) : (item.text)}
                      </div>
                  ))}
              </div>
             <div className="absolute inset-0 opacity-[0.08] pointer-events-none mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")` }} />
-            <div className="relative z-10 flex flex-col items-center gap-12 max-w-lg w-full px-6">
-                <div className="flex flex-col items-center gap-1">
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tighter opacity-90 drop-shadow-md pr-4">Somatic Studio</h1>
+            
+            <div className="relative z-10 flex flex-col items-center justify-center w-full h-[100dvh] p-4 md:p-8 gap-6 md:gap-12">
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                    <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tighter opacity-90 drop-shadow-md pr-4 text-center">Somatic Studio</h1>
                 </div>
-                <div className="relative w-72 h-80 md:w-80 md:h-96 flex flex-col items-center justify-center transition-all duration-500 ease-out" style={{ transform: `rotate(${polaroidRotation}deg)` }}>
+                
+                <div className="relative shrink-0 w-[65vw] max-w-[280px] aspect-[4/5] md:w-80 md:h-96 md:max-w-none md:aspect-auto flex flex-col items-center justify-center transition-all duration-500 ease-out" style={{ transform: `rotate(${polaroidRotation}deg)` }}>
                     <div className="absolute inset-0 bg-[#f8f8f8] shadow-2xl rounded-sm transform translate-y-1" />
                     {latestImage ? (
-                        <div className="relative w-[90%] h-[85%] mt-4 bg-zinc-100 flex flex-col animate-in fade-in duration-500">
-                             <img src={latestImage.fileUrl} alt="Loading Preview" className="w-full h-64 object-cover filter sepia-[0.1] contrast-[1.1]" />
-                             <div className="flex-1 flex flex-col justify-end p-3 pb-1">
-                                 <div className="flex justify-between items-end font-mono text-[10px] text-zinc-400 tracking-wider">
+                        <div className="relative w-[90%] h-[90%] mt-[5%] bg-zinc-100 flex flex-col animate-in fade-in duration-500 shadow-inner">
+                             <div className="flex-1 w-full overflow-hidden relative bg-zinc-200">
+                                 <img src={latestImage.fileUrl} alt="Loading Preview" className="absolute inset-0 w-full h-full object-cover filter sepia-[0.1] contrast-[1.1]" />
+                             </div>
+                             <div className="h-12 md:h-16 flex flex-col justify-end p-2 md:p-3 pb-1 md:pb-2 shrink-0">
+                                 <div className="flex justify-between items-end font-mono text-[8px] md:text-[10px] text-zinc-400 tracking-wider">
                                      <span className="uppercase truncate max-w-[120px]">{latestImage.inferredSeason} {new Date(latestImage.captureTimestamp).getFullYear()}</span>
                                      <span>ISO{latestImage.iso}</span>
                                  </div>
-                                 <div className="flex gap-1 mt-1 justify-end opacity-50">{latestImage.palette.slice(0,3).map(c => (<div key={c} className="w-2 h-2 rounded-full" style={{background: c}} />))}</div>
+                                 <div className="flex gap-1 mt-1 justify-end opacity-50">
+                                    {latestImage.palette.slice(0,3).map(c => (<div key={c} className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full" style={{background: c}} />))}
+                                 </div>
                              </div>
                         </div>
-                    ) : (<div className="relative w-[90%] h-[85%] mt-4 bg-zinc-100 flex flex-col items-center justify-center text-zinc-300"><Activity size={32} /></div>)}
+                    ) : (<div className="relative w-[90%] h-[90%] mt-[5%] bg-zinc-100 flex flex-col items-center justify-center text-zinc-300"><Activity size={32} /></div>)}
                 </div>
-                <div className="w-full flex flex-col gap-4 max-w-md">
-                    <div className="flex justify-between text-2xl font-mono text-zinc-400 items-end px-2"><span>{progress.current.toString().padStart(3, '0')}</span><span className="opacity-30 text-sm mb-1">/</span><span>{progress.total}</span></div>
-                    <div className="w-full h-6 relative">
-                        <svg className="w-full h-full overflow-visible" preserveAspectRatio="none">
+
+                <div className="w-full flex flex-col gap-2 md:gap-4 max-w-[240px] md:max-w-md shrink-0">
+                    <div className="flex justify-between text-lg md:text-2xl font-mono text-zinc-400 items-end px-2">
+                        <span>{progress.current.toString().padStart(3, '0')}</span>
+                        <span className="opacity-30 text-xs md:text-sm mb-1">/</span>
+                        <span>{progress.total}</span>
+                    </div>
+                    <div className="w-full h-4 md:h-6 relative">
+                        <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 400 20">
                             <path d="M2,10 Q50,14 100,10 T200,10 T300,10 T400,10" fill="none" stroke="#3f3f46" strokeWidth="2" strokeLinecap="round" className="w-full" vectorEffect="non-scaling-stroke" />
                             <path d="M2,10 Q50,14 100,10 T200,10 T300,10 T400,10" fill="none" stroke="#e4e4e7" strokeWidth="4" strokeLinecap="round" strokeDasharray="410" strokeDashoffset={410 - (percentage * 4.1)} className="transition-all duration-300 ease-linear" vectorEffect="non-scaling-stroke" filter="url(#pencil)" />
                             <defs><filter id="pencil"><feTurbulence type="fractalNoise" baseFrequency="0.5" numOctaves="5" stitchTiles="stitch" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="2" /></filter></defs>
                         </svg>
                     </div>
-                    <div className="text-center text-zinc-500 text-lg mt-1 font-mono tracking-widest">{percentage}% COMPLETED</div>
+                    <div className="text-center text-zinc-500 text-xs md:text-lg mt-1 font-mono tracking-widest">{percentage}% COMPLETED</div>
                 </div>
             </div>
-            <div className="fixed bottom-8 right-8 flex items-center gap-3 opacity-80 z-[110]">
-                <div className="text-right"><div className="font-hand text-xl text-zinc-300 pr-4">Captured on</div><div className="font-mono text-xs text-zinc-400 uppercase tracking-widest">Fujifilm X-Series</div></div>
-                <Camera size={24} className="text-zinc-300" strokeWidth={1.5} />
+            
+            <div className="fixed bottom-4 right-4 md:bottom-8 md:right-8 flex items-center gap-2 md:gap-3 opacity-60 md:opacity-80 z-[110] scale-75 md:scale-100 origin-bottom-right">
+                <div className="text-right"><div className="font-hand text-lg md:text-xl text-zinc-300 pr-2">Captured on</div><div className="font-mono text-[10px] md:text-xs text-zinc-400 uppercase tracking-widest">Fujifilm X-Series</div></div>
+                <Camera size={20} className="text-zinc-300" strokeWidth={1.5} />
             </div>
         </div>
     );
@@ -230,8 +242,22 @@ export const RoughContainer: React.FC<{
     alignText: 'left' | 'right';
     onTitleClick?: () => void;
 }> = ({ children, title, description, alignText, onTitleClick }) => {
+    
+    // Handler to toggle open/close when clicking the container, but ignored if clicking an internal button
+    const handleContainerClick = (e: React.MouseEvent) => {
+        if (!onTitleClick) return;
+        // Check if the target is a button or inside a button (like a color swatch or tag)
+        if ((e.target as HTMLElement).closest('button')) {
+            return;
+        }
+        onTitleClick();
+    };
+
     return (
-        <div className="relative group pointer-events-auto p-6">
+        <div 
+            onClick={handleContainerClick}
+            className={`relative group pointer-events-auto p-3 md:p-6 transition-all duration-300 ${onTitleClick ? 'cursor-pointer active:scale-[0.99]' : ''}`}
+        >
             <div className="absolute -inset-4 bg-white/80 backdrop-blur-xl rounded-xl -z-10 shadow-lg border border-zinc-400/20" 
                  style={{ 
                      borderRadius: '255px 15px 225px 15px / 15px 225px 15px 255px',
@@ -244,20 +270,23 @@ export const RoughContainer: React.FC<{
                  </svg>
             </div>
 
-            <div className={`flex flex-col gap-4 min-w-[120px] ${children ? 'min-w-[200px] max-w-[calc(100vw-5rem)]' : ''} ${alignText === 'right' ? 'items-end text-right' : 'items-start text-left'}`}>
-                <div className="flex flex-col gap-0.5">
+            <div className={`flex flex-col gap-3 min-w-[80px] md:min-w-[120px] ${children ? 'min-w-[200px] max-w-[calc(100vw-5rem)]' : ''} ${alignText === 'right' ? 'items-end text-right' : 'items-start text-left'}`}>
+                <div className="flex flex-col gap-0.5 pointer-events-none">
                     <div 
-                        onClick={onTitleClick}
-                        className={`font-hand text-3xl font-bold text-zinc-700 leading-none tracking-wide pr-4 select-none ${onTitleClick ? 'cursor-pointer active:scale-95 transition-transform' : ''}`}
+                        className="font-hand text-2xl md:text-3xl font-bold text-zinc-700 leading-none tracking-wide pr-2 md:pr-4 select-none"
                     >
                         {title}
                     </div>
-                    {description && <div className="font-hand text-lg text-zinc-500 leading-tight pr-4">{description}</div>}
+                    {description && (
+                        <div className="font-hand text-base md:text-lg text-zinc-500 leading-tight pr-2 md:pr-4">
+                            {description}
+                        </div>
+                    )}
                     {children && <div className={`h-px bg-zinc-300 w-12 mt-2 ${alignText === 'right' ? 'ml-auto' : 'mr-auto'}`} />}
                 </div>
 
                 {children && (
-                    <div className="relative z-10">
+                    <div className="relative z-10 pointer-events-auto">
                         {children}
                     </div>
                 )}
@@ -294,6 +323,49 @@ export const Annotation: React.FC<{ side: 'left' | 'right'; children: React.Reac
     );
 };
 
+// --- Mobile Connection Helper ---
+const MobileConnectionInfo: React.FC<{ 
+    colorMatches: {cA: string, cB: string}[], 
+    techMatches: string[], 
+    commonTags: Tag[] 
+}> = ({ colorMatches, techMatches, commonTags }) => (
+    <div className="md:hidden flex flex-col items-center gap-3 mt-6 w-full px-4 animate-in fade-in slide-in-from-top-2 duration-500">
+        {/* Visual & Tech Row */}
+        <div className="flex items-center justify-center gap-6 w-full">
+             {colorMatches.length > 0 && (
+                 <div className="flex -space-x-3">
+                     {colorMatches.slice(0, 3).map((pair, idx) => (
+                         <div key={idx} className="relative">
+                             <div className="w-5 h-5 rounded-full border border-white/20 shadow-sm" style={{backgroundColor: pair.cA}} />
+                             <div className="w-5 h-5 rounded-full border border-white/20 shadow-sm absolute top-2 left-2" style={{backgroundColor: pair.cB}} />
+                         </div>
+                     ))}
+                 </div>
+             )}
+             {techMatches.length > 0 && (
+                 <div className="flex flex-col gap-0.5 text-[10px] font-mono text-zinc-500 uppercase tracking-widest text-center">
+                     {techMatches.map((t, idx) => <span key={idx}>{t}</span>)}
+                 </div>
+             )}
+        </div>
+
+        {/* Tags Row */}
+        {commonTags.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+                {commonTags.slice(0, 6).map((tag) => (
+                    <div key={tag.id} className="flex items-center gap-1.5 text-zinc-400">
+                        <Hash size={12} className="opacity-40" />
+                        <span className="font-hand text-lg leading-none text-zinc-500">{tag.label}</span>
+                    </div>
+                ))}
+            </div>
+        )}
+        
+        {/* Divider to separate from next item */}
+        <div className="w-8 h-px bg-zinc-200 mt-2 mb-4" />
+    </div>
+);
+
 // --- History Stream (Extracted from Experience.tsx) ---
 export const HistoryStream: React.FC<{ 
     history: AnchorState[]; 
@@ -324,8 +396,13 @@ export const HistoryStream: React.FC<{
                             <div className="w-16 h-16 rounded-full border border-white/10 bg-zinc-800/50 backdrop-blur-sm p-1.5 flex items-center justify-center relative z-20 shadow-[0_0_20px_rgba(139,92,246,0.1)]">
                                 <EsotericSprite node={{ id: currentHero.id, original: currentHero, x: 0, y: 0, currentScale: 1, targetScale: 1, currentOpacity: 1, targetOpacity: 1, relevanceScore: 100, isVisible: true }} />
                             </div>
+                            
+                            {/* Desktop Annotations */}
                             <div className="hidden md:block"><Annotation side="left" compact verticalOffset={0} isCurved={true}><div className="flex flex-col gap-2 items-end">{colorMatches.slice(0, 3).map((pair, idx) => (<div key={idx} className="flex items-center gap-2"><span className="text-xs font-mono opacity-50 uppercase">{pair.cA}</span><div className="flex -space-x-1"><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cA}} /><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cB}} /></div></div>))}{techMatches.length > 0 && (<div className="mt-1 text-right">{techMatches.map((t, idx) => (<span key={idx} className="block text-zinc-400 text-sm">{t}</span>))}</div>)}</div></Annotation></div>
                             <div className="hidden md:block"><Annotation side="right" compact verticalOffset={0} isCurved={false}><div className="flex flex-col gap-1 items-start text-zinc-400">{commonTags.slice(0, 4).map((tag, idx) => (<div key={tag.id} className="flex items-center gap-2"><Hash size={12} className="opacity-50" /><span>{tag.label}</span></div>))}{commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}</div></Annotation></div>
+                            
+                            {/* Mobile Info */}
+                            <MobileConnectionInfo colorMatches={colorMatches} techMatches={techMatches} commonTags={commonTags} />
                         </div>
                      );
                  }
@@ -466,8 +543,13 @@ export const HistoryStream: React.FC<{
                                                 <div className="w-20 h-20 rounded-full border border-white/10 bg-zinc-800/50 backdrop-blur-sm p-2 flex items-center justify-center relative z-20 shadow-[0_0_30px_rgba(139,92,246,0.1)]">
                                                     <EsotericSprite node={{ id: img.id, original: img, x: 0, y: 0, currentScale: 1, targetScale: 1, currentOpacity: 1, targetOpacity: 1, relevanceScore: 100, isVisible: true }} />
                                                 </div>
+                                                
+                                                {/* Desktop Annotations */}
                                                 <div className="hidden md:block"><Annotation side="left" compact verticalOffset={0} isCurved={true}><div className="flex flex-col gap-2 items-end">{colorMatches.slice(0, 3).map((pair, idx) => (<div key={idx} className="flex items-center gap-2"><span className="text-xs font-mono opacity-50 uppercase">{pair.cA}</span><div className="flex -space-x-1"><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cA}} /><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cB}} /></div></div>))}{techMatches.length > 0 && (<div className="mt-1 text-right">{techMatches.map((t, idx) => (<span key={idx} className="block text-zinc-400 text-sm">{t}</span>))}</div>)}</div></Annotation></div>
                                                 <div className="hidden md:block"><Annotation side="right" compact verticalOffset={0} isCurved={false}><div className="flex flex-col gap-1 items-start text-zinc-400">{commonTags.slice(0, 4).map((tag, idx) => (<div key={tag.id} className="flex items-center gap-2"><Hash size={12} className="opacity-50" /><span>{tag.label}</span></div>))}{commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}</div></Annotation></div>
+                                                
+                                                {/* Mobile Info */}
+                                                <MobileConnectionInfo colorMatches={colorMatches} techMatches={techMatches} commonTags={commonTags} />
                                             </div>
                                         );
                                     })()}
