@@ -162,7 +162,23 @@ const SatelliteLayer: React.FC<{
     node: ImageNode;
     tags: Tag[];
     onNavigate: (anchor: AnchorState) => void;
-}> = ({ node, tags, onNavigate }) => {
+    isMobile: boolean;
+}> = ({ node, tags, onNavigate, isMobile }) => {
+    const [openPanel, setOpenPanel] = useState<'palette' | 'tags' | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // Handle click outside on mobile to close panels
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setOpenPanel(null);
+            }
+        };
+        // Add listener
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const uniqueTags = useMemo(() => {
         const allIds = [...node.tagIds, ...(node.aiTagIds || [])];
         const resolved = allIds.map(id => tags.find(t => t.id === id)).filter(Boolean) as Tag[];
@@ -173,32 +189,50 @@ const SatelliteLayer: React.FC<{
         return final;
     }, [node, tags]);
 
+    const togglePanel = (panel: 'palette' | 'tags') => {
+        setOpenPanel(prev => prev === panel ? null : panel);
+    };
+
     return (
-        <div className="absolute inset-0 pointer-events-none z-[60]">
+        <div ref={containerRef} className="absolute inset-0 pointer-events-none z-[60]">
             {/* Left: Palette */}
-            <div className="absolute bottom-12 left-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700">
-                <RoughContainer title="Spectral ID" description="Pivot via color space" alignText="left">
-                    <div className="flex flex-col gap-3 min-w-[140px]">
-                        {node.palette.map((color, i) => (
-                            <button key={i} className="flex items-center gap-3 group/color cursor-pointer transition-transform hover:translate-x-1" onClick={() => onNavigate({ mode: 'COLOR', id: color })} title={color}>
-                                <div className="w-8 h-8 rounded-full border-2 border-white/80 shadow-sm" style={{ backgroundColor: color }} />
-                                <span className="font-hand text-xl text-zinc-500 group-hover/color:text-zinc-800 transition-colors uppercase tracking-widest pr-4">{color}</span>
-                            </button>
-                        ))}
+            <div className={`absolute bottom-4 left-4 md:bottom-12 md:left-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 transition-all ${openPanel === 'palette' ? 'z-50' : 'z-40'}`}>
+                <RoughContainer 
+                    title="Spectral ID" 
+                    description={isMobile && openPanel !== 'palette' ? undefined : "Pivot via color space"} 
+                    alignText="left"
+                    onTitleClick={() => togglePanel('palette')}
+                >
+                    <div className={`${openPanel === 'palette' ? 'block' : 'hidden md:block'} transition-all duration-300`}>
+                        <div className="flex flex-col gap-3 min-w-[140px] pt-2 md:pt-0">
+                            {node.palette.map((color, i) => (
+                                <button key={i} className="flex items-center gap-3 group/color cursor-pointer transition-transform hover:translate-x-1" onClick={() => onNavigate({ mode: 'COLOR', id: color })} title={color}>
+                                    <div className="w-8 h-8 rounded-full border-2 border-white/80 shadow-sm" style={{ backgroundColor: color }} />
+                                    <span className="font-hand text-xl text-zinc-500 group-hover/color:text-zinc-800 transition-colors uppercase tracking-widest pr-4">{color}</span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </RoughContainer>
             </div>
 
             {/* Right: Tags */}
-            <div className="absolute bottom-12 right-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
-                <RoughContainer title="Semantic Web" description="Traverse concept clusters" alignText="right">
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 items-center max-h-[300px] overflow-y-auto no-scrollbar pr-2">
-                        {uniqueTags.map(tag => (
-                            <button key={tag.id} className="text-xl font-hand text-zinc-600 hover:text-indigo-600 hover:translate-x-1 transition-all text-left flex items-center gap-2 group/tag whitespace-nowrap cursor-pointer pr-2" onClick={() => onNavigate({ mode: 'TAG', id: tag.id, meta: tag })}>
-                                <Hash size={14} className="opacity-30 group-hover/tag:opacity-100 flex-shrink-0 text-indigo-400" />
-                                <span className="truncate max-w-[160px] pr-3">{tag.label}</span>
-                            </button>
-                        ))}
+            <div className={`absolute bottom-4 right-4 md:bottom-12 md:right-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100 transition-all ${openPanel === 'tags' ? 'z-50' : 'z-40'}`}>
+                <RoughContainer 
+                    title="Semantic Web" 
+                    description={isMobile && openPanel !== 'tags' ? undefined : "Traverse concept clusters"} 
+                    alignText="right"
+                    onTitleClick={() => togglePanel('tags')}
+                >
+                    <div className={`${openPanel === 'tags' ? 'block' : 'hidden md:block'} transition-all duration-300`}>
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-3 items-center max-h-[300px] overflow-y-auto no-scrollbar pr-2 pt-2 md:pt-0">
+                            {uniqueTags.map(tag => (
+                                <button key={tag.id} className="text-xl font-hand text-zinc-600 hover:text-indigo-600 hover:translate-x-1 transition-all text-left flex items-center gap-2 group/tag whitespace-nowrap cursor-pointer pr-2" onClick={() => onNavigate({ mode: 'TAG', id: tag.id, meta: tag })}>
+                                    <Hash size={14} className="opacity-30 group-hover/tag:opacity-100 flex-shrink-0 text-indigo-400" />
+                                    <span className="truncate max-w-[160px] pr-3">{tag.label}</span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </RoughContainer>
             </div>
@@ -255,10 +289,20 @@ const Experience: React.FC<ExperienceProps> = ({
     const [galleryState, setGalleryState] = useState<{ isOpen: boolean, startIndex: number }>({ isOpen: false, startIndex: 0 });
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [titleClicks, setTitleClicks] = useState(0);
+    const [isMobile, setIsMobile] = useState(false); // Mobile state tracking
     
     // Derived Data State
     const [commonTags, setCommonTags] = useState<Tag[]>([]);
     const [activePalette, setActivePalette] = useState<string[]>([]);
+
+    useEffect(() => {
+        const handleResize = () => {
+            setIsMobile(window.innerWidth < 768);
+        };
+        handleResize(); // Init
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     const handleTitleClick = () => {
         const next = titleClicks + 1;
@@ -519,11 +563,17 @@ const Experience: React.FC<ExperienceProps> = ({
     // 2. INITIALIZATION (Grid Layout)
     useEffect(() => {
         if(loadingProgress) return;
-        const centerX = window.innerWidth / 2;
-        const centerY = window.innerHeight / 2;
+        
+        // Immediate Grid Calculation for Static Startup
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const mobile = width < 768; // Local var for init logic, matches isMobile state eventually
 
         setSimNodes((prev: ExperienceNode[]) => {
             const existingMap = new Map<string, ExperienceNode>(prev.map(n => [n.id, n]));
+            
             const newNodes = images.map((img, idx) => {
                 const existing = existingMap.get(img.id);
                 const gridSortIndex = existing?.gridSortIndex ?? Math.random();
@@ -561,14 +611,18 @@ const Experience: React.FC<ExperienceProps> = ({
                 };
             });
 
+            // Force Grid Positions IMMEDIATELY if mode is NONE (Initial Load / Home)
             if (anchor.mode === 'NONE') {
                 const visibleNodes = newNodes.filter(n => n.isVisible);
                 visibleNodes.sort((a, b) => (a.gridSortIndex || 0) - (b.gridSortIndex || 0));
-                const COLS = Math.ceil(Math.sqrt(visibleNodes.length));
-                const CELL_W = 120; 
-                const CELL_H = 120;
+                
+                // Match Physics Loop Grid Logic EXACTLY
+                const CELL_W = mobile ? 90 : 120; 
+                const CELL_H = mobile ? 90 : 120; 
+                const COLS = Math.max(1, Math.floor(width / CELL_W));
+                const total = visibleNodes.length;
                 const gridW = (COLS - 1) * CELL_W;
-                const ROWS = Math.ceil(visibleNodes.length / COLS);
+                const ROWS = Math.ceil(total / COLS);
                 const gridH = (ROWS - 1) * CELL_H;
                 const startX = centerX - gridW / 2;
                 const startY = centerY - gridH / 2;
@@ -576,8 +630,12 @@ const Experience: React.FC<ExperienceProps> = ({
                 visibleNodes.forEach((node, idx) => {
                     const col = idx % COLS;
                     const row = Math.floor(idx / COLS);
-                    node.x = startX + col * CELL_W;
-                    node.y = startY + row * CELL_H;
+                    const tx = startX + col * CELL_W;
+                    const ty = startY + row * CELL_H;
+                    
+                    // Instant Snap
+                    node.x = tx;
+                    node.y = ty;
                     node.vx = 0;
                     node.vy = 0;
                     node.currentScale = 0.85;
@@ -588,13 +646,14 @@ const Experience: React.FC<ExperienceProps> = ({
             }
             return newNodes;
         });
-    }, [images, nsfwFilterActive, loadingProgress]);
+    }, [images, nsfwFilterActive, loadingProgress]); 
 
     // 3. PHYSICS LOOP
     useEffect(() => {
         if (!containerRef.current || simNodes.length === 0 || loadingProgress) return;
         const width = containerRef.current.clientWidth;
         const height = containerRef.current.clientHeight;
+        const mobile = width < 768;
 
         const zoom = d3.zoom<HTMLDivElement, unknown>()
             .scaleExtent([0.1, 4])
@@ -614,8 +673,9 @@ const Experience: React.FC<ExperienceProps> = ({
             activeNodes = simNodes.filter(n => n.isVisible && n.id !== anchor.id);
         }
 
-        const maxScaleByHeight = (height * 0.6) / 288;
-        const heroScale = Math.min(Math.max(maxScaleByHeight, 1.2), 1.8); 
+        // Adjust scales for mobile responsiveness
+        const maxScaleByHeight = (height * (mobile ? 0.5 : 0.6)) / 288;
+        const heroScale = Math.min(Math.max(maxScaleByHeight, mobile ? 1.0 : 1.2), mobile ? 1.4 : 1.8); 
         const heroWidth = 192 * heroScale;
         const heroRadius = Math.sqrt(heroWidth ** 2 + (heroWidth * 1.5) ** 2) / 2;
 
@@ -626,18 +686,18 @@ const Experience: React.FC<ExperienceProps> = ({
                 if (!d.isVisible) return 0;
                 if (anchor.mode === 'NONE') return 0; 
                 if (d.id === anchor.id) return -1500; 
-                if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return -30;
+                if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return mobile ? -15 : -30;
                 return -200; 
             }))
             .force("collide", d3.forceCollide<ExperienceNode>().radius((d) => {
                  if (!d.isVisible) return 0;
                  if (anchor.mode === 'NONE') return 0;
                  if (anchor.mode === 'IMAGE') {
-                     if (d.id === anchor.id) return heroRadius * 0.95; 
-                     return 45; 
+                     if (d.id === anchor.id) return heroRadius * (mobile ? 0.8 : 0.95); 
+                     return mobile ? 30 : 45; // Smaller neighbor radius on mobile
                  }
-                 if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return 30;
-                 return 55; 
+                 if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return mobile ? 20 : 30;
+                 return mobile ? 35 : 55; 
             }).strength(0.8)); 
 
         simulation.on("tick", () => {
@@ -655,7 +715,8 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
 
                 const isAnchor = anchor.mode === 'IMAGE' && node.id === anchor.id;
-                const lerpFactor = !node.isVisible ? 0.3 : 0.1;
+                // Faster lerp for hiding to clear the view quickly
+                const lerpFactor = !node.isVisible ? 0.4 : 0.1;
 
                 if (node.isVisible && !isAnchor && anchor.mode !== 'NONE' && !['TAG', 'COLOR', 'SEASON', 'DATE', 'CAMERA', 'LENS'].includes(anchor.mode)) {
                      const floatSpeed = 0.5;
@@ -669,9 +730,10 @@ const Experience: React.FC<ExperienceProps> = ({
                         const idx = activeNodes.indexOf(node);
                         if (idx !== -1) {
                             const total = activeNodes.length;
-                            const COLS = Math.ceil(Math.sqrt(total));
-                            const CELL_W = 120; 
-                            const CELL_H = 120; 
+                            // Denser grid on mobile
+                            const CELL_W = mobile ? 90 : 120; 
+                            const CELL_H = mobile ? 90 : 120; 
+                            const COLS = Math.max(1, Math.floor(width / CELL_W)); // Dynamic cols
                             const col = idx % COLS;
                             const row = Math.floor(idx / COLS);
                             const gridW = (COLS - 1) * CELL_W;
@@ -729,7 +791,8 @@ const Experience: React.FC<ExperienceProps> = ({
                         node.vx += (-dy / dist) * swirlSpeed;
                         node.vy += (dx / dist) * swirlSpeed;
                         
-                        node.targetScale = node.relevanceScore > 40 ? 0.8 : 0.6;
+                        // Smaller neighbors on mobile
+                        node.targetScale = node.relevanceScore > 40 ? (mobile ? 0.6 : 0.8) : (mobile ? 0.45 : 0.6);
                         node.targetOpacity = 1.0; 
                     } 
                     else {
@@ -741,20 +804,23 @@ const Experience: React.FC<ExperienceProps> = ({
                     if (node.isVisible) {
                         const idx = activeNodes.indexOf(node);
                         const total = activeNodes.length;
-                        const COLS = Math.ceil(Math.sqrt(total));
-                        const ROWS = Math.ceil(total / COLS);
-                        const CELL_W = 220; 
-                        const CELL_H = 220; 
-                        const col = idx % COLS;
+                        // Denser grid for filtered view on mobile
+                        // Adjusted for better mobile layout (3 columns preferred, smaller images)
+                        const CELL_W = mobile ? 120 : 220; 
+                        const CELL_H = mobile ? 160 : 220; 
+                        const COLS = Math.max(1, Math.floor(width / CELL_W));
                         const row = Math.floor(idx / COLS);
+                        const col = idx % COLS;
                         const gridW = (COLS - 1) * CELL_W;
-                        const gridH = (ROWS - 1) * CELL_H;
+                        const gridH = (Math.ceil(total / COLS) - 1) * CELL_H;
                         const tx = cx + (col * CELL_W) - (gridW / 2);
                         const ty = cy + (row * CELL_H) - (gridH / 2);
                         const structureStrength = 0.15;
                         node.vx = (node.vx || 0) + (tx - node.x) * structureStrength;
                         node.vy = (node.vy || 0) + (ty - node.y) * structureStrength;
-                        node.targetScale = 0.85; 
+                        
+                        // Scale down on mobile to fit the tighter grid
+                        node.targetScale = mobile ? 0.55 : 0.85; 
                         node.targetOpacity = 1;
                     } else {
                         node.targetScale = 0;
@@ -823,7 +889,7 @@ const Experience: React.FC<ExperienceProps> = ({
             
             {/* Top-Left Navigation Control */}
             {!isDetailOpen && !galleryState.isOpen && (
-                <div className="absolute top-8 left-8 z-[70] animate-in fade-in slide-in-from-top-4 duration-700">
+                <div className="absolute top-4 left-4 md:top-8 md:left-8 z-[70] animate-in fade-in slide-in-from-top-4 duration-700">
                     <RoughContainer 
                         title="Somatic Studio" 
                         alignText="left" 
@@ -873,7 +939,7 @@ const Experience: React.FC<ExperienceProps> = ({
                 </div>
             )}
 
-            {anchor.mode === 'IMAGE' && activeNode && !isDetailOpen && experienceMode === 'EXPLORE' && (<SatelliteLayer node={activeNode.original} tags={tags} onNavigate={onAnchorChange} />)}
+            {anchor.mode === 'IMAGE' && activeNode && !isDetailOpen && experienceMode === 'EXPLORE' && (<SatelliteLayer node={activeNode.original} tags={tags} onNavigate={onAnchorChange} isMobile={isMobile} />)}
             <HistoryTimeline history={history} images={images} tags={tags} activeMode={experienceMode} nsfwFilterActive={nsfwFilterActive} nsfwTagId={nsfwTagId} currentHero={activeNode?.original} />
             
             {/* DETAIL VIEW OVERLAY */}
