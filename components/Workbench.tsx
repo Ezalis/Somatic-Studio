@@ -123,10 +123,10 @@ const Workbench: React.FC<WorkbenchProps> = ({
         // Sort by frequency
         const sortedTagIds = Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a]);
         // Get top 100 labels
-        const preferredLabels = sortedTagIds.slice(0, 100).map(tid => {
+        const preferredLabels: string[] = sortedTagIds.slice(0, 100).map(tid => {
             const t = tags.find(tag => tag.id === tid);
             return t ? t.label : null;
-        }).filter((l): l is string => !!l);
+        }).filter((l): l is string => typeof l === 'string');
 
         try {
             const results = await harmonizeTagsBatch(
@@ -162,12 +162,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
             });
 
             if (newTagsToAdd.length > 0) {
-                const mergedTags = [...tags, ...newTagsToAdd];
-                // Note: We don't call onAddTag in loop to avoid rapid re-renders, assuming parent handles updates via onUpdateImages? 
-                // Actually parent manages `tags`. We need to bubble this up. 
-                // For now, we will update the parent `tags` state via `onAddTag` manually or just assume saveTagDefinitions works if we reload. 
-                // But to be safe, let's just save to DB. The parent `App` doesn't expose a bulk add tags.
-                // We'll iterate and add.
                 newTagsToAdd.forEach(t => onAddTag(t));
                 await saveTagDefinitions([...tags, ...newTagsToAdd]); 
             }
@@ -221,16 +215,22 @@ const Workbench: React.FC<WorkbenchProps> = ({
         if (!batchTagInput.trim() || selectedIds.size === 0) return;
         
         const inputLabel = batchTagInput.trim();
-        let tagToAdd: Tag | undefined = tags.find(t => t.label.toLowerCase() === inputLabel.toLowerCase());
+        const existingTag = tags.find(t => t.label.toLowerCase() === inputLabel.toLowerCase());
         
-        if (!tagToAdd) {
-            tagToAdd = { id: generateUUID(), label: inputLabel, type: TagType.QUALITATIVE };
-            onAddTag(tagToAdd);
-            saveTagDefinitions([...tags, tagToAdd]);
+        let targetTag: Tag;
+
+        if (existingTag) {
+            targetTag = existingTag;
+        } else {
+            const newTag: Tag = { 
+                id: generateUUID(), 
+                label: inputLabel, 
+                type: TagType.QUALITATIVE 
+            };
+            onAddTag(newTag);
+            saveTagDefinitions([...tags, newTag]);
+            targetTag = newTag;
         }
-        
-        // Ensure tagToAdd is treated as defined
-        const targetTag = tagToAdd as Tag;
 
         const updatedImages = images.map(img => {
             if (selectedIds.has(img.id)) {
@@ -294,7 +294,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                         {activeTagFilters.size > 0 && (
                             <span className="text-[10px] uppercase font-bold text-zinc-400 mr-1 flex-shrink-0">Filtered by:</span>
                         )}
-                        {Array.from(activeTagFilters).map(tId => {
+                        {Array.from(activeTagFilters).map((tId: string) => {
                             const tag = getTagById(tId);
                             if (!tag) return null;
                             return (

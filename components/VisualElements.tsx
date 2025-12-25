@@ -302,7 +302,10 @@ export const HistoryStream: React.FC<{
     nsfwFilterActive: boolean; 
     nsfwTagId?: string; 
     currentHero?: ImageNode;
-}> = ({ history, images, tags, nsfwFilterActive, nsfwTagId, currentHero }) => {
+    onItemClick?: (index: number) => void;
+    baseIndexOffset?: number;
+    idPrefix?: string; 
+}> = ({ history, images, tags, nsfwFilterActive, nsfwTagId, currentHero, onItemClick, baseIndexOffset = 0, idPrefix = 'history-' }) => {
     
     // VISUALIZE CONNECTION BETWEEN HERO AND FIRST HISTORY ITEM
     let heroConnection = null;
@@ -356,6 +359,7 @@ export const HistoryStream: React.FC<{
                 const isFirst = index === 0;
                 const prevStep = history[index + 1]; 
                 const isDirectLink = step.mode === 'IMAGE' && prevStep?.mode === 'IMAGE';
+                const actualIndex = baseIndexOffset + index;
                 
                 if (step.mode === 'IMAGE' && nsfwFilterActive) {
                     const img = images.find(i => i.id === step.id);
@@ -373,7 +377,17 @@ export const HistoryStream: React.FC<{
                 }
 
                 return (
-                    <div key={index} className="w-full max-w-4xl flex flex-col items-center snap-center shrink-0 py-16 relative group perspective-1000">
+                    <div 
+                        key={index} 
+                        id={`${idPrefix}item-${actualIndex}`}
+                        className={`w-full max-w-4xl flex flex-col items-center snap-center shrink-0 py-16 relative group perspective-1000 ${step.mode === 'IMAGE' && onItemClick ? 'cursor-pointer' : ''}`}
+                        onClick={(e) => {
+                            if (step.mode === 'IMAGE' && onItemClick) {
+                                e.stopPropagation();
+                                onItemClick(actualIndex);
+                            }
+                        }}
+                    >
                         {!isFirst && !isDirectLink && (<div className="absolute -top-16 left-1/2 -translate-x-1/2 z-0 flex flex-col items-center pointer-events-none opacity-50"><GreasePencilArrow seed={index * 123} className="text-zinc-500 w-8 h-16 drop-shadow-sm" /></div>)}
                         {step.mode === 'IMAGE' && (() => {
                             const img = images.find(i => i.id === step.id);

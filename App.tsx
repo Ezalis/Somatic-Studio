@@ -22,6 +22,7 @@ import {
 import { processBatchAIAnalysis } from './services/aiService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
+import { LoadingOverlay } from './components/VisualElements';
 import { LayoutGrid, Network, DownloadCloud, Trash2, Loader2, Plus, HardDrive, Camera, X, Tag as TagIcon, Palette, Hash, Eye, Sparkles as SparklesIcon, History, Globe, Shield, ShieldAlert, Calendar, Aperture, Snowflake, Sun, Cloud, Thermometer } from 'lucide-react';
 import exifr from 'exifr';
 
@@ -250,21 +251,13 @@ const App: React.FC = () => {
     return (
         <div className="flex flex-col h-[100dvh] w-screen bg-[#faf9f6] overflow-hidden relative">
             
-            {/* --- LOADING OVERLAY (Generic fallback, mostly unused now as Experience handles it) --- */}
+            {/* --- LOADING OVERLAY --- */}
             {loadingProgress && (viewMode as string) === 'WORKBENCH' && (
-                <div className="absolute inset-0 z-[100] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 animate-in fade-in duration-500">
-                    <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
-                    <div className="flex flex-col items-center gap-1">
-                        <span className="font-mono text-sm font-bold text-zinc-600 tracking-wider">RESTORING ASSETS</span>
-                        <span className="font-mono text-xs text-zinc-400">{loadingProgress.current} / {loadingProgress.total}</span>
-                    </div>
-                    <div className="w-64 h-1 bg-zinc-100 rounded-full overflow-hidden mt-2">
-                        <div 
-                            className="h-full bg-indigo-600 transition-all duration-300 ease-out" 
-                            style={{ width: `${(loadingProgress.current / loadingProgress.total) * 100}%` }} 
-                        />
-                    </div>
-                </div>
+                <LoadingOverlay 
+                    progress={loadingProgress} 
+                    images={images} 
+                    tags={tags} 
+                />
             )}
 
             {/* --- PERSISTENT NAVIGATION (WORKBENCH ONLY) --- */}
