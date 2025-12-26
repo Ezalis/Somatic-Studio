@@ -3,7 +3,8 @@ import * as d3 from 'd3';
 import { ImageNode, Tag, TagType, ExperienceNode, ViewMode, ExperienceMode, AnchorState, ExperienceContext } from '../types';
 import { 
     X, Camera, Maximize2, Calendar, Aperture, Hash, Palette, 
-    ArrowDown, ArrowUp, Sun, Cloud, Thermometer, Gauge, Timer 
+    ArrowDown, ArrowUp, Sun, Cloud, Thermometer, Gauge, Timer,
+    Shield
 } from 'lucide-react';
 
 // Import visual components from new cleanup file
@@ -37,6 +38,118 @@ interface ExperienceProps {
     nsfwFilterActive: boolean;
     loadingProgress?: { current: number, total: number } | null;
 }
+
+// --- FIELD GUIDE OVERLAY ---
+const FieldGuideOverlay: React.FC<{ onClose: () => void; onAdminAccess: () => void }> = ({ onClose, onAdminAccess }) => {
+    const [adminClicks, setAdminClicks] = useState(0);
+
+    // Prevent scroll propagation on body when open
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        return () => { document.body.style.overflow = ''; };
+    }, []);
+
+    const handleAdminClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (e.shiftKey) {
+            onAdminAccess();
+            return;
+        }
+        const next = adminClicks + 1;
+        setAdminClicks(next);
+        if (next >= 5) {
+            onAdminAccess();
+        }
+    };
+
+    return (
+        <div 
+            className="fixed inset-0 z-[80] bg-zinc-950 animate-in fade-in duration-500 overflow-y-auto" 
+            onClick={onClose}
+        >
+             {/* Admin Access Button (Subtle/Hidden) */}
+             <button
+                onClick={handleAdminClick}
+                className="fixed top-8 left-8 sm:left-20 z-[90] flex items-center gap-2 px-3 py-1.5 rounded text-xs font-mono uppercase tracking-widest text-zinc-800 hover:text-zinc-500 transition-colors cursor-default select-none group"
+                title="Restricted Access"
+             >
+                <Shield size={12} className="opacity-50 group-hover:opacity-100" />
+                <span>Admin</span>
+             </button>
+
+             {/* Fixed Close Button matching Detail View */}
+             <button 
+                className="fixed top-8 right-8 sm:right-20 z-[90] p-2 text-zinc-400 hover:text-white bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full transition-all duration-200 shadow-xl border border-white/10"
+                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                title="Close Field Guide"
+            >
+                <X size={24} />
+            </button>
+
+            <div className="min-h-full flex items-center justify-center p-6 md:p-12" onClick={onClose}>
+                <div 
+                    className="max-w-5xl w-full bg-zinc-900 border border-zinc-800 rounded-lg p-8 md:p-16 shadow-2xl relative overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Decorative Elements - Darker for readability */}
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-900 via-purple-900 to-amber-900 opacity-50" />
+                    <div className="absolute -right-20 -top-20 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+
+                    <div className="relative z-10 flex flex-col gap-12">
+                        <div className="flex flex-col gap-2">
+                            <h1 className="font-hand text-6xl md:text-8xl text-zinc-100 font-bold tracking-tight drop-shadow-sm">Field Guide</h1>
+                            <p className="font-mono text-xs md:text-sm text-zinc-500 uppercase tracking-widest ml-2">Somatic Studio v1.0</p>
+                        </div>
+
+                        <div className="space-y-4 font-hand text-2xl md:text-3xl text-zinc-300 leading-relaxed border-l-4 border-zinc-800 pl-8 py-2">
+                            <p>
+                                <span className="text-white font-bold">Welcome to the archive.</span>
+                            </p>
+                            <p className="opacity-90">
+                                This is not a static folder structure, but a living web of memory, color, and light. There is no wrong path here, only the journey.
+                            </p>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-x-12 gap-y-16 pt-8">
+                            <div className="space-y-3 group">
+                                <h3 className="font-mono text-xs text-indigo-400 font-bold uppercase tracking-widest group-hover:text-indigo-300 transition-colors">01. The Pattern</h3>
+                                <p className="font-hand text-2xl text-zinc-400 leading-relaxed group-hover:text-zinc-200 transition-colors">
+                                    The grid is a living map. Each floating "esoteric sprite" is a unique signature generated from the color palette and complexity of a photograph.
+                                </p>
+                            </div>
+
+                            <div className="space-y-3 group">
+                                <h3 className="font-mono text-xs text-amber-400 font-bold uppercase tracking-widest group-hover:text-amber-300 transition-colors">02. The Reveal</h3>
+                                <p className="font-hand text-2xl text-zinc-400 leading-relaxed group-hover:text-zinc-200 transition-colors">
+                                    Select a symbol to bring the memory into focus. The studio rearranges itself around your selection, pulling related memories closer.
+                                </p>
+                            </div>
+
+                            <div className="space-y-3 group">
+                                <h3 className="font-mono text-xs text-emerald-400 font-bold uppercase tracking-widest group-hover:text-emerald-300 transition-colors">03. The Thread</h3>
+                                <p className="font-hand text-2xl text-zinc-400 leading-relaxed group-hover:text-zinc-200 transition-colors">
+                                    Navigate by feeling. Use the <span className="text-zinc-100">Satellite Layers</span> to pivot through color space or semantic concepts. Drift through the archive on threads of similarity.
+                                </p>
+                            </div>
+
+                            <div className="space-y-3 group">
+                                <h3 className="font-mono text-xs text-rose-400 font-bold uppercase tracking-widest group-hover:text-rose-300 transition-colors">04. The Discovery</h3>
+                                <p className="font-hand text-2xl text-zinc-400 leading-relaxed group-hover:text-zinc-200 transition-colors">
+                                    Every step is recorded. Your path creates a unique <span className="text-zinc-100">History Trail</span> below, allowing you to trace the lineage of your exploration.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="pt-16 mt-8 border-t border-zinc-800 text-center opacity-50 hover:opacity-100 transition-opacity">
+                            <p className="font-hand text-2xl italic text-zinc-500">"Wander. Get lost. Find the patterns that bind these moments together."</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // --- FULLSCREEN VERTICAL GALLERY COMPONENT ---
 const FullscreenVerticalGallery: React.FC<{
@@ -193,47 +306,54 @@ const SatelliteLayer: React.FC<{
         setOpenPanel(prev => prev === panel ? null : panel);
     };
 
+    const showPalette = !isMobile || openPanel === 'palette';
+    const showTags = !isMobile || openPanel === 'tags';
+
     return (
         <div ref={containerRef} className="absolute inset-0 pointer-events-none z-[60]">
-            {/* Left: Palette */}
-            <div className={`absolute bottom-4 left-4 md:bottom-12 md:left-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 transition-all ${openPanel === 'palette' ? 'z-50' : 'z-40'}`}>
+            {/* Left: Palette - Increased offset for landscape mobile (Dynamic Island) */}
+            <div className={`absolute bottom-8 left-8 sm:left-20 lg:bottom-12 lg:left-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 transition-all ${openPanel === 'palette' ? 'z-50' : 'z-40'}`}>
                 <RoughContainer 
                     title="Spectral ID" 
-                    description={isMobile && openPanel !== 'palette' ? undefined : "Pivot via color space"} 
+                    description={isMobile && !showPalette ? undefined : "Pivot via color space"} 
                     alignText="left"
                     onTitleClick={() => togglePanel('palette')}
                 >
-                    <div className={`${openPanel === 'palette' ? 'block' : 'hidden md:block'} transition-all duration-300`}>
-                        <div className="flex flex-col gap-3 min-w-[140px] pt-2 md:pt-0">
-                            {node.palette.map((color, i) => (
-                                <button key={i} className="flex items-center gap-3 group/color cursor-pointer transition-transform hover:translate-x-1" onClick={() => onNavigate({ mode: 'COLOR', id: color })} title={color}>
-                                    <div className="w-8 h-8 rounded-full border-2 border-white/80 shadow-sm" style={{ backgroundColor: color }} />
-                                    <span className="font-hand text-xl text-zinc-500 group-hover/color:text-zinc-800 transition-colors uppercase tracking-widest pr-4">{color}</span>
-                                </button>
-                            ))}
+                    {showPalette && (
+                        <div className="transition-all duration-300 animate-in fade-in">
+                            <div className="flex flex-col gap-3 min-w-[140px] pt-1 lg:pt-0">
+                                {node.palette.map((color, i) => (
+                                    <button key={i} className="flex items-center gap-3 group/color cursor-pointer transition-transform hover:translate-x-1" onClick={() => onNavigate({ mode: 'COLOR', id: color })} title={color}>
+                                        <div className="w-8 h-8 rounded-full border-2 border-white/80 shadow-sm" style={{ backgroundColor: color }} />
+                                        <span className="font-hand text-xl text-zinc-500 group-hover/color:text-zinc-800 transition-colors uppercase tracking-widest pr-4">{color}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </RoughContainer>
             </div>
 
-            {/* Right: Tags */}
-            <div className={`absolute bottom-4 right-4 md:bottom-12 md:right-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100 transition-all ${openPanel === 'tags' ? 'z-50' : 'z-40'}`}>
+            {/* Right: Tags - Increased offset for landscape mobile (Dynamic Island) */}
+            <div className={`absolute bottom-8 right-8 sm:right-20 lg:bottom-12 lg:right-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100 transition-all ${openPanel === 'tags' ? 'z-50' : 'z-40'}`}>
                 <RoughContainer 
                     title="Semantic Web" 
-                    description={isMobile && openPanel !== 'tags' ? undefined : "Traverse concept clusters"} 
+                    description={isMobile && !showTags ? undefined : "Traverse concept clusters"} 
                     alignText="right"
                     onTitleClick={() => togglePanel('tags')}
                 >
-                    <div className={`${openPanel === 'tags' ? 'block' : 'hidden md:block'} transition-all duration-300`}>
-                        <div className="grid grid-cols-2 gap-x-8 gap-y-3 items-center max-h-[300px] overflow-y-auto no-scrollbar pr-2 pt-2 md:pt-0">
-                            {uniqueTags.map(tag => (
-                                <button key={tag.id} className="text-xl font-hand text-zinc-600 hover:text-indigo-600 hover:translate-x-1 transition-all text-left flex items-center gap-2 group/tag whitespace-nowrap cursor-pointer pr-2" onClick={() => onNavigate({ mode: 'TAG', id: tag.id, meta: tag })}>
-                                    <Hash size={14} className="opacity-30 group-hover/tag:opacity-100 flex-shrink-0 text-indigo-400" />
-                                    <span className="truncate max-w-[160px] pr-3">{tag.label}</span>
-                                </button>
-                            ))}
+                    {showTags && (
+                        <div className="transition-all duration-300 animate-in fade-in">
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-3 items-center max-h-[300px] overflow-y-auto no-scrollbar pr-2 pt-1 lg:pt-0">
+                                {uniqueTags.map(tag => (
+                                    <button key={tag.id} className="text-xl font-hand text-zinc-600 hover:text-indigo-600 hover:translate-x-1 transition-all text-left flex items-center gap-2 group/tag whitespace-nowrap cursor-pointer pr-2" onClick={() => onNavigate({ mode: 'TAG', id: tag.id, meta: tag })}>
+                                        <Hash size={14} className="opacity-30 group-hover/tag:opacity-100 flex-shrink-0 text-indigo-400" />
+                                        <span className="truncate max-w-[160px] pr-3">{tag.label}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </RoughContainer>
             </div>
         </div>
@@ -288,8 +408,9 @@ const Experience: React.FC<ExperienceProps> = ({
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [galleryState, setGalleryState] = useState<{ isOpen: boolean, startIndex: number }>({ isOpen: false, startIndex: 0 });
     const [showScrollTop, setShowScrollTop] = useState(false);
-    const [titleClicks, setTitleClicks] = useState(0);
+    const [isGuideOpen, setIsGuideOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false); // Mobile state tracking
+    const [windowDimensions, setWindowDimensions] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 0, height: typeof window !== 'undefined' ? window.innerHeight : 0 });
     
     // Derived Data State
     const [commonTags, setCommonTags] = useState<Tag[]>([]);
@@ -297,7 +418,10 @@ const Experience: React.FC<ExperienceProps> = ({
 
     useEffect(() => {
         const handleResize = () => {
-            setIsMobile(window.innerWidth < 768);
+            // Treat anything under 1024px as "Mobile" for physics and UI interaction purposes
+            // This covers landscape phones and most tablets
+            setIsMobile(window.innerWidth < 1024);
+            setWindowDimensions({ width: window.innerWidth, height: window.innerHeight });
         };
         handleResize(); // Init
         window.addEventListener('resize', handleResize);
@@ -305,12 +429,7 @@ const Experience: React.FC<ExperienceProps> = ({
     }, []);
 
     const handleTitleClick = () => {
-        const next = titleClicks + 1;
-        setTitleClicks(next);
-        if (next >= 5) {
-            onViewChange('WORKBENCH');
-            setTitleClicks(0);
-        }
+        setIsGuideOpen(true);
     };
 
     // --- EFFECT: DYNAMIC THEME COLOR FOR SAFARI ---
@@ -324,13 +443,15 @@ const Experience: React.FC<ExperienceProps> = ({
             color = '#000000'; // Black for gallery
         } else if (isDetailOpen || experienceMode === 'HISTORY') {
             color = '#18181b'; // Zinc-900 for Detail or History
+        } else if (isGuideOpen) {
+            color = '#09090b'; // Zinc-950 for Guide
         }
 
         metaThemeColor.setAttribute('content', color);
         return () => {
             metaThemeColor.setAttribute('content', '#faf9f6');
         };
-    }, [galleryState.isOpen, isDetailOpen, experienceMode]);
+    }, [galleryState.isOpen, isDetailOpen, experienceMode, isGuideOpen]);
 
     // Reset scroll when opening detail view with new node
     useEffect(() => {
@@ -369,6 +490,10 @@ const Experience: React.FC<ExperienceProps> = ({
     const handleCloseDetail = (e: React.MouseEvent) => {
         e.stopPropagation();
         setIsDetailOpen(false);
+        // Force a zoom reset when closing details to recenter if needed (e.g. rotated while open)
+        if (anchor.mode === 'IMAGE' && containerRef.current && zoomRef.current) {
+             d3.select(containerRef.current).transition().duration(750).ease(d3.easeCubicOut).call(zoomRef.current.transform, d3.zoomIdentity);
+        }
     };
 
     // 1. SCORING & RELATIONSHIP ENGINE (Visibility Logic)
@@ -569,7 +694,7 @@ const Experience: React.FC<ExperienceProps> = ({
         const height = window.innerHeight;
         const centerX = width / 2;
         const centerY = height / 2;
-        const mobile = width < 768; // Local var for init logic, matches isMobile state eventually
+        const mobile = width < 1024; // Keep this consistent with handleResize
 
         setSimNodes((prev: ExperienceNode[]) => {
             const existingMap = new Map<string, ExperienceNode>(prev.map(n => [n.id, n]));
@@ -653,7 +778,7 @@ const Experience: React.FC<ExperienceProps> = ({
         if (!containerRef.current || simNodes.length === 0 || loadingProgress) return;
         const width = containerRef.current.clientWidth;
         const height = containerRef.current.clientHeight;
-        const mobile = width < 768;
+        const mobile = width < 1024; // Consistent threshold
 
         const zoom = d3.zoom<HTMLDivElement, unknown>()
             .scaleExtent([0.1, 4])
@@ -706,6 +831,11 @@ const Experience: React.FC<ExperienceProps> = ({
             const time = Date.now() / 1000;
 
             simNodes.forEach((node, i) => {
+                if (!node.currentOpacity && !node.targetOpacity && !node.isVisible) {
+                     // Optimization: Skip completely invisible nodes that are settled
+                     return;
+                }
+                
                 if (!node.isVisible && node.currentOpacity < 0.01 && node.currentScale < 0.01) {
                     node.currentOpacity = 0;
                     node.currentScale = 0;
@@ -857,7 +987,7 @@ const Experience: React.FC<ExperienceProps> = ({
         });
 
         return () => { simulation.stop(); };
-    }, [simNodes, anchor, activePalette, loadingProgress]); 
+    }, [simNodes, anchor, activePalette, loadingProgress, windowDimensions]); 
 
     // 4. ZOOM RESET EFFECT
     useEffect(() => {
@@ -887,15 +1017,26 @@ const Experience: React.FC<ExperienceProps> = ({
                 </defs>
             </svg>
             
-            {/* Top-Left Navigation Control */}
-            {!isDetailOpen && !galleryState.isOpen && (
-                <div className="absolute top-4 left-4 md:top-8 md:left-8 z-[70] animate-in fade-in slide-in-from-top-4 duration-700">
+            {/* Top-Left Navigation Control - INCREASED OFFSET FOR LANDSCAPE MOBILE */}
+            {!isDetailOpen && !galleryState.isOpen && !isGuideOpen && (
+                <div className="absolute top-8 left-8 sm:left-20 lg:top-8 lg:left-8 z-[90] animate-in fade-in slide-in-from-top-4 duration-700">
                     <RoughContainer 
                         title="Somatic Studio" 
                         alignText="left" 
                         onTitleClick={handleTitleClick}
                     />
                 </div>
+            )}
+
+            {/* FIELD GUIDE OVERLAY */}
+            {isGuideOpen && (
+                <FieldGuideOverlay 
+                    onClose={() => setIsGuideOpen(false)} 
+                    onAdminAccess={() => {
+                        setIsGuideOpen(false);
+                        onViewChange('WORKBENCH');
+                    }}
+                />
             )}
 
             {loadingProgress && loadingProgress.current < loadingProgress.total && (<LoadingOverlay progress={loadingProgress} images={images} tags={tags} />)}
@@ -929,11 +1070,11 @@ const Experience: React.FC<ExperienceProps> = ({
             </div>
             
             {anchor.mode === 'NONE' && experienceMode === 'EXPLORE' && images.length > 0 && !loadingProgress && (
-                <div className="absolute bottom-12 right-12 z-[60] animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500">
+                <div className="absolute bottom-8 right-8 sm:right-20 z-[60] animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500">
                      <RoughContainer title="Visual Index" description="Start your journey" alignText="right">
-                         <div className="text-zinc-600 font-hand text-xl leading-relaxed text-right max-w-[280px]">
-                             <p className="pr-4">Every pattern encodes a unique image.</p>
-                             <p className="mt-2 pr-4">Select a node to reveal the photograph and explore the collection through shared colors, concepts, and time.</p>
+                         <div className="text-zinc-600 font-hand text-xl leading-relaxed text-right max-w-[320px]">
+                             <p className="pr-4">Navigate by feeling, not folders.</p>
+                             <p className="mt-2 pr-4">Each <em>Esoteric Sprite</em> is a unique visual signature. Select one to anchor the space, then drift through the archive on threads of color, concept, and time.</p>
                          </div>
                      </RoughContainer>
                 </div>
@@ -945,9 +1086,9 @@ const Experience: React.FC<ExperienceProps> = ({
             {/* DETAIL VIEW OVERLAY */}
             {isDetailOpen && activeNode && experienceMode === 'EXPLORE' && (
                 <>
-                    {/* Fixed Close Button (Outside Scroll Container) */}
+                    {/* Fixed Close Button (Outside Scroll Container) - INCREASED OFFSET FOR LANDSCAPE MOBILE */}
                     <button 
-                        className="fixed top-6 right-6 z-[70] p-2 text-zinc-400 hover:text-white bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full transition-all duration-200 shadow-xl border border-white/10"
+                        className="fixed top-8 right-8 sm:right-20 z-[70] p-2 text-zinc-400 hover:text-white bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full transition-all duration-200 shadow-xl border border-white/10"
                         onClick={handleCloseDetail}
                         title="Close Detail View"
                     >
@@ -957,7 +1098,7 @@ const Experience: React.FC<ExperienceProps> = ({
                     {/* Scroll To Top Button */}
                     <button 
                         onClick={handleScrollToTop}
-                        className={`fixed bottom-10 right-10 z-[70] flex flex-col items-center gap-1 transition-all duration-500 group cursor-pointer ${showScrollTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}
+                        className={`fixed bottom-8 right-8 z-[70] flex flex-col items-center gap-1 transition-all duration-500 group cursor-pointer ${showScrollTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}
                         title="Back to Top"
                     >
                         <ArrowUp size={32} strokeWidth={1.5} className="text-zinc-500 group-hover:text-zinc-200 transition-transform duration-300 group-hover:-translate-y-1" />
@@ -965,78 +1106,92 @@ const Experience: React.FC<ExperienceProps> = ({
                     </button>
 
                     {/* Scrollable Container */}
-                    <div ref={detailScrollRef} onScroll={handleDetailScroll} className="fixed inset-0 z-50 bg-zinc-900/95 backdrop-blur-md overflow-y-auto custom-scrollbar" onClick={handleCloseDetail}>
+                    <div ref={detailScrollRef} onScroll={handleDetailScroll} className="fixed inset-0 z-50 bg-zinc-900/95 backdrop-blur-md overflow-y-auto custom-scrollbar overflow-x-hidden" onClick={handleCloseDetail}>
                         
                         <div className="flex flex-col items-center w-full min-h-screen">
-                            <div className="w-full max-w-[1920px] min-h-[78vh] grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(250px,350px)_1fr_minmax(250px,350px)] gap-12 p-8 md:p-12 items-center mx-auto" onClick={(e) => e.stopPropagation()}>
+                            {/* Responsive Grid: 
+                                - Mobile Portrait (<640px): 1 col (Stacked)
+                                - Landscape Mobile / Tablet (sm 640px+): 3 cols (Side-by-side, compact, auto center for notch clearance)
+                                - Desktop (lg 1024px+): 3 cols (Spacious)
+                            */}
+                            <div className="w-full max-w-[1920px] min-h-[78vh] grid grid-cols-1 sm:grid-cols-[120px_auto_120px] md:grid-cols-[140px_auto_140px] lg:grid-cols-[160px_1fr_160px] xl:grid-cols-[minmax(250px,350px)_1fr_minmax(250px,350px)] gap-12 sm:gap-4 lg:gap-12 p-8 sm:px-12 sm:py-4 lg:p-12 items-center mx-auto sm:justify-center" onClick={(e) => e.stopPropagation()}>
                                 {/* Left Panel */}
-                                <div className="flex flex-col gap-16 h-full justify-center order-2 xl:order-1 items-center md:items-end text-center md:text-right col-span-1">
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex flex-col items-center md:items-end gap-1 text-zinc-400">
-                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'SEASON', id: activeNode.original.inferredSeason }); setIsDetailOpen(false); }} className="text-4xl text-zinc-200 font-bold flex items-center gap-3 font-hand hover:text-amber-300 transition-colors pr-4">
+                                <div className="flex flex-col gap-16 sm:gap-6 lg:gap-16 h-full justify-center order-2 sm:order-1 items-center sm:items-end text-center sm:text-right col-span-1">
+                                    {/* 1. Spectral ID (Moved Top & Increased Size) */}
+                                    <div className="relative group w-40 h-40 sm:w-24 sm:h-24 md:w-28 md:h-28 lg:w-48 lg:h-48 lg:mr-8 flex-shrink-0">
+                                        <div className="absolute inset-0 bg-white/5 rounded-full blur-xl animate-pulse" />
+                                        <EsotericSprite node={activeNode} />
+                                        <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-lg sm:text-xs md:text-xs lg:text-lg font-hand text-zinc-500 opacity-60 whitespace-nowrap pr-4">Spectral ID</span>
+                                    </div>
+
+                                    {/* 2. Date Info */}
+                                    <div className="flex items-center gap-4 sm:gap-2 lg:gap-4">
+                                        <div className="flex flex-col items-center sm:items-end gap-1 text-zinc-400">
+                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'SEASON', id: activeNode.original.inferredSeason }); setIsDetailOpen(false); }} className="text-4xl sm:text-2xl md:text-xl lg:text-4xl text-zinc-200 font-bold flex items-center gap-3 sm:gap-1.5 lg:gap-3 font-hand hover:text-amber-300 transition-colors pr-4 sm:pr-2 lg:pr-4">
                                                 {activeNode.original.inferredSeason}
-                                                {activeNode.original.inferredSeason === 'Summer' ? <Sun size={28} /> : activeNode.original.inferredSeason === 'Winter' ? <Thermometer size={28} /> : <Cloud size={28} />}
+                                                {activeNode.original.inferredSeason === 'Summer' ? <Sun size={28} className="sm:w-6 sm:h-6 md:w-5 md:h-5 lg:w-7 lg:h-7" /> : activeNode.original.inferredSeason === 'Winter' ? <Thermometer size={28} className="sm:w-6 sm:h-6 md:w-5 md:h-5 lg:w-7 lg:h-7" /> : <Cloud size={28} className="sm:w-6 sm:h-6 md:w-5 md:h-5 lg:w-7 lg:h-7" />}
                                             </button>
-                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'DATE', id: activeNode.original.captureTimestamp.toString(), meta: activeNode.original.captureTimestamp }); setIsDetailOpen(false); }} className="text-2xl flex items-center gap-2 font-hand text-zinc-300 hover:text-blue-300 transition-colors pr-4">
+                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'DATE', id: activeNode.original.captureTimestamp.toString(), meta: activeNode.original.captureTimestamp }); setIsDetailOpen(false); }} className="text-2xl sm:text-lg md:text-base lg:text-2xl flex items-center gap-2 sm:gap-1 lg:gap-2 font-hand text-zinc-300 hover:text-blue-300 transition-colors pr-4 sm:pr-2 lg:pr-4">
                                                 {new Date(activeNode.original.captureTimestamp).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
                                             </button>
-                                            <span className="text-xl italic opacity-70 font-hand pointer-events-none pr-4">{new Date(activeNode.original.captureTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span className="text-xl sm:text-base md:text-sm lg:text-xl italic opacity-70 font-hand pointer-events-none pr-4 sm:pr-2 lg:pr-4">{new Date(activeNode.original.captureTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         </div>
-                                        <div className="hidden xl:block"><ScribbleConnector direction="right" length="60px" /></div>
+                                        <div className="hidden sm:block"><ScribbleConnector direction="right" length="60px" /></div>
                                     </div>
-                                    <div className="relative group w-32 h-32 lg:mr-8"><div className="absolute inset-0 bg-white/5 rounded-full blur-xl animate-pulse" /><EsotericSprite node={activeNode} /><span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-lg font-hand text-zinc-500 opacity-60 whitespace-nowrap pr-4">Spectral ID</span></div>
-                                    <div className="flex items-start gap-4">
-                                        <div className="flex flex-col items-center md:items-end gap-4">
-                                            <h3 className="text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 flex-row-reverse pr-4"><Palette size={20} /> Palette</h3>
-                                            <div className="flex flex-col gap-3">
+
+                                    {/* 3. Palette */}
+                                    <div className="flex items-start gap-4 sm:gap-2 lg:gap-4">
+                                        <div className="flex flex-col items-center sm:items-end gap-4 sm:gap-2 lg:gap-4">
+                                            <h3 className="text-2xl sm:text-lg md:text-base lg:text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 sm:gap-1 lg:gap-2 flex-row-reverse pr-4 sm:pr-2 lg:pr-4"><Palette size={20} className="sm:w-4 sm:h-4 md:w-4 md:h-4 lg:w-5 lg:h-5" /> Palette</h3>
+                                            <div className="flex flex-col gap-3 sm:gap-1.5 lg:gap-3">
                                                 {activeNode.original.palette.map((color, i) => (
-                                                    <div key={i} className="flex items-center gap-3 group cursor-pointer flex-row-reverse" onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'COLOR', id: color, meta: color }); setIsDetailOpen(false); }}>
-                                                        <div className="w-8 h-8 rounded-full border border-white/20 group-hover:scale-110 transition-transform shadow-md" style={{ backgroundColor: color }} />
-                                                        <span className="font-hand text-xl text-zinc-500 group-hover:text-zinc-300 transition-colors pr-4">{color}</span>
+                                                    <div key={i} className="flex items-center gap-3 sm:gap-1.5 lg:gap-3 group cursor-pointer flex-row-reverse" onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'COLOR', id: color, meta: color }); setIsDetailOpen(false); }}>
+                                                        <div className="w-8 h-8 sm:w-6 sm:h-6 md:w-5 md:h-5 lg:w-8 lg:h-8 rounded-full border border-white/20 group-hover:scale-110 transition-transform shadow-md" style={{ backgroundColor: color }} />
+                                                        <span className="font-hand text-xl sm:text-base md:text-sm lg:text-xl text-zinc-500 group-hover:text-zinc-300 transition-colors pr-4 sm:pr-2 lg:pr-4">{color}</span>
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
-                                        <div className="hidden xl:block"><ScribbleConnector direction="right" length="40px" /></div>
+                                        <div className="hidden sm:block"><ScribbleConnector direction="right" length="40px" /></div>
                                     </div>
                                 </div>
 
                                 {/* Center Image (Hero) */}
-                                <div className="flex items-center justify-center h-full relative group order-1 xl:order-2 col-span-1 md:col-span-2 xl:col-span-1">
+                                <div className="flex items-center justify-center h-full relative group order-1 sm:order-2 col-span-1 sm:col-span-1">
                                     <div 
-                                        className="relative bg-white p-3 rounded-sm shadow-2xl transition-transform duration-500 group-hover:scale-[1.01] cursor-zoom-in rotate-1" 
+                                        className="relative bg-white p-3 sm:p-1.5 lg:p-3 rounded-sm shadow-2xl transition-transform duration-500 group-hover:scale-[1.01] cursor-zoom-in rotate-1 sm:rotate-0" 
                                         onClick={() => setGalleryState({ isOpen: true, startIndex: 0 })}
                                     >
-                                        <img src={activeNode.original.fileUrl} alt="" className="max-h-[50vh] xl:max-h-[65vh] w-auto max-w-[85vw] xl:max-w-[50vw] object-contain bg-zinc-100" />
+                                        <img src={activeNode.original.fileUrl} alt="" className="max-h-[50vh] sm:max-h-[85vh] w-auto max-w-[85vw] sm:max-w-[40vw] lg:max-w-[50vw] object-contain bg-zinc-100" />
                                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 pointer-events-none">
-                                            <Maximize2 size={48} className="text-white drop-shadow-md" />
+                                            <Maximize2 size={48} className="text-white drop-shadow-md sm:w-8 sm:h-8 lg:w-12 lg:h-12" />
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Right Panel */}
-                                <div className="flex flex-col gap-16 h-full justify-center order-3 items-center md:items-start text-center md:text-left col-span-1">
-                                    <div className="flex items-center gap-4">
-                                        <div className="hidden xl:block"><ScribbleConnector direction="left" length="60px" /></div>
-                                        <div className="flex flex-col items-center md:items-start gap-1 text-zinc-400">
-                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'CAMERA', id: activeNode.original.cameraModel }); setIsDetailOpen(false); }} className="text-3xl text-zinc-200 font-bold flex items-center gap-3 font-hand hover:text-emerald-300 transition-colors pr-4">
-                                                <Camera size={24} className="opacity-70" />{activeNode.original.cameraModel}
+                                <div className="flex flex-col gap-16 sm:gap-6 lg:gap-16 h-full justify-center order-3 items-center sm:items-start text-center sm:text-left col-span-1">
+                                    <div className="flex items-center gap-4 sm:gap-2 lg:gap-4">
+                                        <div className="hidden sm:block"><ScribbleConnector direction="left" length="60px" /></div>
+                                        <div className="flex flex-col items-center sm:items-start gap-1 text-zinc-400">
+                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'CAMERA', id: activeNode.original.cameraModel }); setIsDetailOpen(false); }} className="text-3xl sm:text-xl md:text-base lg:text-3xl text-zinc-200 font-bold flex items-center gap-3 sm:gap-1.5 lg:gap-3 font-hand hover:text-emerald-300 transition-colors pr-4 sm:pr-0">
+                                                <Camera size={24} className="opacity-70 sm:w-5 sm:h-5 md:w-5 md:h-5 lg:w-6 lg:h-6" />{activeNode.original.cameraModel}
                                             </button>
-                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'LENS', id: activeNode.original.lensModel }); setIsDetailOpen(false); }} className="text-2xl italic opacity-80 font-hand text-zinc-500 ml-1 hover:text-amber-300 transition-colors text-left pr-4">
+                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'LENS', id: activeNode.original.lensModel }); setIsDetailOpen(false); }} className="text-2xl sm:text-lg md:text-sm lg:text-2xl italic opacity-80 font-hand text-zinc-500 ml-1 sm:ml-0 hover:text-amber-300 transition-colors text-left pr-4 sm:pr-0">
                                                 {activeNode.original.lensModel}
                                             </button>
-                                            <div className="flex flex-col gap-1 mt-3 ml-2 font-hand text-xl text-zinc-400 opacity-80 pointer-events-none pr-4 items-center md:items-start">
-                                                <span className="flex items-center gap-2"><Aperture size={16} /> {activeNode.original.aperture}</span>
-                                                <span className="flex items-center gap-2"><Timer size={16} /> {activeNode.original.shutterSpeed}s</span>
-                                                <span className="flex items-center gap-2"><Gauge size={16} /> ISO {activeNode.original.iso}</span>
+                                            <div className="flex flex-col gap-1 mt-3 sm:mt-1 lg:mt-3 ml-2 sm:ml-0 font-hand text-xl sm:text-sm md:text-xs lg:text-xl text-zinc-400 opacity-80 pointer-events-none pr-4 sm:pr-0 items-center sm:items-start">
+                                                <span className="flex items-center gap-2 sm:gap-1 lg:gap-2"><Aperture size={16} className="sm:w-3 sm:h-3 md:w-4 md:h-4 lg:w-4 lg:h-4" /> {activeNode.original.aperture}</span>
+                                                <span className="flex items-center gap-2 sm:gap-1 lg:gap-2"><Timer size={16} className="sm:w-3 sm:h-3 md:w-4 md:h-4 lg:w-4 lg:h-4" /> {activeNode.original.shutterSpeed}s</span>
+                                                <span className="flex items-center gap-2 sm:gap-1 lg:gap-2"><Gauge size={16} className="sm:w-3 sm:h-3 md:w-4 md:h-4 lg:w-4 lg:h-4" /> ISO {activeNode.original.iso}</span>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-start gap-4 max-h-[60vh]">
-                                        <div className="hidden xl:block"><ScribbleConnector direction="left" length="40px" /></div>
-                                        <div className="flex flex-col items-center md:items-start gap-2 w-full">
-                                            <h3 className="text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 mb-2 pr-4"><Hash size={20} /> Concepts</h3>
-                                            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-left overflow-y-auto max-h-[400px] pr-4 w-full no-scrollbar">
+                                    <div className="flex items-start gap-4 sm:gap-2 lg:gap-4">
+                                        <div className="hidden sm:block"><ScribbleConnector direction="left" length="40px" /></div>
+                                        <div className="flex flex-col items-center sm:items-start gap-2 sm:gap-1 lg:gap-2 w-full">
+                                            <h3 className="text-2xl sm:text-lg md:text-base lg:text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 sm:gap-1 lg:gap-2 mb-2 sm:mb-1 lg:mb-2 pr-4 sm:pr-0"><Hash size={20} className="sm:w-4 sm:h-4 md:w-4 md:h-4 lg:w-5 lg:h-5" /> Concepts</h3>
+                                            <div className="grid grid-cols-2 sm:grid-cols-1 gap-x-6 sm:gap-x-2 lg:gap-x-6 gap-y-2 sm:gap-y-0.5 lg:gap-y-2 text-left overflow-y-auto max-h-[400px] sm:max-h-[50vh] lg:max-h-[400px] pr-4 sm:pr-2 lg:pr-4 w-full no-scrollbar relative z-10">
                                                 {(() => { 
                                                     const allTagIds = Array.from(new Set([...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])])); 
                                                     const candidates = allTagIds.map(tid => tags.find(t => t.id === tid)).filter((t): t is Tag => { if (!t) return false; if (t.type === TagType.TECHNICAL || t.type === TagType.SEASONAL) return false; if (t.label.trim().toLowerCase() === 'nsfw') return false; return true; }); 
@@ -1044,7 +1199,7 @@ const Experience: React.FC<ExperienceProps> = ({
                                                     const visibleTags: Tag[] = []; 
                                                     candidates.forEach(t => { const key = t.label.toLowerCase().trim(); if (!seenLabels.has(key)) { seenLabels.add(key); visibleTags.push(t); } }); 
                                                     return visibleTags.map(tag => (
-                                                        <button key={tag.id} onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'TAG', id: tag.id, meta: tag }); setIsDetailOpen(false); }} className="font-hand text-xl text-zinc-400 hover:text-zinc-100 hover:scale-105 transition-all duration-200 truncate justify-self-start w-full text-left pr-4" title={tag.label}>
+                                                        <button key={tag.id} onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'TAG', id: tag.id, meta: tag }); setIsDetailOpen(false); }} className="font-hand text-xl sm:text-lg md:text-base lg:text-xl text-zinc-400 hover:text-zinc-100 hover:scale-105 transition-all duration-200 justify-self-start w-full text-left pr-4 sm:pr-0 whitespace-normal break-words leading-tight py-1 sm:py-0.5" title={tag.label}>
                                                             {tag.label}
                                                         </button>
                                                     )); 
@@ -1091,18 +1246,22 @@ const Experience: React.FC<ExperienceProps> = ({
                     onClose={(finalHistoryIndex) => {
                         setGalleryState({ isOpen: false, startIndex: 0 });
                         
-                        // SNAP LOGIC
-                        // We use a small timeout to ensure the state update renders before we attempt to scroll
+                        // SNAP LOGIC (For both Detail View and History View)
                         setTimeout(() => {
-                            // If index is 0, we snap to top (Hero)
-                            if (finalHistoryIndex <= 0) {
-                                 detailScrollRef.current?.scrollTo({ top: 0, behavior: 'instant' });
-                            } else {
-                                 // Target the DETAIL view item, not the timeline one
-                                 const el = document.getElementById(`detail-history-item-${finalHistoryIndex}`);
-                                 if (el) el.scrollIntoView({ behavior: 'auto', block: 'center' });
+                            // 1. Try to snap the Detail View history trail (if visible)
+                            const detailId = `detail-history-item-${finalHistoryIndex}`;
+                            const detailEl = document.getElementById(detailId);
+                            if (detailEl) {
+                                detailEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }
-                        }, 0);
+
+                            // 2. Try to snap the Main Timeline (if visible in History Mode)
+                            const timelineId = `timeline-history-item-${finalHistoryIndex}`;
+                            const timelineEl = document.getElementById(timelineId);
+                            if (timelineEl) {
+                                timelineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        }, 50);
                     }}
                 />
             )}

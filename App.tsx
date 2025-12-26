@@ -34,6 +34,7 @@ const App: React.FC = () => {
     const [tags, setTags] = useState<Tag[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [loadingProgress, setLoadingProgress] = useState<{current: number, total: number} | null>(null);
+    const [isInitializing, setIsInitializing] = useState(true);
     
     // AI State
     const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
@@ -59,9 +60,16 @@ const App: React.FC = () => {
             const mappings = getAllMappings();
             const mappedFiles = Object.keys(mappings);
             
-            // If we have mappings in the JSON but no images loaded in memory yet, start hydration
+            // If we have mappings in the JSON but no images loaded in memory yet, prepare hydration
             if (mappedFiles.length > 0) {
                 setLoadingProgress({ current: 0, total: mappedFiles.length });
+            }
+
+            // Initialization logic complete, safe to reveal UI (Loading Overlay will cover if progress is set)
+            setIsInitializing(false);
+            
+            // Start hydration process if needed
+            if (mappedFiles.length > 0) {
                 try {
                     await hydrateGalleryAssets(
                         mappedFiles, 
@@ -246,6 +254,9 @@ const App: React.FC = () => {
         }
     };
 
+    if (isInitializing) {
+        return <div className="fixed inset-0 bg-black z-[9999]" />;
+    }
 
     // --- RENDERING ---
     return (
