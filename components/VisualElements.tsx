@@ -142,7 +142,14 @@ export const LoadingOverlay: React.FC<{
     tags: Tag[];
 }> = ({ progress, images, tags }) => {
     const latestImage = images.length > 0 ? images[images.length - 1] : null;
-    const percentage = Math.round((progress.current / progress.total) * 100);
+    
+    // Robust percentage calculation
+    const percentage = useMemo(() => {
+        if (progress.total <= 0) return 0;
+        const p = Math.round((progress.current / progress.total) * 100);
+        return Math.min(100, Math.max(0, p));
+    }, [progress]);
+
     const [floatingItems, setFloatingItems] = useState<FloatingItem[]>([]);
     const lastImageCount = useRef(0);
 
@@ -218,7 +225,19 @@ export const LoadingOverlay: React.FC<{
                     <div className="w-full h-4 md:h-6 relative">
                         <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 400 20">
                             <path d="M2,10 Q50,14 100,10 T200,10 T300,10 T400,10" fill="none" stroke="#3f3f46" strokeWidth="2" strokeLinecap="round" className="w-full" vectorEffect="non-scaling-stroke" />
-                            <path d="M2,10 Q50,14 100,10 T200,10 T300,10 T400,10" fill="none" stroke="#e4e4e7" strokeWidth="4" strokeLinecap="round" strokeDasharray="410" strokeDashoffset={410 - (percentage * 4.1)} className="transition-all duration-300 ease-linear" vectorEffect="non-scaling-stroke" filter="url(#pencil)" />
+                            <path 
+                                d="M2,10 Q50,14 100,10 T200,10 T300,10 T400,10" 
+                                fill="none" 
+                                stroke="#e4e4e7" 
+                                strokeWidth="4" 
+                                strokeLinecap="round" 
+                                pathLength="100" 
+                                strokeDasharray="100" 
+                                strokeDashoffset={100 - percentage} 
+                                className="transition-all duration-300 ease-linear" 
+                                vectorEffect="non-scaling-stroke" 
+                                filter="url(#pencil)" 
+                            />
                             <defs><filter id="pencil"><feTurbulence type="fractalNoise" baseFrequency="0.5" numOctaves="5" stitchTiles="stitch" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="2" /></filter></defs>
                         </svg>
                     </div>
@@ -256,33 +275,33 @@ export const RoughContainer: React.FC<{
     return (
         <div 
             onClick={handleContainerClick}
-            className={`relative group pointer-events-auto p-3 md:p-6 transition-all duration-300 ${onTitleClick ? 'cursor-pointer active:scale-[0.99]' : ''}`}
+            className={`relative group pointer-events-auto p-1.5 lg:p-6 transition-all duration-300 ${onTitleClick ? 'cursor-pointer active:scale-[0.99]' : ''}`}
         >
-            <div className="absolute -inset-4 bg-white/80 backdrop-blur-xl rounded-xl -z-10 shadow-lg border border-zinc-400/20" 
+            <div className="absolute -inset-1.5 lg:-inset-4 bg-white/80 backdrop-blur-xl rounded-xl -z-10 shadow-lg border border-zinc-400/20" 
                  style={{ 
                      borderRadius: '255px 15px 225px 15px / 15px 225px 15px 255px',
                  }}
             />
             
-            <div className="absolute -inset-4 -z-10 pointer-events-none text-zinc-400/40">
+            <div className="absolute -inset-1.5 lg:-inset-4 -z-10 pointer-events-none text-zinc-400/40">
                  <svg className="w-full h-full overflow-visible">
-                    <rect x="0" y="0" width="100%" height="100%" rx="15" ry="15" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="300 8" vectorEffect="non-scaling-stroke" style={{ filter: 'url(#sketch-filter)' }} />
+                    <rect x="0" y="0" width="100%" height="100%" rx="8" ry="8" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="300 8" vectorEffect="non-scaling-stroke" style={{ filter: 'url(#sketch-filter)' }} />
                  </svg>
             </div>
 
-            <div className={`flex flex-col gap-3 min-w-[80px] md:min-w-[120px] ${children ? 'min-w-[200px] max-w-[calc(100vw-5rem)]' : ''} ${alignText === 'right' ? 'items-end text-right' : 'items-start text-left'}`}>
-                <div className="flex flex-col gap-0.5 pointer-events-none">
+            <div className={`flex flex-col gap-0.5 lg:gap-3 min-w-[40px] lg:min-w-[120px] ${children ? 'min-w-[140px] lg:min-w-[200px] max-w-[calc(100vw-2rem)] lg:max-w-[calc(100vw-5rem)]' : ''} ${alignText === 'right' ? 'items-end text-right' : 'items-start text-left'}`}>
+                <div className="flex flex-col gap-0 lg:gap-0.5 pointer-events-none">
                     <div 
-                        className="font-hand text-2xl md:text-3xl font-bold text-zinc-700 leading-none tracking-wide pr-2 md:pr-4 select-none"
+                        className="font-hand text-sm lg:text-3xl font-bold text-zinc-700 leading-none tracking-wide pr-1 lg:pr-4 select-none"
                     >
                         {title}
                     </div>
                     {description && (
-                        <div className="font-hand text-base md:text-lg text-zinc-500 leading-tight pr-2 md:pr-4">
+                        <div className="font-hand text-[9px] lg:text-lg text-zinc-500 leading-tight pr-1 lg:pr-4">
                             {description}
                         </div>
                     )}
-                    {children && <div className={`h-px bg-zinc-300 w-12 mt-2 ${alignText === 'right' ? 'ml-auto' : 'mr-auto'}`} />}
+                    {children && <div className={`h-px bg-zinc-300 w-6 lg:w-12 mt-0.5 lg:mt-2 ${alignText === 'right' ? 'ml-auto' : 'mr-auto'}`} />}
                 </div>
 
                 {children && (
