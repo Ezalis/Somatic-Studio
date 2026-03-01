@@ -1,6 +1,6 @@
 import { ImageNode, Tag, TagType } from '../types';
 import { extractColorPalette, getSeason, formatShutterSpeed } from './dataService';
-import { getCachedPalette, saveCachedPalette } from './resourceService';
+import { getCachedPalette, saveCachedPalette, getCachedAITagsForFile, getCachedTagDefinitions } from './resourceService';
 
 const ALBUM_NAME = 'SomaticStudio';
 const API_BASE = '/api/immich';
@@ -180,6 +180,8 @@ async function extractPaletteFromAsset(assetId: string): Promise<string[]> {
 
 // --- Tag Processing ---
 
+const TAG_PREFIX = 'SomaticStudio/';
+
 function buildTagsFromImmichNative(
     assets: ImmichAsset[]
 ): { tags: Tag[]; assetTagMap: Map<string, string[]> } {
@@ -190,8 +192,11 @@ function buildTagsFromImmichNative(
         const tagIds: string[] = [];
         if (asset.tags) {
             for (const t of asset.tags) {
-                // Immich tags have name (category) and value (label)
-                const label = t.value || t.name;
+                // Only recognize tags with our SomaticStudio/ prefix
+                const rawName = t.value || t.name;
+                if (!rawName.startsWith(TAG_PREFIX)) continue;
+
+                const label = rawName.slice(TAG_PREFIX.length);
                 const id = createTagId(label);
                 if (!tagMap.has(id)) {
                     tagMap.set(id, {
@@ -263,7 +268,12 @@ export async function hydrateFromImmich(
         if (lens !== 'Unknown Lens') ensureTag(lens, TagType.TECHNICAL);
     }
 
-    const allTags = [...nativeTags, ...Array.from(technicalTagMap.values())];
+    // Merge cached AI tag definitions from previous CLIP runs
+    const cachedDefs = getCachedTagDefinitions().filter(t => t.type === TagType.AI_GENERATED);
+    const tagIdSet = new Set([...nativeTags.map(t => t.id), ...Array.from(technicalTagMap.keys())]);
+    const restoredDefs = cachedDefs.filter(t => !tagIdSet.has(t.id));
+
+    const allTags = [...nativeTags, ...Array.from(technicalTagMap.values()), ...restoredDefs];
 
     // 6. Convert assets to ImageNodes and extract palettes in batches
     const allNodes: ImageNode[] = [];
@@ -278,6 +288,12 @@ export async function hydrateFromImmich(
                 try {
                     const nativeTagIds = assetTagMap.get(asset.id) || [];
                     const node = assetToImageNode(asset, nativeTags, nativeTagIds);
+
+                    // Restore cached AI tags from previous CLIP runs
+                    const cachedAiTags = getCachedAITagsForFile(asset.id);
+                    if (cachedAiTags.length > 0) {
+                        node.aiTagIds = [...new Set([...node.aiTagIds, ...cachedAiTags])];
+                    }
 
                     // Extract palette from thumbnail
                     node.palette = await extractPaletteFromAsset(asset.id);
@@ -326,19 +342,23 @@ export async function generateClipTags(
 
     // For each CLIP label, run a smart search and see which of our assets appear
     const assetIdSet = new Set(assetIds);
+    const penetrationLimit = Math.floor(assetIds.length * 0.6);
 
     for (const label of CLIP_LABELS) {
         try {
             const result = await apiFetch<SmartSearchResult>('/search/smart', {
                 method: 'POST',
-                body: JSON.stringify({ query: label }),
+                body: JSON.stringify({ query: label, size: 20 }),
             });
 
+            // Position cutoff: only top 15 results (sorted by CLIP embedding similarity)
             const matchedIds = (result.assets?.items || [])
+                .slice(0, 15)
                 .map(item => item.id)
                 .filter(id => assetIdSet.has(id));
 
-            if (matchedIds.length > 0) {
+            // Penetration limit: skip labels matching >60% of album (too generic)
+            if (matchedIds.length > 0 && matchedIds.length <= penetrationLimit) {
                 const tagId = createTagId(label);
                 if (!tagMap.has(tagId)) {
                     tagMap.set(tagId, {
@@ -348,8 +368,6 @@ export async function generateClipTags(
                     });
                 }
 
-                // Assets that appear in results for this label get the tag
-                // Weight by position (earlier = more relevant)
                 for (const id of matchedIds) {
                     const existing = assetTagMap.get(id) || [];
                     if (!existing.includes(tagId)) {
@@ -373,4 +391,70 @@ export async function generateClipTags(
         tags: Array.from(tagMap.values()),
         assetTagMap,
     };
+}
+
+// --- Sync Tags to Immich (Durable Persistence) ---
+
+export async function syncTagsToImmich(
+    clipTags: Tag[],
+    assetTagMap: Map<string, string[]>
+): Promise<void> {
+    if (clipTags.length === 0) return;
+
+    try {
+        // 1. Fetch existing Immich tags to avoid duplicates
+        const existingTags = await getImmichTags();
+        const existingByName = new Map(existingTags.map(t => [t.name || t.value, t.id]));
+
+        // 2. Create or find Immich tag IDs for each CLIP label
+        const labelToImmichId = new Map<string, string>();
+
+        for (const clipTag of clipTags) {
+            const immichName = `${TAG_PREFIX}${clipTag.label}`;
+            const existingId = existingByName.get(immichName);
+
+            if (existingId) {
+                labelToImmichId.set(clipTag.id, existingId);
+            } else {
+                try {
+                    const created = await apiFetch<{ id: string }>('/tags', {
+                        method: 'POST',
+                        body: JSON.stringify({ name: immichName }),
+                    });
+                    labelToImmichId.set(clipTag.id, created.id);
+                } catch (e) {
+                    console.error(`Failed to create Immich tag "${immichName}":`, e);
+                }
+            }
+        }
+
+        // 3. Build reverse map: immichTagId → assetIds
+        const tagToAssets = new Map<string, string[]>();
+        for (const [assetId, tagIds] of assetTagMap) {
+            for (const tagId of tagIds) {
+                const immichTagId = labelToImmichId.get(tagId);
+                if (immichTagId) {
+                    const assets = tagToAssets.get(immichTagId) || [];
+                    assets.push(assetId);
+                    tagToAssets.set(immichTagId, assets);
+                }
+            }
+        }
+
+        // 4. Assign tags to assets in Immich
+        for (const [immichTagId, assetIds] of tagToAssets) {
+            try {
+                await apiFetch(`/tags/${immichTagId}/assets`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ ids: assetIds }),
+                });
+            } catch (e) {
+                console.error(`Failed to assign Immich tag ${immichTagId} to assets:`, e);
+            }
+        }
+
+        console.log(`Synced ${labelToImmichId.size} tags to Immich for ${assetTagMap.size} assets`);
+    } catch (e) {
+        console.error('Failed to sync tags to Immich:', e);
+    }
 }
