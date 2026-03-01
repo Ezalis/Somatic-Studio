@@ -122,7 +122,7 @@ export const getIntersectionAttributes = (imgA: ImageNode, imgB: ImageNode, allT
     return { commonTags, colorMatches, techMatches };
 };
 
-export const MONO_KEYWORDS = ['b&w', 'black and white', 'monochrome', 'grayscale', 'noir', 'silver gelatin'];
+export const MONO_KEYWORDS = ['b&w', 'black & white', 'black and white', 'monochrome', 'grayscale', 'noir', 'silver gelatin'];
 
 export const isMonochrome = (tags: Tag[], tagIds: string[]) => {
     return tagIds.some(id => {
