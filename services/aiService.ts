@@ -3,8 +3,16 @@ import { GoogleGenAI, Schema, Type } from "@google/genai";
 import { ImageNode, Tag, TagType } from '../types';
 import { generateUUID } from './dataService';
 
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy-initialize Gemini (only when AI features are actually used)
+let _ai: GoogleGenAI | null = null;
+const getAI = (): GoogleGenAI => {
+    if (!_ai) {
+        const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error("GEMINI_API_KEY is not configured. AI tagging features are unavailable.");
+        _ai = new GoogleGenAI({ apiKey });
+    }
+    return _ai;
+};
 
 // Helper: Resize image to a smaller dimension (e.g. 512px) to optimize AI analysis speed
 const resizeImageToBase64 = (url: string, maxDim: number = 512): Promise<string> => {
@@ -64,7 +72,7 @@ export const generateAITagsForImage = async (
             }
         };
 
-        const response = await ai.models.generateContent({
+        const response = await getAI().models.generateContent({
             model: 'gemini-2.5-flash',
             contents: {
                 parts: [
@@ -211,7 +219,7 @@ export const harmonizeTagsBatch = async (
                 }
             };
 
-            const response = await ai.models.generateContent({
+            const response = await getAI().models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: {
                     parts: [
