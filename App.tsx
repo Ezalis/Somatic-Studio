@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ViewMode, ExperienceMode, ImageNode, Tag, AnchorState, ExperienceContext } from './types';
 import { initDatabase, clearDatabase, saveTagDefinitions, saveAITagsForFile } from './services/resourceService';
-import { hydrateFromImmich, generateClipTags } from './services/immichService';
+import { hydrateFromImmich, generateClipTags, syncTagsToImmich } from './services/immichService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
 import { LoadingOverlay } from './components/VisualElements';
@@ -19,6 +19,7 @@ const App: React.FC = () => {
     // AI State (CLIP Smart Search)
     const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
     const [analysisProgress, setAnalysisProgress] = useState(0);
+    const [shouldAutoRunClip, setShouldAutoRunClip] = useState(false);
 
     // Experience State
     const [experienceAnchor, setExperienceAnchor] = useState<AnchorState>({ mode: 'NONE', id: '' });
@@ -54,6 +55,12 @@ const App: React.FC = () => {
 
                 setTags(loadedTags);
                 await saveTagDefinitions(loadedTags);
+
+                // Auto-trigger CLIP if no images have AI tags
+                const hasAnyAiTags = loadedImages.some(img => img.aiTagIds && img.aiTagIds.length > 0);
+                if (!hasAnyAiTags && loadedImages.length > 0) {
+                    setShouldAutoRunClip(true);
+                }
             } catch (e) {
                 console.error("Failed to hydrate from Immich", e);
             } finally {
@@ -129,20 +136,16 @@ const App: React.FC = () => {
         setExperienceAnchor({ mode: 'COLOR', id: colorHex, meta: colorHex });
     };
 
-    // --- CLIP SMART SEARCH ---
-    const handleRunClipAnalysis = async () => {
-        if (images.length === 0) return;
-
-        const unanalyzedImages = images.filter(img => !img.aiTagIds || img.aiTagIds.length === 0);
-
-        let batchToProcess = unanalyzedImages;
-        if (unanalyzedImages.length === 0) {
-            if (window.confirm("All images have CLIP tags. Re-analyze everything?")) {
-                batchToProcess = images;
-            } else {
-                return;
-            }
+    // --- AUTO-CLIP TRIGGER ---
+    useEffect(() => {
+        if (shouldAutoRunClip && images.length > 0 && !isAIAnalyzing && !loadingProgress) {
+            setShouldAutoRunClip(false);
+            runClipAnalysis(images);
         }
+    }, [shouldAutoRunClip, images, isAIAnalyzing, loadingProgress]);
+
+    // --- CLIP SMART SEARCH ---
+    const runClipAnalysis = async (batchToProcess: ImageNode[]) => {
 
         setIsAIAnalyzing(true);
         setAnalysisProgress(0);
@@ -178,12 +181,29 @@ const App: React.FC = () => {
 
             setImages(updatedImages);
 
+            // Sync CLIP tags to Immich for cross-device persistence
+            syncTagsToImmich(clipTags, assetTagMap).catch(e =>
+                console.error('Background Immich sync failed:', e)
+            );
+
         } catch (error) {
             console.error("CLIP Analysis Failed", error);
             alert("CLIP analysis interrupted. Please check console.");
         } finally {
             setIsAIAnalyzing(false);
             setAnalysisProgress(0);
+        }
+    };
+
+    const handleRunClipAnalysis = async () => {
+        if (images.length === 0) return;
+
+        const unanalyzedImages = images.filter(img => !img.aiTagIds || img.aiTagIds.length === 0);
+
+        if (unanalyzedImages.length > 0) {
+            runClipAnalysis(unanalyzedImages);
+        } else if (window.confirm("All images have CLIP tags. Re-analyze everything?")) {
+            runClipAnalysis(images);
         }
     };
 
@@ -292,6 +312,8 @@ const App: React.FC = () => {
                         onExperienceModeChange={setExperienceMode}
                         nsfwFilterActive={nsfwFilterActive}
                         loadingProgress={loadingProgress}
+                        isAIAnalyzing={isAIAnalyzing}
+                        analysisProgress={analysisProgress}
                     />
                 )}
             </main>

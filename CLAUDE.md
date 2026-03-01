@@ -99,14 +99,22 @@ npm run preview    # Preview production build
 | Production | 3100 | `http://docker-01:3100` / `http://192.168.50.66:3100` |
 | Development | 3001 | `http://docker-01:3001` / `http://192.168.50.66:3001` |
 
+**Current branch state:** Production runs `main`. Development runs `feature/immich-integration`.
+
 ```bash
 # Update production
 ssh -i ~/.ssh/id_ed25519_dockeradmin thensomethingnew@docker-01 \
   "cd ~/somatic-studio-src && git pull origin main && \
    cd ~/compose-stacks/somatic-studio && docker compose --profile prod up -d --build"
 
+# Update dev (feature branch)
+ssh -i ~/.ssh/id_ed25519_dockeradmin thensomethingnew@docker-01 \
+  "cd ~/somatic-studio-src && git pull origin feature/immich-integration && \
+   cd ~/compose-stacks/somatic-studio && docker compose --profile dev up -d --build"
+
 # View logs
 ssh -i ~/.ssh/id_ed25519_dockeradmin thensomethingnew@docker-01 "docker logs somatic-prod --tail 50"
+ssh -i ~/.ssh/id_ed25519_dockeradmin thensomethingnew@docker-01 "docker logs somatic-dev --tail 50"
 ```
 
 Docker infrastructure lives in the DockerAdmin repo at `compose-templates/somatic-studio/`.
@@ -120,6 +128,12 @@ Migrated from local gallery + Gemini AI to Immich image service:
 - AI tagging via Immich CLIP Smart Search, replacing Gemini
 - Removed `exifr`, `@google/genai`, process shim plugin
 - API key injected server-side via proxy (Vite dev / Nginx prod)
+
+### 2026-03-01: Dev Deployment (feature/immich-integration)
+- Dev server (docker-01:3001) switched from `main` to `feature/immich-integration`
+- docker-compose.yml updated: removed `somatic-studio-data` volume, added `IMMICH_API_KEY`/`IMMICH_URL` env vars
+- `.env` files created on remote (source repo + compose stack) with Immich API key
+- Prod (docker-01:3100) unchanged, still on `main`
 
 ### 2026-03-01: Docker Self-Hosting
 Migrated from Google AI Studio (CDN-hosted) to self-hosted Docker:

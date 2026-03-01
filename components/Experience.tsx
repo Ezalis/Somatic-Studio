@@ -37,6 +37,8 @@ interface ExperienceProps {
     onExperienceModeChange: (mode: ExperienceMode) => void;
     nsfwFilterActive: boolean;
     loadingProgress?: { current: number, total: number } | null;
+    isAIAnalyzing?: boolean;
+    analysisProgress?: number;
 }
 
 // --- FIELD GUIDE OVERLAY ---
@@ -393,7 +395,9 @@ const Experience: React.FC<ExperienceProps> = ({
     onViewChange,
     onExperienceModeChange,
     nsfwFilterActive,
-    loadingProgress
+    loadingProgress,
+    isAIAnalyzing,
+    analysisProgress
 }) => {
     // Refs
     const containerRef = useRef<HTMLDivElement>(null);
@@ -1040,6 +1044,16 @@ const Experience: React.FC<ExperienceProps> = ({
             )}
 
             {loadingProgress && loadingProgress.current < loadingProgress.total && (<LoadingOverlay progress={loadingProgress} images={images} tags={tags} />)}
+            {isAIAnalyzing && (
+                <div className="absolute bottom-0 left-0 right-0 z-[70] pointer-events-none">
+                    <div className="h-1 bg-zinc-200/50">
+                        <div className="h-full bg-indigo-400/60 transition-all duration-500 ease-out" style={{ width: `${analysisProgress || 0}%` }} />
+                    </div>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] text-zinc-400 font-mono tracking-wider">
+                        SENSING {analysisProgress || 0}%
+                    </div>
+                </div>
+            )}
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-in-out" style={{ background: anchor.mode !== 'NONE' && activePalette.length > 0 ? `radial-gradient(circle at 50% 30%, ${activePalette[0]}1A, transparent 70%), radial-gradient(circle at 85% 85%, ${activePalette[1] || activePalette[0]}15, transparent 60%), radial-gradient(circle at 15% 75%, ${activePalette[2] || activePalette[0]}10, transparent 60%)` : '#faf9f6' }} />)}
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-multiply" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />)}
             <div ref={containerRef} className="absolute inset-0 top-0 cursor-move active:cursor-grabbing z-10 pb-0">

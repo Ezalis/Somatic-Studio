@@ -132,6 +132,14 @@ export const saveTagsForFile = async (assetId: string, tagIds: string[]) => {
 
 // --- AI TAGS (keyed by asset ID) ---
 
+export const getCachedAITagsForFile = (assetId: string): string[] => {
+    return aiMappingsCache[assetId] || [];
+};
+
+export const getCachedTagDefinitions = (): Tag[] => {
+    return definitionsCache;
+};
+
 export const saveAITagsForFile = async (assetId: string, tagIds: string[]) => {
     aiMappingsCache[assetId] = tagIds;
     const db = await openDB();
