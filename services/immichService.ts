@@ -6,14 +6,54 @@ const ALBUM_NAME = 'SomaticStudio';
 const API_BASE = '/api/immich';
 const BATCH_SIZE = 4;
 
-// --- CLIP Smart Search Labels ---
-const CLIP_LABELS = [
-    'Portrait', 'Landscape', 'Street Photography', 'Architecture', 'Nature',
-    'Night Photography', 'Black and White', 'Macro', 'Wildlife', 'Urban',
-    'Minimalist', 'Documentary', 'Fashion', 'Abstract', 'Candid',
-    'Silhouette', 'Motion Blur', 'Golden Hour', 'Moody', 'Vintage',
-    'Cinematic', 'Industrial', 'Serene', 'Dramatic', 'Intimate',
-    'Geometric', 'Textured'
+// --- CLIP Smart Search Tag Definitions ---
+// Each entry maps a display label to a CLIP-optimized query phrase.
+// Designed for a portrait/editorial collection with overlapping clusters (3-6 tags per image).
+const CLIP_TAG_DEFINITIONS: Array<{ label: string; query: string }> = [
+    // ── Subject ──
+    { label: 'Portrait',         query: 'portrait photograph of a person, face and upper body visible' },
+    { label: 'Close-Up',         query: 'extreme close-up photograph of a face, tight crop headshot' },
+    { label: 'Full Body',        query: 'full body photograph of a person standing or posing, head to toe' },
+    { label: 'Landscape',        query: 'landscape photograph of natural scenery without people, wide view' },
+    { label: 'Automotive',       query: 'photograph of a car, automobile, vehicle, automotive detail' },
+    { label: 'Live Music',       query: 'concert photograph, live music performance on stage, crowd, stage lights' },
+    { label: 'Animal',           query: 'photograph of an animal, pet, cat, dog' },
+    { label: 'Detail Shot',      query: 'close-up detail photograph of an object, texture, mechanical parts, not a person' },
+
+    // ── Setting ──
+    { label: 'Studio',           query: 'studio portrait with controlled lighting and backdrop, indoor setup' },
+    { label: 'Outdoors',         query: 'outdoor photograph in nature, trees, sky, natural environment' },
+    { label: 'Water',            query: 'photograph featuring water, river, creek, pool, ocean, waterfall' },
+    { label: 'Mountains',        query: 'mountain landscape, foggy mountain overlook, Blue Ridge, ridgeline' },
+    { label: 'Interior',         query: 'indoor photograph, room interior, furniture, domestic space, apartment' },
+
+    // ── Lighting & Technique ──
+    { label: 'Colored Gel',      query: 'photograph lit with colored gels, neon pink blue purple magenta lighting' },
+    { label: 'Natural Light',    query: 'photograph using natural daylight, window light, sun on skin' },
+    { label: 'Low Key',          query: 'dark low-key photograph, deep shadows, single dramatic light source' },
+    { label: 'High Key',         query: 'bright high-key photograph, overexposed, white background, glowing light' },
+    { label: 'Golden Hour',      query: 'warm golden hour sunlight, orange amber sunset light, warm tones' },
+    { label: 'Night',            query: 'nighttime photograph, dark sky, moon, stars, city lights at night' },
+    { label: 'Black & White',    query: 'monochrome black and white photograph, grayscale, no color' },
+    { label: 'Long Exposure',    query: 'long exposure photograph, motion blur, light trails, streaking lights' },
+    { label: 'Shallow Focus',    query: 'shallow depth of field, blurry background bokeh, subject in sharp focus' },
+    { label: 'Silhouette',       query: 'silhouette of a person, dark figure against bright background' },
+
+    // ── Mood & Atmosphere ──
+    { label: 'Moody',            query: 'moody dark atmospheric photograph, emotional, brooding, shadows' },
+    { label: 'Ethereal',         query: 'dreamy ethereal photograph, soft glowing light, otherworldly, hazy' },
+    { label: 'Intimate',         query: 'intimate personal photograph, tender, close, vulnerable, warm' },
+    { label: 'Dramatic',         query: 'dramatic photograph, strong contrast, bold composition, intense' },
+    { label: 'Serene',           query: 'serene calm peaceful photograph, quiet, contemplative, still' },
+    { label: 'Playful',          query: 'fun playful energetic photograph, bright, joyful, casual, smiling' },
+
+    // ── Content & Visual ──
+    { label: 'Tattoo Art',       query: 'person with visible tattoos, tattooed skin, body art, ink' },
+    { label: 'Fashion',          query: 'fashion photography, styled wardrobe, editorial clothing, accessories, lace' },
+    { label: 'Fog & Haze',       query: 'foggy misty photograph, atmospheric haze, smoke, fog machine' },
+    { label: 'Autumn Foliage',   query: 'autumn fall scenery, orange red yellow leaves, fall foliage, October' },
+    { label: 'Motorsport',       query: 'racing car, motorsport event, race track, speed, formula drift' },
+    { label: 'Abstract',         query: 'abstract experimental photograph, distorted, prism, light leak, unconventional' },
 ];
 
 // --- Immich API Types ---
@@ -192,11 +232,12 @@ function buildTagsFromImmichNative(
         const tagIds: string[] = [];
         if (asset.tags) {
             for (const t of asset.tags) {
-                // Only recognize tags with our SomaticStudio/ prefix
                 const rawName = t.value || t.name;
-                if (!rawName.startsWith(TAG_PREFIX)) continue;
+                // Strip SomaticStudio/ prefix if present, otherwise use raw name
+                const label = rawName.startsWith(TAG_PREFIX)
+                    ? rawName.slice(TAG_PREFIX.length)
+                    : rawName;
 
-                const label = rawName.slice(TAG_PREFIX.length);
                 const id = createTagId(label);
                 if (!tagMap.has(id)) {
                     tagMap.set(id, {
@@ -289,10 +330,12 @@ export async function hydrateFromImmich(
                     const nativeTagIds = assetTagMap.get(asset.id) || [];
                     const node = assetToImageNode(asset, nativeTags, nativeTagIds);
 
-                    // Restore cached AI tags from previous CLIP runs
-                    const cachedAiTags = getCachedAITagsForFile(asset.id);
-                    if (cachedAiTags.length > 0) {
-                        node.aiTagIds = [...new Set([...node.aiTagIds, ...cachedAiTags])];
+                    // Only fall back to IndexedDB cache if Immich has zero tags for this asset
+                    if (nativeTagIds.length === 0) {
+                        const cachedAiTags = getCachedAITagsForFile(asset.id);
+                        if (cachedAiTags.length > 0) {
+                            node.aiTagIds = [...new Set([...node.aiTagIds, ...cachedAiTags])];
+                        }
                     }
 
                     // Extract palette from thumbnail
@@ -337,33 +380,33 @@ export async function generateClipTags(
 ): Promise<{ tags: Tag[]; assetTagMap: Map<string, string[]> }> {
     const tagMap = new Map<string, Tag>();
     const assetTagMap = new Map<string, string[]>();
-    const totalLabels = CLIP_LABELS.length;
+    const totalLabels = CLIP_TAG_DEFINITIONS.length;
     let completed = 0;
 
-    // For each CLIP label, run a smart search and see which of our assets appear
+    // For each CLIP tag definition, run a smart search and see which of our assets appear
     const assetIdSet = new Set(assetIds);
-    const penetrationLimit = Math.floor(assetIds.length * 0.6);
+    const penetrationLimit = Math.floor(assetIds.length * 0.3);
 
-    for (const label of CLIP_LABELS) {
+    for (const def of CLIP_TAG_DEFINITIONS) {
         try {
             const result = await apiFetch<SmartSearchResult>('/search/smart', {
                 method: 'POST',
-                body: JSON.stringify({ query: label, size: 20 }),
+                body: JSON.stringify({ query: def.query, size: 10 }),
             });
 
-            // Position cutoff: only top 15 results (sorted by CLIP embedding similarity)
+            // Position cutoff: only top 5 results (strongest matches)
             const matchedIds = (result.assets?.items || [])
-                .slice(0, 15)
+                .slice(0, 5)
                 .map(item => item.id)
                 .filter(id => assetIdSet.has(id));
 
-            // Penetration limit: skip labels matching >60% of album (too generic)
+            // Penetration limit: skip labels matching >30% of album (too generic)
             if (matchedIds.length > 0 && matchedIds.length <= penetrationLimit) {
-                const tagId = createTagId(label);
+                const tagId = createTagId(def.label);
                 if (!tagMap.has(tagId)) {
                     tagMap.set(tagId, {
                         id: tagId,
-                        label,
+                        label: def.label,
                         type: TagType.AI_GENERATED,
                     });
                 }
@@ -377,7 +420,7 @@ export async function generateClipTags(
                 }
             }
         } catch (e) {
-            console.error(`CLIP search failed for "${label}":`, e);
+            console.error(`CLIP search failed for "${def.label}":`, e);
         }
 
         completed++;
@@ -394,6 +437,12 @@ export async function generateClipTags(
 }
 
 // --- Sync Tags to Immich (Durable Persistence) ---
+
+interface BulkIdResult {
+    id: string;
+    success: boolean;
+    error?: string;
+}
 
 export async function syncTagsToImmich(
     clipTags: Tag[],
@@ -414,6 +463,7 @@ export async function syncTagsToImmich(
             const existingId = existingByName.get(immichName);
 
             if (existingId) {
+                console.log(`[TagSync] Found existing tag "${immichName}" → ${existingId}`);
                 labelToImmichId.set(clipTag.id, existingId);
             } else {
                 try {
@@ -421,9 +471,10 @@ export async function syncTagsToImmich(
                         method: 'POST',
                         body: JSON.stringify({ name: immichName }),
                     });
+                    console.log(`[TagSync] Created tag "${immichName}" → ${created.id}`);
                     labelToImmichId.set(clipTag.id, created.id);
                 } catch (e) {
-                    console.error(`Failed to create Immich tag "${immichName}":`, e);
+                    console.error(`[TagSync] Failed to create tag "${immichName}":`, e);
                 }
             }
         }
@@ -442,19 +493,33 @@ export async function syncTagsToImmich(
         }
 
         // 4. Assign tags to assets in Immich
+        let totalAssigned = 0;
+        let totalFailures = 0;
+
         for (const [immichTagId, assetIds] of tagToAssets) {
             try {
-                await apiFetch(`/tags/${immichTagId}/assets`, {
+                const results = await apiFetch<BulkIdResult[]>(`/tags/${immichTagId}/assets`, {
                     method: 'PUT',
                     body: JSON.stringify({ ids: assetIds }),
                 });
+
+                const successes = results.filter(r => r.success).length;
+                const failures = results.filter(r => !r.success);
+                totalAssigned += successes;
+                totalFailures += failures.length;
+
+                if (failures.length > 0) {
+                    console.warn(`[TagSync] Tag ${immichTagId}: ${failures.length} assignment failures:`,
+                        failures.map(f => `${f.id}: ${f.error}`).join(', '));
+                }
             } catch (e) {
-                console.error(`Failed to assign Immich tag ${immichTagId} to assets:`, e);
+                console.error(`[TagSync] Failed to assign tag ${immichTagId} to ${assetIds.length} assets:`, e);
+                totalFailures += assetIds.length;
             }
         }
 
-        console.log(`Synced ${labelToImmichId.size} tags to Immich for ${assetTagMap.size} assets`);
+        console.log(`[TagSync] Complete: ${labelToImmichId.size} tags, ${assetTagMap.size} assets, ${totalAssigned} assignments, ${totalFailures} failures`);
     } catch (e) {
-        console.error('Failed to sync tags to Immich:', e);
+        console.error('[TagSync] Fatal error:', e);
     }
 }
