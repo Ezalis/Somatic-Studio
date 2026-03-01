@@ -2,20 +2,7 @@ import { ImageNode, Tag, TagType, ExperienceNode } from '../types';
 import { getSavedTagsForFile, getSavedAITagsForFile, getSavedImageMetadata } from './resourceService';
 import exifr from 'exifr';
 
-// --- CONFIGURATION ---
-const REPO_OWNER = 'Ezalis'; 
-const REPO_NAME = 'Somatic-Studio';
-const BRANCH = 'main';
-
-const GALLERY_BASE_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/public/gallery/`;
-
 // --- Utilities ---
-
-const strictEncodeURIComponent = (str: string) => {
-  return encodeURIComponent(str).replace(/[!'()*]/g, (c) => {
-    return '%' + c.charCodeAt(0).toString(16);
-  });
-};
 
 export const generateUUID = (): string => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -299,20 +286,9 @@ export const hydrateGalleryAssets = async (
         
         await Promise.all(batch.map(async (fileName) => {
             try {
-                let res: Response | null = null;
-                let fetchUrl = '';
+                let res = await fetch(`/gallery/${fileName}`);
 
-                // Attempt 1: Standard encoding
-                fetchUrl = `${GALLERY_BASE_URL}${encodeURIComponent(fileName)}`;
-                res = await fetch(fetchUrl);
-                
-                // Attempt 2: Strict encoding
-                if (!res.ok) {
-                    fetchUrl = `${GALLERY_BASE_URL}${strictEncodeURIComponent(fileName)}`;
-                    res = await fetch(fetchUrl);
-                }
-
-                // Attempt 3: Case insensitivity
+                // Fallback: try alternate case for file extension
                 if (!res.ok) {
                     const ext = fileName.split('.').pop();
                     if (ext) {
@@ -321,18 +297,11 @@ export const hydrateGalleryAssets = async (
                         else if (ext === 'JPG') altName = fileName.replace(/\.JPG$/, '.jpg');
                         else if (ext === 'jpeg') altName = fileName.replace(/\.jpeg$/, '.JPEG');
                         else if (ext === 'png') altName = fileName.replace(/\.png$/, '.PNG');
-                        
+
                         if (altName) {
-                            fetchUrl = `${GALLERY_BASE_URL}${encodeURIComponent(altName)}`;
-                            res = await fetch(fetchUrl);
+                            res = await fetch(`/gallery/${altName}`);
                         }
                     }
-                }
-
-                // Attempt 4: Local Fallback
-                if (!res.ok) {
-                    fetchUrl = `/gallery/${fileName}`;
-                    res = await fetch(fetchUrl);
                 }
 
                 if (!res.ok) return;
