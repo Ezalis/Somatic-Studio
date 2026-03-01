@@ -1,27 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { ImageNode, Tag, TagType, ViewMode } from '../types';
-import { 
-    Camera, Plus, Search, X, Check, Eraser, AlertCircle, Sparkles, BrainCircuit, Download,
-    Network
+import {
+    Camera, Plus, Search, X, Check, Eraser, AlertCircle, Sparkles, BrainCircuit
 } from 'lucide-react';
-import { generateUUID } from '../services/dataService';
-import { 
-    saveTagsForFile, 
-    saveTagDefinitions,
-    saveAITagsForFile,
-    saveImageMetadata
+import {
+    saveTagsForFile,
+    saveTagDefinitions
 } from '../services/resourceService';
-import { harmonizeTagsBatch } from '../services/aiService';
 
 interface WorkbenchProps {
     images: ImageNode[];
     tags: Tag[];
     onUpdateImages: (images: ImageNode[]) => void;
     onAddTag: (newTag: Tag) => void;
-    onResetDatabase: () => void;
     onViewChange: (mode: ViewMode) => void;
     onRunAIAnalysis: () => void;
-    onExportAITags: () => void;
     isAnalyzing: boolean;
     analysisProgress: number;
 }
@@ -37,13 +30,12 @@ const getTagColor = (type: TagType) => {
     }
 };
 
-const Workbench: React.FC<WorkbenchProps> = ({ 
-    images, 
-    tags, 
-    onUpdateImages, 
+const Workbench: React.FC<WorkbenchProps> = ({
+    images,
+    tags,
+    onUpdateImages,
     onAddTag,
     onRunAIAnalysis,
-    onExportAITags,
     isAnalyzing,
     analysisProgress
 }) => {
@@ -59,10 +51,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
     const [batchTagInput, setBatchTagInput] = useState('');
     const [isRemoveMenuOpen, setIsRemoveMenuOpen] = useState(false);
 
-    // Harmonization State
-    const [isHarmonizing, setIsHarmonizing] = useState(false);
-    const [harmonizeProgress, setHarmonizeProgress] = useState(0);
-    
     // --- DERIVED DATA ---
     const filteredImages: ImageNode[] = useMemo(() => {
         return images.filter(img => {
@@ -92,90 +80,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
     }, [images, activeTagFilters, searchQuery, tags]);
 
     const getTagById = (id: string) => tags.find(t => t.id === id);
-
-    // --- HARMONIZATION LOGIC ---
-    const handleRunHarmonization = async () => {
-        if (images.length === 0) return;
-
-        // 1. Identify un-harmonized images (Resume Logic)
-        const unharmonizedImages = images.filter(img => !img.tagVersion || img.tagVersion < 1);
-        
-        let batchToProcess = unharmonizedImages;
-        if (unharmonizedImages.length === 0) {
-            if (window.confirm("All images are already harmonized (v1.0). Re-process everything?")) {
-                batchToProcess = images;
-            } else {
-                return;
-            }
-        }
-
-        setIsHarmonizing(true);
-        setHarmonizeProgress(0);
-
-        // 2. Calculate Global Context (Preferred Common Tags)
-        // Frequency analysis of current tags
-        const tagCounts: Record<string, number> = {};
-        images.forEach(img => {
-            [...img.tagIds, ...(img.aiTagIds || [])].forEach(tid => {
-                tagCounts[tid] = (tagCounts[tid] || 0) + 1;
-            });
-        });
-        // Sort by frequency
-        const sortedTagIds = Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a]);
-        // Get top 100 labels
-        const preferredLabels: string[] = sortedTagIds.slice(0, 100).map(tid => {
-            const t = tags.find(tag => tag.id === tid);
-            return t ? t.label : null;
-        }).filter((l): l is string => typeof l === 'string');
-
-        try {
-            const results = await harmonizeTagsBatch(
-                batchToProcess, 
-                tags, 
-                preferredLabels, 
-                (completed, total) => {
-                    setHarmonizeProgress(Math.round((completed / total) * 100));
-                }
-            );
-
-            // Update State & DB
-            const newTagsToAdd: Tag[] = [];
-            const updatedImages = images.map(img => {
-                const result = results.find(r => r.imageId === img.id);
-                if (result) {
-                    // Accumulate definitions
-                    result.tags.forEach(t => {
-                        if (!tags.some(existing => existing.id === t.id) && !newTagsToAdd.some(pending => pending.id === t.id)) {
-                            newTagsToAdd.push(t);
-                        }
-                    });
-
-                    // Save AI Tags (Overwriting previous ones with harmonized set)
-                    saveAITagsForFile(img.fileName, result.tagIds);
-                    
-                    // Mark as Version 1.0
-                    saveImageMetadata(img.fileName, { tagVersion: 1 });
-
-                    return { ...img, aiTagIds: result.tagIds, tagVersion: 1 };
-                }
-                return img;
-            });
-
-            if (newTagsToAdd.length > 0) {
-                newTagsToAdd.forEach(t => onAddTag(t));
-                await saveTagDefinitions([...tags, ...newTagsToAdd]); 
-            }
-
-            onUpdateImages(updatedImages);
-
-        } catch (error) {
-            console.error("Harmonization Failed", error);
-            alert("Harmonization interrupted. Check console.");
-        } finally {
-            setIsHarmonizing(false);
-            setHarmonizeProgress(0);
-        }
-    };
 
     // --- HANDLERS: SELECTION ---
     const handleSelect = (id: string, event: React.MouseEvent) => {
@@ -222,10 +126,10 @@ const Workbench: React.FC<WorkbenchProps> = ({
         if (existingTag) {
             targetTag = existingTag;
         } else {
-            const newTag: Tag = { 
-                id: generateUUID(), 
-                label: inputLabel, 
-                type: TagType.QUALITATIVE 
+            const newTag: Tag = {
+                id: inputLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                label: inputLabel,
+                type: TagType.QUALITATIVE
             };
             onAddTag(newTag);
             saveTagDefinitions([...tags, newTag]);
@@ -324,44 +228,20 @@ const Workbench: React.FC<WorkbenchProps> = ({
                     </div>
                 </div>
 
-                {/* AI & Export Actions */}
+                {/* CLIP Smart Search */}
                 <div className="flex items-center gap-3 pl-4 border-l border-zinc-200">
                      <button
                         onClick={onRunAIAnalysis}
-                        disabled={isAnalyzing || isHarmonizing || images.length === 0}
+                        disabled={isAnalyzing || images.length === 0}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors text-xs font-bold ${isAnalyzing ? 'opacity-70 cursor-wait' : ''}`}
-                        title="Generate Initial AI Tags"
+                        title="Generate CLIP Smart Search tags via Immich"
                     >
                         {isAnalyzing ? (
                              <div className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
                         ) : (
                             <BrainCircuit size={14} />
                         )}
-                        <span>{isAnalyzing ? `${analysisProgress}%` : 'AI TAGS'}</span>
-                    </button>
-
-                    <button
-                        onClick={handleRunHarmonization}
-                        disabled={isAnalyzing || isHarmonizing || images.length === 0}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors text-xs font-bold ${isHarmonizing ? 'opacity-70 cursor-wait' : ''}`}
-                        title="Refine tags to increase network density (v1.0)"
-                    >
-                        {isHarmonizing ? (
-                             <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                            <Network size={14} />
-                        )}
-                        <span>{isHarmonizing ? `${harmonizeProgress}%` : 'HARMONIZE v1.0'}</span>
-                    </button>
-
-                    <button
-                        onClick={onExportAITags}
-                        disabled={isAnalyzing || isHarmonizing}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 transition-colors text-xs font-medium"
-                        title="Export AI-tags.json"
-                    >
-                        <Download size={14} />
-                        <span>JSON</span>
+                        <span>{isAnalyzing ? `${analysisProgress}%` : 'CLIP TAGS'}</span>
                     </button>
                 </div>
             </div>
@@ -379,7 +259,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                     <div>Metadata & Tags</div>
                     <div className="flex items-center gap-2 text-violet-400">
                         <Sparkles size={10} />
-                        AI Insights
+                        CLIP Tags
                     </div>
                     <div>Technical</div>
                 </div>
@@ -410,8 +290,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
                 {filteredImages.map((img) => {
                     const isSelected = selectedIds.has(img.id);
                     const dateObj = new Date(img.captureTimestamp);
-                    const isHarmonized = img.tagVersion === 1;
-
                     return (
                         <div 
                             key={img.id}
@@ -432,11 +310,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
                             {/* Thumbnail */}
                             <div className="w-10 h-10 bg-zinc-200 rounded overflow-hidden shadow-sm border border-zinc-200 relative">
                                 <img src={img.fileUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                                {isHarmonized && (
-                                    <div className="absolute bottom-0 right-0 bg-indigo-500 w-2.5 h-2.5 rounded-tl-sm flex items-center justify-center" title="Tags Harmonized (v1.0)">
-                                        <div className="w-1 h-1 bg-white rounded-full" />
-                                    </div>
-                                )}
                             </div>
 
                             {/* Timestamp */}
@@ -493,7 +366,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                                 }}
                                                 className={`
                                                     text-[10px] px-2 py-0.5 rounded border font-medium transition-all
-                                                    ${isHarmonized ? 'bg-indigo-50 text-indigo-700 border-indigo-100 group-hover:border-indigo-200' : 'bg-violet-50 text-violet-700 border-violet-100 group-hover:border-violet-200'}
+                                                    bg-violet-50 text-violet-700 border-violet-100 group-hover:border-violet-200
                                                     hover:shadow-sm cursor-pointer active:scale-95 flex items-center gap-1
                                                 `}
                                             >
@@ -502,7 +375,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                         );
                                     })
                                 ) : (
-                                    <span className="text-[10px] text-zinc-300 italic">No AI data</span>
+                                    <span className="text-[10px] text-zinc-300 italic">No CLIP data</span>
                                 )}
                             </div>
 

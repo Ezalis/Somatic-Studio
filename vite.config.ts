@@ -1,19 +1,7 @@
 import path from 'path';
-import { defineConfig, loadEnv, Plugin } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-
-function processShimPlugin(): Plugin {
-    return {
-        name: 'process-shim',
-        transformIndexHtml(html) {
-            return html.replace(
-                '<head>',
-                `<head><script>window.process = window.process || { env: {}, platform: "browser", version: "", versions: {}, arch: "", emit: function(){}, on: function(){}, once: function(){}, off: function(){}, removeListener: function(){} };</script>`
-            );
-        },
-    };
-}
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
@@ -22,11 +10,21 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
         watch: { usePolling: true },
+        proxy: {
+          '/api/immich': {
+            target: env.IMMICH_URL || 'http://192.168.50.66:2283',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/immich/, '/api'),
+            configure: (proxy) => {
+              proxy.on('proxyReq', (proxyReq) => {
+                proxyReq.setHeader('x-api-key', env.IMMICH_API_KEY || '');
+              });
+            },
+          },
+        },
       },
-      plugins: [processShimPlugin(), tailwindcss(), react()],
+      plugins: [tailwindcss(), react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || ''),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || ''),
         'process.env.NODE_ENV': JSON.stringify(mode),
       },
       resolve: {
