@@ -98,11 +98,11 @@ const Gallery: React.FC<GalleryProps> = ({ history, images, tags, startHistoryIn
                     if (!img) return null;
 
                     return (
-                        <div key={idx} className="w-full h-full flex items-center justify-center snap-center relative shrink-0">
+                        <div key={idx} className="w-full h-full snap-center relative shrink-0">
                             <ProgressiveImage
                                 previewSrc={img.fileUrl}
                                 fullSrc={img.originalUrl}
-                                className="max-w-full max-h-full"
+                                className="w-full h-full place-items-center"
                                 imgClassName="max-w-full max-h-full object-contain p-2 md:p-8 select-none shadow-2xl"
                                 loading="lazy"
                             />
