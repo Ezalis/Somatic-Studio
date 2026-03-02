@@ -12,8 +12,9 @@ import SatelliteLayer from './SatelliteLayer';
 import HistoryTimeline from './HistoryTimeline';
 import DetailView from './DetailView';
 
-// Import scoring hook
+// Import hooks
 import { useRelevanceScoring } from '../hooks/useRelevanceScoring';
+import { usePhysicsSimulation } from '../hooks/usePhysicsSimulation';
 
 interface ExperienceProps {
     images: ImageNode[];
@@ -52,7 +53,6 @@ const Experience: React.FC<ExperienceProps> = ({
     const worldRef = useRef<HTMLDivElement>(null);
     const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const hoveredNodeIdRef = useRef<string | null>(null);
-    const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
 
     // State
     const [simNodes, setSimNodes] = useState<ExperienceNode[]>([]);
@@ -66,6 +66,12 @@ const Experience: React.FC<ExperienceProps> = ({
 
     // Scoring Engine
     const { activePalette } = useRelevanceScoring(simNodes, setSimNodes, anchor, images, tags, nsfwFilterActive, nsfwTagId, loadingProgress);
+
+    // Physics Simulation
+    const { zoomRef } = usePhysicsSimulation(
+        containerRef, worldRef, nodeRefs, hoveredNodeIdRef,
+        simNodes, anchor, activePalette, loadingProgress, windowDimensions
+    );
 
     useEffect(() => {
         const handleResize = () => {
@@ -202,215 +208,7 @@ const Experience: React.FC<ExperienceProps> = ({
         });
     }, [images, nsfwFilterActive, loadingProgress]);
 
-    // 3. PHYSICS LOOP
-    useEffect(() => {
-        if (!containerRef.current || simNodes.length === 0 || loadingProgress) return;
-        const width = containerRef.current.clientWidth;
-        const height = containerRef.current.clientHeight;
-        const mobile = width < 1024;
-
-        const zoom = d3.zoom<HTMLDivElement, unknown>()
-            .scaleExtent([0.1, 4])
-            .on("zoom", (event) => {
-                if (worldRef.current) {
-                    worldRef.current.style.transform = `translate3d(${event.transform.x}px, ${event.transform.y}px, 0) scale(${event.transform.k})`;
-                }
-            });
-
-        zoomRef.current = zoom;
-        d3.select(containerRef.current).call(zoom).on("dblclick.zoom", null);
-
-        let activeNodes: ExperienceNode[] = [];
-        if (anchor.mode === 'NONE') {
-            activeNodes = simNodes.filter(n => n.isVisible).sort((a, b) => (a.gridSortIndex || 0) - (b.gridSortIndex || 0));
-        } else {
-            activeNodes = simNodes.filter(n => n.isVisible && n.id !== anchor.id);
-        }
-
-        const maxScaleByHeight = (height * (mobile ? 0.5 : 0.6)) / 288;
-        const heroScale = Math.min(Math.max(maxScaleByHeight, mobile ? 1.0 : 1.2), mobile ? 1.4 : 1.8);
-        const heroWidth = 192 * heroScale;
-        const heroRadius = Math.sqrt(heroWidth ** 2 + (heroWidth * 1.5) ** 2) / 2;
-
-        const simulation = d3.forceSimulation<ExperienceNode>(simNodes)
-            .alphaTarget(anchor.mode === 'NONE' ? 0 : 0.05)
-            .velocityDecay(anchor.mode === 'NONE' ? 0.2 : 0.3)
-            .force("charge", d3.forceManyBody<ExperienceNode>().strength((d) => {
-                if (!d.isVisible) return 0;
-                if (anchor.mode === 'NONE') return 0;
-                if (d.id === anchor.id) return -1500;
-                if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return mobile ? -15 : -30;
-                return -200;
-            }))
-            .force("collide", d3.forceCollide<ExperienceNode>().radius((d) => {
-                 if (!d.isVisible) return 0;
-                 if (anchor.mode === 'NONE') return 0;
-                 if (anchor.mode === 'IMAGE') {
-                     if (d.id === anchor.id) return heroRadius * (mobile ? 0.8 : 0.95);
-                     return mobile ? 30 : 45;
-                 }
-                 if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return mobile ? 20 : 30;
-                 return mobile ? 35 : 55;
-            }).strength(0.8));
-
-        simulation.on("tick", () => {
-            const cx = width / 2;
-            const cy = height / 2;
-            const time = Date.now() / 1000;
-
-            simNodes.forEach((node, i) => {
-                if (!node.currentOpacity && !node.targetOpacity && !node.isVisible) {
-                     return;
-                }
-
-                if (!node.isVisible && node.currentOpacity < 0.01 && node.currentScale < 0.01) {
-                    node.currentOpacity = 0;
-                    node.currentScale = 0;
-                    const el = nodeRefs.current.get(node.id);
-                    if (el) el.style.display = 'none';
-                    return;
-                }
-
-                const isAnchor = anchor.mode === 'IMAGE' && node.id === anchor.id;
-                const lerpFactor = !node.isVisible ? 0.4 : 0.1;
-
-                if (node.isVisible && !isAnchor && anchor.mode !== 'NONE' && !['TAG', 'COLOR', 'SEASON', 'DATE', 'CAMERA', 'LENS'].includes(anchor.mode)) {
-                     const floatSpeed = 0.5;
-                     const floatAmp = 0.05;
-                     node.vx = (node.vx || 0) + Math.sin(time * floatSpeed + i) * floatAmp;
-                     node.vy = (node.vy || 0) + Math.cos(time * floatSpeed * 0.8 + i) * floatAmp;
-                }
-
-                if (anchor.mode === 'NONE') {
-                    if (node.isVisible) {
-                        const idx = activeNodes.indexOf(node);
-                        if (idx !== -1) {
-                            const total = activeNodes.length;
-                            const CELL_W = mobile ? 90 : 120;
-                            const CELL_H = mobile ? 90 : 120;
-                            const COLS = Math.max(1, Math.floor(width / CELL_W));
-                            const col = idx % COLS;
-                            const row = Math.floor(idx / COLS);
-                            const gridW = (COLS - 1) * CELL_W;
-                            const ROWS = Math.ceil(total / COLS);
-                            const gridH = (ROWS - 1) * CELL_H;
-                            const tx = cx + (col * CELL_W) - (gridW / 2);
-                            const ty = cy + (row * CELL_H) - (gridH / 2);
-
-                            const pull = 0.15;
-                            node.vx = (node.vx || 0) + (tx - node.x) * pull;
-                            node.vy = (node.vy || 0) + (ty - node.y) * pull;
-                        }
-                        node.targetScale = 0.85;
-                        node.targetOpacity = 1;
-                    } else {
-                        node.targetScale = 0;
-                        node.targetOpacity = 0;
-                    }
-                }
-                else if (anchor.mode === 'IMAGE') {
-                    if (isAnchor) {
-                        const targetY = height * 0.45;
-                        const k = 0.12;
-                        node.vx = (node.vx || 0) + (cx - node.x) * k;
-                        node.vy = (node.vy || 0) + (targetY - node.y) * k;
-                        node.vx *= 0.8;
-                        node.vy *= 0.8;
-                        node.targetScale = heroScale;
-                        node.targetOpacity = 1;
-                    }
-                    else if (node.isVisible) {
-                        const targetY = height * 0.45;
-                        const dxRaw = node.x - cx;
-                        const dyRaw = node.y - targetY;
-                        const distRaw = Math.sqrt(dxRaw*dxRaw + dyRaw*dyRaw) || 1;
-                        const boundaryRadius = Math.max(width, height) * 0.9;
-
-                        if (distRaw > boundaryRadius) {
-                            const angle = Math.atan2(dyRaw, dxRaw);
-                            node.x = cx + Math.cos(angle) * (boundaryRadius * 0.95);
-                            node.y = targetY + Math.sin(angle) * (boundaryRadius * 0.95);
-                            node.vx = (node.vx || 0) * 0.1;
-                            node.vy = (node.vy || 0) * 0.1;
-                        }
-
-                        const gravity = 0.035;
-                        node.vx = (node.vx || 0) + (cx - node.x) * gravity;
-                        node.vy = (node.vy || 0) + (targetY - node.y) * gravity;
-
-                        const dx = node.x - cx;
-                        const dy = node.y - targetY;
-                        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-                        const swirlSpeed = 0.6;
-
-                        node.vx += (-dy / dist) * swirlSpeed;
-                        node.vy += (dx / dist) * swirlSpeed;
-
-                        node.targetScale = node.relevanceScore > 40 ? (mobile ? 0.6 : 0.8) : (mobile ? 0.45 : 0.6);
-                        node.targetOpacity = 1.0;
-                    }
-                    else {
-                        node.targetScale = 0;
-                        node.targetOpacity = 0;
-                    }
-                }
-                else if (['TAG', 'COLOR', 'DATE', 'CAMERA', 'LENS', 'SEASON'].includes(anchor.mode)) {
-                    if (node.isVisible) {
-                        const idx = activeNodes.indexOf(node);
-                        const total = activeNodes.length;
-                        const CELL_W = mobile ? 120 : 220;
-                        const CELL_H = mobile ? 160 : 220;
-                        const COLS = Math.max(1, Math.floor(width / CELL_W));
-                        const row = Math.floor(idx / COLS);
-                        const col = idx % COLS;
-                        const gridW = (COLS - 1) * CELL_W;
-                        const gridH = (Math.ceil(total / COLS) - 1) * CELL_H;
-                        const tx = cx + (col * CELL_W) - (gridW / 2);
-                        const ty = cy + (row * CELL_H) - (gridH / 2);
-                        const structureStrength = 0.15;
-                        node.vx = (node.vx || 0) + (tx - node.x) * structureStrength;
-                        node.vy = (node.vy || 0) + (ty - node.y) * structureStrength;
-
-                        node.targetScale = mobile ? 0.55 : 0.85;
-                        node.targetOpacity = 1;
-                    } else {
-                        node.targetScale = 0;
-                        node.targetOpacity = 0;
-                    }
-                }
-
-                node.vx = (node.vx || 0) * 0.9;
-                node.vy = (node.vy || 0) * 0.9;
-                node.currentScale += (node.targetScale - node.currentScale) * lerpFactor;
-                node.currentOpacity += (node.targetOpacity - node.currentOpacity) * lerpFactor;
-
-                const el = nodeRefs.current.get(node.id);
-                if (el) {
-                    el.style.transform = `translate3d(${node.x}px, ${node.y}px, 0) scale(${node.currentScale})`;
-                    el.style.opacity = node.currentOpacity.toString();
-                    el.style.display = node.currentOpacity < 0.05 ? 'none' : 'block';
-
-                    if (hoveredNodeIdRef.current === node.id || (anchor.mode === 'IMAGE' && node.id === anchor.id)) {
-                         el.style.zIndex = node.id === anchor.id ? '2000' : '1000';
-                         el.style.filter = 'none';
-                         if (node.id === anchor.id) {
-                             el.style.boxShadow = `0 20px 60px -10px ${activePalette[0] || 'rgba(0,0,0,0.3)'}`;
-                         } else {
-                             el.style.boxShadow = 'none';
-                         }
-                    } else {
-                         el.style.zIndex = Math.floor(node.currentScale * 100).toString();
-                         el.style.filter = 'none';
-                         el.style.boxShadow = 'none';
-                    }
-                }
-            });
-        });
-
-        return () => { simulation.stop(); };
-    }, [simNodes, anchor, activePalette, loadingProgress, windowDimensions]);
-
-    // 4. ZOOM RESET EFFECT
+    // 3. ZOOM RESET EFFECT
     useEffect(() => {
         if (anchor.mode === 'IMAGE' && containerRef.current && zoomRef.current) {
              d3.select(containerRef.current).transition().duration(750).ease(d3.easeCubicOut).call(zoomRef.current.transform, d3.zoomIdentity);
