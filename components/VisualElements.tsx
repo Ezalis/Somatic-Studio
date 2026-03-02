@@ -136,13 +136,14 @@ interface FloatingItem {
     delay: number;
 }
 
-export const LoadingOverlay: React.FC<{ 
-    progress: { current: number, total: number }; 
+export const LoadingOverlay: React.FC<{
+    progress: { current: number, total: number };
     images: ImageNode[];
     tags: Tag[];
-}> = ({ progress, images, tags }) => {
+    previewUrls?: string[];
+}> = ({ progress, images, tags, previewUrls = [] }) => {
     const latestImage = images.length > 0 ? images[images.length - 1] : null;
-    
+
     // Robust percentage calculation
     const percentage = useMemo(() => {
         if (progress.total <= 0) return 0;
@@ -158,7 +159,7 @@ export const LoadingOverlay: React.FC<{
             const newCount = images.length;
             const itemsToAdd: FloatingItem[] = [];
             const newImages = images.slice(lastImageCount.current, newCount);
-            
+
             newImages.forEach(img => {
                 if (Math.random() > 0.5 && img.tagIds.length > 0) {
                     const randomTagId = img.tagIds[Math.floor(Math.random() * img.tagIds.length)];
@@ -178,10 +179,35 @@ export const LoadingOverlay: React.FC<{
         }
     }, [images, tags]);
 
+    // Stagger-reveal preview thumbnails one at a time
+    const [visiblePreviews, setVisiblePreviews] = useState(0);
+    useEffect(() => {
+        if (previewUrls.length === 0) return;
+        setVisiblePreviews(0);
+        let i = 0;
+        const interval = setInterval(() => {
+            i++;
+            setVisiblePreviews(i);
+            if (i >= previewUrls.length) clearInterval(interval);
+        }, 2200);
+        return () => clearInterval(interval);
+    }, [previewUrls]);
+
+    // Stable random positions for preview thumbnails
+    const previewPositions = useMemo(() =>
+        previewUrls.map((_, i) => ({
+            x: 8 + ((i * 37 + 13) % 70),
+            y: 5 + ((i * 53 + 7) % 75),
+            rotation: ((i * 17 + 3) % 25) - 12,
+            scale: 0.85 + ((i * 13) % 30) / 100,
+        })),
+    [previewUrls]);
+
     const polaroidRotation = useMemo(() => (Math.random() - 0.5) * 6, [latestImage]);
 
     return (
         <div className="absolute inset-0 z-[100] bg-zinc-950 flex flex-col items-center justify-center font-hand text-zinc-200 overflow-hidden">
+             {/* Floating metadata items */}
              <div className="absolute inset-0 pointer-events-none overflow-hidden">
                  {floatingItems.map(item => (
                      <div key={item.id} className="absolute text-white/20 text-lg md:text-2xl animate-in fade-in zoom-in duration-1000 fill-mode-forwards pr-4" style={{ left: `${item.x}%`, top: `${item.y}%`, transform: `rotate(${item.rotation}deg)`, animationDelay: `${item.delay}s` }}>
@@ -189,13 +215,30 @@ export const LoadingOverlay: React.FC<{
                      </div>
                  ))}
              </div>
+             {/* Streaming preview thumbnails */}
+             <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                 {previewUrls.slice(0, visiblePreviews).map((url, i) => (
+                     <div
+                         key={url}
+                         className="absolute w-20 h-20 md:w-28 md:h-28 rounded-sm overflow-hidden shadow-lg animate-in fade-in zoom-in-75 duration-1000 fill-mode-forwards"
+                         style={{
+                             left: `${previewPositions[i].x}%`,
+                             top: `${previewPositions[i].y}%`,
+                             transform: `rotate(${previewPositions[i].rotation}deg) scale(${previewPositions[i].scale})`,
+                             opacity: 0.12,
+                         }}
+                     >
+                         <img src={url} alt="" className="w-full h-full object-cover grayscale" />
+                     </div>
+                 ))}
+             </div>
             <div className="absolute inset-0 opacity-[0.08] pointer-events-none mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")` }} />
-            
+
             <div className="relative z-10 flex flex-col items-center justify-center w-full h-[100dvh] p-4 md:p-8 gap-6 md:gap-12">
                 <div className="flex flex-col items-center gap-1 shrink-0">
                     <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tighter opacity-90 drop-shadow-md pr-4 text-center">Somatic Studio</h1>
                 </div>
-                
+
                 <div className="relative shrink-0 w-[65vw] max-w-[280px] aspect-[4/5] md:w-80 md:h-96 md:max-w-none md:aspect-auto flex flex-col items-center justify-center transition-all duration-500 ease-out" style={{ transform: `rotate(${polaroidRotation}deg)` }}>
                     <div className="absolute inset-0 bg-[#f8f8f8] shadow-2xl rounded-sm transform translate-y-1" />
                     {latestImage ? (
