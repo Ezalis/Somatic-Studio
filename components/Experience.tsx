@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { ImageNode, Tag, TagType, ExperienceNode, ViewMode, ExperienceMode, AnchorState, ExperienceContext } from '../types';
 import { 
@@ -16,14 +16,8 @@ import {
     HistoryStream
 } from './VisualElements';
 
-// Import logic helpers from dataService
-import { 
-    getColorDistSq, 
-    getMinPaletteDistance, 
-    isMonochrome, 
-    getDominantColorsFromNodes, 
-    getRelatedTagsFromNodes 
-} from '../services/dataService';
+// Import scoring hook
+import { useRelevanceScoring } from '../hooks/useRelevanceScoring';
 
 interface ExperienceProps {
     images: ImageNode[];
@@ -416,9 +410,8 @@ const Experience: React.FC<ExperienceProps> = ({
     const [isMobile, setIsMobile] = useState(false); // Mobile state tracking
     const [windowDimensions, setWindowDimensions] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 0, height: typeof window !== 'undefined' ? window.innerHeight : 0 });
     
-    // Derived Data State
-    const [_commonTags, setCommonTags] = useState<Tag[]>([]);
-    const [activePalette, setActivePalette] = useState<string[]>([]);
+    // Scoring Engine
+    const { activePalette } = useRelevanceScoring(simNodes, setSimNodes, anchor, images, tags, nsfwFilterActive, nsfwTagId, loadingProgress);
 
     useEffect(() => {
         const handleResize = () => {
@@ -464,7 +457,6 @@ const Experience: React.FC<ExperienceProps> = ({
         }
     }, [anchor.id, isDetailOpen]);
 
-    const getTagById = useCallback((id: string) => tags.find(t => t.id === id), [tags]);
     const nsfwTagId = useMemo(() => tags.find(t => t.label.trim().toLowerCase() === 'nsfw')?.id, [tags]);
 
     // Reset modals if anchor changes to something else
@@ -499,195 +491,6 @@ const Experience: React.FC<ExperienceProps> = ({
              d3.select(containerRef.current).transition().duration(750).ease(d3.easeCubicOut).call(zoomRef.current.transform, d3.zoomIdentity);
         }
     };
-
-    // 1. SCORING & RELATIONSHIP ENGINE (Visibility Logic)
-    useEffect(() => {
-        if (loadingProgress) return; 
-
-        setSimNodes(prevNodes => {
-            if (prevNodes.length === 0) return prevNodes;
-
-            let calculatedPalette: string[] = [];
-            let calculatedTags: Tag[] = [];
-
-            // --- A. Scoring Nodes ---
-            const scoredNodes = prevNodes.map(node => {
-                 // FILTER CHECK
-                 if (nsfwFilterActive) {
-                     const allNodeTagIds = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
-                     const isNsfw = allNodeTagIds.some(tid => {
-                         if (tid === nsfwTagId) return true;
-                         const t = getTagById(tid);
-                         return t && t.label.trim().toLowerCase() === 'nsfw';
-                     });
-                     if (isNsfw) return { ...node, relevanceScore: -9999, isVisible: false }; 
-                 }
-
-                 let score = 0;
-                 
-                 if (anchor.mode === 'IMAGE') {
-                     if (node.id === anchor.id) score = 10000; 
-                     else {
-                         const anchorImg = images.find(i => i.id === anchor.id);
-                         if (anchorImg) {
-                             const anchorTags = [...anchorImg.tagIds, ...(anchorImg.aiTagIds || [])];
-                             const targetTags = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
-                             
-                             const anchorIsMono = isMonochrome(tags, anchorTags);
-                             const targetIsMono = isMonochrome(tags, targetTags);
-                             const colorDist = getMinPaletteDistance(anchorImg.palette, node.original.palette);
-                             
-                             const timeDiff = Math.abs(node.original.captureTimestamp - anchorImg.captureTimestamp);
-                             const isSameDay = timeDiff < 86400000;
-                             const isNearDate = timeDiff < 259200000; 
-                             const sameSeason = node.original.inferredSeason === anchorImg.inferredSeason;
-
-                             // 1. TEMPORAL (High Priority)
-                             if (isSameDay) score += 500; 
-                             else if (isNearDate) score += 100;
-                             if (sameSeason) score += 20;
-
-                             // 2. THEMATIC (Medium Priority)
-                             const sharedTags = targetTags.filter(t => anchorTags.includes(t));
-                             let meaningfulTagMatches = 0;
-                             
-                             sharedTags.forEach(tid => {
-                                 const t = getTagById(tid);
-                                 if (t) {
-                                     if (t.type === TagType.AI_GENERATED) {
-                                         score += 20;
-                                         meaningfulTagMatches++;
-                                     }
-                                     else if (t.type === TagType.QUALITATIVE) {
-                                         score += 25; 
-                                         meaningfulTagMatches++;
-                                     }
-                                     else if (t.type === TagType.CATEGORICAL) {
-                                         score += 20;
-                                         meaningfulTagMatches++;
-                                     }
-                                     else if (t.type === TagType.TECHNICAL) score += 5;
-                                     else score += 2;
-                                 }
-                             });
-
-                             const highThematicCorrelation = meaningfulTagMatches >= 3;
-                             // 3. VISUAL & CROSS-MODALITY
-                             
-                             if (anchorIsMono) {
-                                 if (targetIsMono) {
-                                     score += 200; 
-                                 } else {
-                                     if (isSameDay) score += 150; 
-                                     else if (highThematicCorrelation) score += 50;
-                                     else score -= 1000; 
-                                 }
-                             } else {
-                                 if (targetIsMono) {
-                                     if (isSameDay) score += 150;
-                                     else if (highThematicCorrelation) score += 50;
-                                     else score -= 500;
-                                 } else {
-                                     if (isSameDay || highThematicCorrelation) {
-                                         score += 50; 
-                                     } else {
-                                         if (colorDist < 1500) score += 200;
-                                         else if (colorDist < 4000) score += 100;
-                                         else if (colorDist < 8000) score += 20;
-                                         else score -= 150; 
-                                     }
-                                 }
-                             }
-
-                             // 4. TECHNICAL
-                             if (node.original.cameraModel === anchorImg.cameraModel && node.original.cameraModel !== 'Unknown Camera') score += 10;
-                             if (node.original.lensModel === anchorImg.lensModel && node.original.lensModel !== 'Unknown Lens') score += 10;
-                         }
-                     }
-                 } else if (anchor.mode === 'TAG') {
-                     const hasTag = node.original.tagIds.includes(anchor.id) || (node.original.aiTagIds && node.original.aiTagIds.includes(anchor.id));
-                     if (hasTag) score = 100;
-                 } else if (anchor.mode === 'COLOR') {
-                     const minD = node.original.palette.reduce((min, c) => Math.min(min, getColorDistSq(c, anchor.id)), Infinity);
-                     if (minD < 1500) score = 100;
-                 } else if (anchor.mode === 'DATE') {
-                     const anchorTime = parseInt(anchor.id);
-                     const diff = Math.abs(node.original.captureTimestamp - anchorTime);
-                     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-                     if (diff < thirtyDaysMs) score = 100 - (diff / thirtyDaysMs) * 50; 
-                 } else if (anchor.mode === 'CAMERA') {
-                     if (node.original.cameraModel === anchor.id) score = 100;
-                 } else if (anchor.mode === 'LENS') {
-                     if (node.original.lensModel === anchor.id) score = 100;
-                 } else if (anchor.mode === 'SEASON') {
-                     if (node.original.inferredSeason === anchor.id) score = 100;
-                 }
-
-                 return { ...node, relevanceScore: score };
-            });
-
-            // --- B. Determine Visibility & Context ---
-            const visibleSubset: ExperienceNode[] = [];
-
-            if (anchor.mode === 'IMAGE') {
-                const neighbors = scoredNodes.filter(n => n.id !== anchor.id && n.relevanceScore > 0); 
-                neighbors.sort((a, b) => b.relevanceScore - a.relevanceScore);
-                
-                const visibleCount = Math.min(12, neighbors.length);
-                const visibleNeighborIds = new Set(neighbors.slice(0, visibleCount).map(n => n.id));
-                
-                scoredNodes.forEach(n => {
-                    if (n.relevanceScore <= -5000) { n.isVisible = false; return; }
-
-                    if (n.id === anchor.id) {
-                        n.isVisible = true;
-                    } else if (visibleNeighborIds.has(n.id)) {
-                        n.isVisible = true;
-                    } else {
-                        n.isVisible = false;
-                    }
-
-                    if (n.isVisible) visibleSubset.push(n);
-                });
-
-                const anchorImg = images.find(i => i.id === anchor.id);
-                calculatedPalette = anchorImg ? anchorImg.palette : [];
-                calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 6, undefined, nsfwTagId, nsfwFilterActive);
-
-            } else if (['TAG', 'COLOR', 'DATE', 'CAMERA', 'LENS', 'SEASON'].includes(anchor.mode)) {
-                 scoredNodes.forEach(n => {
-                     if (n.relevanceScore <= -5000) { n.isVisible = false; return; }
-                     n.isVisible = n.relevanceScore > 0;
-                     if (n.isVisible) visibleSubset.push(n);
-                 });
-                 
-                 if (anchor.mode === 'TAG') {
-                     calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 5, anchor.id, nsfwTagId, nsfwFilterActive);
-                 } else if (anchor.mode === 'COLOR') {
-                     const adjacent = getDominantColorsFromNodes(visibleSubset, 5, anchor.id);
-                     calculatedPalette = [anchor.id, ...adjacent].slice(0, 5);
-                 } else {
-                     calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 5, undefined, nsfwTagId, nsfwFilterActive);
-                     calculatedPalette = getDominantColorsFromNodes(visibleSubset, 5);
-                 }
-
-            } else {
-                // NONE mode (Grid)
-                scoredNodes.forEach(n => {
-                    if (n.relevanceScore <= -5000) { n.isVisible = false; return; }
-                    n.isVisible = true; 
-                });
-            }
-            
-            setTimeout(() => {
-                setActivePalette(calculatedPalette);
-                setCommonTags(calculatedTags);
-            }, 0);
-
-            return scoredNodes;
-        });
-
-    }, [anchor, images, getTagById, nsfwFilterActive, nsfwTagId, loadingProgress]);
 
     // 2. INITIALIZATION (Grid Layout)
     useEffect(() => {
