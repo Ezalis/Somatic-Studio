@@ -23,7 +23,7 @@ const App: React.FC = () => {
 
     // Experience State
     const [experienceAnchor, setExperienceAnchor] = useState<AnchorState>({ mode: 'NONE', id: '' });
-    const [experienceContext, setExperienceContext] = useState<ExperienceContext>({ commonTags: [], activePalette: [] });
+    const [_experienceContext, setExperienceContext] = useState<ExperienceContext>({ commonTags: [], activePalette: [] });
 
     // Filter State
     const [nsfwFilterActive, setNsfwFilterActive] = useState(false);
@@ -40,7 +40,7 @@ const App: React.FC = () => {
             setIsInitializing(false);
 
             try {
-                const { images: loadedImages, tags: loadedTags } = await hydrateFromImmich(
+                const { tags: loadedTags } = await hydrateFromImmich(
                     (current, total) => {
                         setLoadingProgress({ current, total });
                     },
@@ -112,7 +112,7 @@ const App: React.FC = () => {
             setLoadingProgress({ current: 0, total: 0 });
 
             try {
-                const { images: loadedImages, tags: loadedTags } = await hydrateFromImmich(
+                const { tags: loadedTags } = await hydrateFromImmich(
                     (current, total) => {
                         setLoadingProgress({ current, total });
                     },
@@ -150,11 +150,11 @@ const App: React.FC = () => {
         setExperienceContext(ctx);
     };
 
-    const handleTagClick = (tag: Tag) => {
+    const _handleTagClick = (tag: Tag) => {
         setExperienceAnchor({ mode: 'TAG', id: tag.id, meta: tag });
     };
 
-    const handleColorClick = (colorHex: string) => {
+    const _handleColorClick = (colorHex: string) => {
         setExperienceAnchor({ mode: 'COLOR', id: colorHex, meta: colorHex });
     };
 
