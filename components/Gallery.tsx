@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { ImageNode, Tag, AnchorState } from '../types';
 import { X } from 'lucide-react';
+import ProgressiveImage from './ProgressiveImage';
 
 interface GalleryProps {
     history: AnchorState[];
@@ -98,11 +99,12 @@ const Gallery: React.FC<GalleryProps> = ({ history, images, tags, startHistoryIn
 
                     return (
                         <div key={idx} className="w-full h-full flex items-center justify-center snap-center relative shrink-0">
-                            <img
-                                src={img.originalUrl || img.fileUrl}
-                                alt=""
-                                className="max-w-full max-h-full object-contain p-2 md:p-8 select-none shadow-2xl"
-                                draggable={false}
+                            <ProgressiveImage
+                                previewSrc={img.fileUrl}
+                                fullSrc={img.originalUrl}
+                                className="max-w-full max-h-full"
+                                imgClassName="max-w-full max-h-full object-contain p-2 md:p-8 select-none shadow-2xl"
+                                loading="lazy"
                             />
                         </div>
                     );

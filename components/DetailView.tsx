@@ -5,6 +5,7 @@ import {
     ArrowDown, ArrowUp, Sun, Cloud, Thermometer, Gauge, Timer
 } from 'lucide-react';
 import { EsotericSprite, ScribbleConnector, HistoryStream } from './VisualElements';
+import ProgressiveImage from './ProgressiveImage';
 
 interface DetailViewProps {
     activeNode: ExperienceNode;
@@ -128,7 +129,11 @@ const DetailView: React.FC<DetailViewProps> = ({
                                 className="relative bg-white p-3 sm:p-1.5 lg:p-3 rounded-sm shadow-2xl transition-transform duration-500 group-hover:scale-[1.01] cursor-zoom-in rotate-1 sm:rotate-0"
                                 onClick={() => onOpenGallery(0)}
                             >
-                                <img src={activeNode.original.originalUrl || activeNode.original.fileUrl} alt="" className="max-h-[50vh] sm:max-h-[85vh] w-auto max-w-[85vw] sm:max-w-[40vw] lg:max-w-[50vw] object-contain bg-zinc-100" />
+                                <ProgressiveImage
+                                    previewSrc={activeNode.original.fileUrl}
+                                    fullSrc={activeNode.original.originalUrl}
+                                    imgClassName="max-h-[50vh] sm:max-h-[85vh] w-auto max-w-[85vw] sm:max-w-[40vw] lg:max-w-[50vw] object-contain bg-zinc-100"
+                                />
                                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 pointer-events-none">
                                     <Maximize2 size={48} className="text-white drop-shadow-md sm:w-8 sm:h-8 lg:w-12 lg:h-12" />
                                 </div>
