@@ -3,10 +3,10 @@ import * as d3 from 'd3';
 import { ExperienceNode, AnchorState, PhysicsConfig } from '../types';
 
 export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
-    velocityDecay: 0.3,
+    velocityDecay: 0.45,
     velocityDecayIdle: 0.2,
-    swirlSpeed: 0.6,
-    floatPerturbation: 0.05,
+    swirlSpeed: 0.35,
+    floatPerturbation: 0.02,
     floatSpeed: 0.5,
     heroGravity: 0.12,
     neighborGravity: 0.035,
@@ -309,6 +309,11 @@ export function usePhysicsSimulation(
         recomputeActiveNodes();
 
         if (simulationRef.current) {
+            // Zero all node velocities to eliminate jolts on anchor change
+            simNodesRef.current.forEach(node => {
+                node.vx = 0;
+                node.vy = 0;
+            });
             applyForces(simulationRef.current);
             simulationRef.current.alpha(0.3).restart();
         }
