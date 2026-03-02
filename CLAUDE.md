@@ -57,7 +57,7 @@ App.tsx             → Root component, global state, view routing
 - **Search** — Full-text across filenames, tags, camera/lens models
 - **Multi-Select** — Click, Shift+Click range, Cmd+Click toggle
 - **Batch Operations** — Add/remove tags across selection
-- **AI Analysis** — Generate 20 tags per image via Gemini, harmonize tags for network density
+- **AI Analysis** — CLIP Smart Search tagging (35 labels across subject/setting/lighting/mood/content categories)
 - **Export** — Download tags.json and AI-tags.json
 
 ## Data Flow
@@ -66,7 +66,7 @@ App.tsx             → Root component, global state, view routing
 2. **Hydration** — `hydrateFromImmich()` finds "SomaticStudio" album → fetches assets with EXIF → reads native ML tags → builds ImageNodes → extracts palettes from thumbnails (batches of 4)
 3. **Scoring** — When an anchor changes, images are scored by temporal/semantic/visual/technical similarity
 4. **Physics** — D3 force simulation positions nodes; top 12 by score become visible neighbors
-5. **CLIP Tagging** — On-demand via Workbench "CLIP TAGS" button: queries Immich Smart Search for 27 semantic labels
+5. **CLIP Tagging** — On-demand via Workbench "CLIP TAGS" button: queries Immich Smart Search for 35 semantic labels (portrait/editorial-optimized, top-5 position cutoff, 30% penetration limit)
 6. **Persistence** — Manual tag edits + palette cache saved to IndexedDB
 
 ## Image Proxy
@@ -134,6 +134,24 @@ Migrated from local gallery + Gemini AI to Immich image service:
 - docker-compose.yml updated: removed `somatic-studio-data` volume, added `IMMICH_API_KEY`/`IMMICH_URL` env vars
 - `.env` files created on remote (source repo + compose stack) with Immich API key
 - Prod (docker-01:3100) unchanged, still on `main`
+
+### 2026-03-01: Legacy AI Tag Migration to Immich
+Migrated original Gemini AI tags from `main:public/resources/AI-tags.json` into Immich via one-time script:
+- Script: `scripts/migrate-legacy-tags.mjs` — embeds legacy data, maps filenames to Immich asset IDs
+- Source data: 65 defined tags + 58 orphan tag IDs (auto-derived labels), 160 image mappings
+- Results: 122 `SomaticStudio/*` tags created, 158/160 images matched, 1,412 tag-to-asset assignments
+- 2 unmatched files: `F38245A5-...` and `Petite LeMans-41 Edited.jpg` (not in Immich album)
+- Script ran inside `somatic-dev` Docker container (Node v22) on docker-01 since no local Node.js installed
+- Bug fix applied between runs: Immich GET /tags returns `{name: "Portrait", value: "SomaticStudio/Portrait"}` — first run matched on `name` only, missing 17 existing CLIP tags; fixed to index by both `name` and `value`
+- Immich now contains `SomaticStudio/*` tags from both legacy Gemini data and CLIP Smart Search
+- `buildTagsFromImmichNative` reads all Immich tags (strips `SomaticStudio/` prefix if present)
+- Immich-first hydration: tags from Immich take priority, IndexedDB cache only used as fallback when Immich has zero tags for an asset
+
+### 2026-03-01: CLIP Tag Revision
+- Expanded from 27 to 35 CLIP tag definitions optimized for portrait/editorial collection
+- Categories: Subject (8), Setting (5), Lighting & Technique (10), Mood & Atmosphere (6), Content & Visual (6)
+- Tighter search params: `size: 10`, top-5 position cutoff, 30% penetration limit
+- Tags written back to Immich as `SomaticStudio/*` via `syncTagsToImmich()`
 
 ### 2026-03-01: Docker Self-Hosting
 Migrated from Google AI Studio (CDN-hosted) to self-hosted Docker:
