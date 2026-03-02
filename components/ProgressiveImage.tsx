@@ -42,8 +42,10 @@ const ProgressiveImage: React.FC<ProgressiveImageProps> = ({
         // Stay on preview — no broken image icon
     };
 
+    // Grid stacking: both images occupy the same cell with identical classes,
+    // so they render at the exact same size. Full-res crossfades over preview.
     return (
-        <div className={`relative ${className ?? ''}`}>
+        <div className={`grid [&>*]:col-start-1 [&>*]:row-start-1 ${className ?? ''}`}>
             <img
                 src={previewSrc}
                 alt={alt}
@@ -56,7 +58,7 @@ const ProgressiveImage: React.FC<ProgressiveImageProps> = ({
                     ref={fullRef}
                     src={fullSrc}
                     alt={alt}
-                    className={`absolute inset-0 w-full h-full transition-opacity duration-500 ${fullLoaded ? 'opacity-100' : 'opacity-0'} ${imgClassName ?? ''}`}
+                    className={`transition-opacity duration-500 ${fullLoaded ? 'opacity-100' : 'opacity-0'} ${imgClassName ?? ''}`}
                     onLoad={handleFullLoad}
                     onError={handleFullError}
                     loading={loading}
