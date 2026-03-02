@@ -1,20 +1,16 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
-import { ImageNode, Tag, TagType, ExperienceNode, ViewMode, ExperienceMode, AnchorState, ExperienceContext } from '../types';
-import { 
-    X, Camera, Maximize2, Aperture, Hash, Palette,
-    ArrowDown, ArrowUp, Sun, Cloud, Thermometer, Gauge, Timer,
-    Shield
-} from 'lucide-react';
+import { ImageNode, Tag, ExperienceNode, ViewMode, ExperienceMode, AnchorState, ExperienceContext } from '../types';
 
-// Import visual components from new cleanup file
-import { 
-    EsotericSprite, 
-    LoadingOverlay, 
-    RoughContainer, 
-    ScribbleConnector, 
-    HistoryStream
-} from './VisualElements';
+// Import visual components
+import { EsotericSprite, LoadingOverlay, RoughContainer } from './VisualElements';
+
+// Import extracted components
+import FieldGuideOverlay from './FieldGuideOverlay';
+import Gallery from './Gallery';
+import SatelliteLayer from './SatelliteLayer';
+import HistoryTimeline from './HistoryTimeline';
+import DetailView from './DetailView';
 
 // Import scoring hook
 import { useRelevanceScoring } from '../hooks/useRelevanceScoring';
@@ -35,352 +31,10 @@ interface ExperienceProps {
     analysisProgress?: number;
 }
 
-// --- FIELD GUIDE OVERLAY ---
-const FieldGuideOverlay: React.FC<{ onClose: () => void; onAdminAccess: () => void }> = ({ onClose, onAdminAccess }) => {
-    const [adminClicks, setAdminClicks] = useState(0);
-
-    // Prevent scroll propagation on body when open
-    useEffect(() => {
-        document.body.style.overflow = 'hidden';
-        return () => { document.body.style.overflow = ''; };
-    }, []);
-
-    const handleAdminClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (e.shiftKey) {
-            onAdminAccess();
-            return;
-        }
-        const next = adminClicks + 1;
-        setAdminClicks(next);
-        if (next >= 5) {
-            onAdminAccess();
-        }
-    };
-
-    return (
-        <div 
-            className="fixed inset-0 z-[80] bg-zinc-950 animate-in fade-in duration-500 overflow-y-auto" 
-            onClick={onClose}
-        >
-             {/* Admin Access Button (Subtle/Hidden) */}
-             <button
-                onClick={handleAdminClick}
-                className="fixed top-8 left-8 sm:left-20 z-[90] flex items-center gap-2 px-3 py-1.5 rounded text-xs font-mono uppercase tracking-widest text-zinc-800 hover:text-zinc-500 transition-colors cursor-default select-none group"
-                title="Restricted Access"
-             >
-                <Shield size={12} className="opacity-50 group-hover:opacity-100" />
-                <span>Admin</span>
-             </button>
-
-             {/* Fixed Close Button matching Detail View */}
-             <button 
-                className="fixed top-8 right-8 sm:right-20 z-[90] p-2 text-zinc-400 hover:text-white bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full transition-all duration-200 shadow-xl border border-white/10"
-                onClick={(e) => { e.stopPropagation(); onClose(); }}
-                title="Close Field Guide"
-            >
-                <X size={24} />
-            </button>
-
-            <div className="min-h-full flex items-center justify-center p-6 md:p-12" onClick={onClose}>
-                <div 
-                    className="max-w-5xl w-full bg-zinc-900 border border-zinc-800 rounded-lg p-8 md:p-16 shadow-2xl relative overflow-hidden"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {/* Decorative Elements - Darker for readability */}
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-900 via-purple-900 to-amber-900 opacity-50" />
-                    <div className="absolute -right-20 -top-20 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-                    <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-
-                    <div className="relative z-10 flex flex-col gap-12">
-                        <div className="flex flex-col gap-2">
-                            <h1 className="font-hand text-6xl md:text-8xl text-zinc-100 font-bold tracking-tight drop-shadow-sm">Field Guide</h1>
-                            <p className="font-mono text-xs md:text-sm text-zinc-500 uppercase tracking-widest ml-2">Somatic Studio v1.0</p>
-                        </div>
-
-                        <div className="space-y-4 font-hand text-2xl md:text-3xl text-zinc-300 leading-relaxed border-l-4 border-zinc-800 pl-8 py-2">
-                            <p>
-                                <span className="text-white font-bold">Welcome to the archive.</span>
-                            </p>
-                            <p className="opacity-90">
-                                This is not a static folder structure, but a living web of memory, color, and light. There is no wrong path here, only the journey.
-                            </p>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-x-12 gap-y-16 pt-8">
-                            <div className="space-y-3 group">
-                                <h3 className="font-mono text-xs text-indigo-400 font-bold uppercase tracking-widest group-hover:text-indigo-300 transition-colors">01. The Pattern</h3>
-                                <p className="font-hand text-2xl text-zinc-400 leading-relaxed group-hover:text-zinc-200 transition-colors">
-                                    The grid is a living map. Each floating "esoteric sprite" is a unique signature generated from the color palette and complexity of a photograph.
-                                </p>
-                            </div>
-
-                            <div className="space-y-3 group">
-                                <h3 className="font-mono text-xs text-amber-400 font-bold uppercase tracking-widest group-hover:text-amber-300 transition-colors">02. The Reveal</h3>
-                                <p className="font-hand text-2xl text-zinc-400 leading-relaxed group-hover:text-zinc-200 transition-colors">
-                                    Select a symbol to bring the memory into focus. The studio rearranges itself around your selection, pulling related memories closer.
-                                </p>
-                            </div>
-
-                            <div className="space-y-3 group">
-                                <h3 className="font-mono text-xs text-emerald-400 font-bold uppercase tracking-widest group-hover:text-emerald-300 transition-colors">03. The Thread</h3>
-                                <p className="font-hand text-2xl text-zinc-400 leading-relaxed group-hover:text-zinc-200 transition-colors">
-                                    Navigate by feeling. Use the <span className="text-zinc-100">Satellite Layers</span> to pivot through color space or semantic concepts. Drift through the archive on threads of similarity.
-                                </p>
-                            </div>
-
-                            <div className="space-y-3 group">
-                                <h3 className="font-mono text-xs text-rose-400 font-bold uppercase tracking-widest group-hover:text-rose-300 transition-colors">04. The Discovery</h3>
-                                <p className="font-hand text-2xl text-zinc-400 leading-relaxed group-hover:text-zinc-200 transition-colors">
-                                    Every step is recorded. Your path creates a unique <span className="text-zinc-100">History Trail</span> below, allowing you to trace the lineage of your exploration.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="pt-16 mt-8 border-t border-zinc-800 text-center opacity-50 hover:opacity-100 transition-opacity">
-                            <p className="font-hand text-2xl italic text-zinc-500">"Wander. Get lost. Find the patterns that bind these moments together."</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- FULLSCREEN VERTICAL GALLERY COMPONENT ---
-const FullscreenVerticalGallery: React.FC<{
-    history: AnchorState[];
-    images: ImageNode[];
-    tags: Tag[];
-    startHistoryIndex: number;
-    onClose: (finalHistoryIndex: number) => void;
-    nsfwFilterActive: boolean;
-    nsfwTagId?: string;
-}> = ({ history, images, tags, startHistoryIndex, onClose, nsfwFilterActive, nsfwTagId }) => {
-    const scrollRef = useRef<HTMLDivElement>(null);
-    
-    // 1. Filter history to strictly images for the gallery view.
-    // We store the original index to snap back correctly in the history stream on close.
-    // Also respect NSFW filter to ensure 1:1 parity with the visible stream.
-    const galleryItems = useMemo(() => {
-        return history
-            .map((step, idx) => ({ step, originalIndex: idx }))
-            .filter(x => {
-                if (x.step.mode !== 'IMAGE') return false;
-                
-                if (nsfwFilterActive) {
-                    const img = images.find(i => i.id === x.step.id);
-                    if (img) {
-                        const hasNsfwTag = [...img.tagIds, ...(img.aiTagIds || [])].some(tid => {
-                            if (tid === nsfwTagId) return true;
-                            const t = tags.find(tag => tag.id === tid);
-                            return t && t.label.trim().toLowerCase() === 'nsfw';
-                        });
-                        if (hasNsfwTag) return false;
-                    }
-                }
-                return true;
-            });
-    }, [history, images, tags, nsfwFilterActive, nsfwTagId]);
-
-    // 2. Find the starting index in our filtered list based on the history index passed in.
-    const initialGalleryIndex = useMemo(() => {
-        const found = galleryItems.findIndex(x => x.originalIndex === startHistoryIndex);
-        return found >= 0 ? found : 0;
-    }, [galleryItems, startHistoryIndex]);
-
-    const [currentIndex, setCurrentIndex] = useState(initialGalleryIndex);
-
-    // 3. Initial scroll to the clicked image
-    // Using scrollTop is more reliable than scrollIntoView for a 100vh snap container on mount
-    useEffect(() => {
-        if (scrollRef.current && galleryItems.length > 0) {
-            // Use clientHeight for robustness against mobile browser chrome resizing
-            const h = scrollRef.current.clientHeight || window.innerHeight;
-            scrollRef.current.scrollTop = initialGalleryIndex * h;
-        }
-    }, []); // Only run on mount
-
-    // 4. Track scroll to update current index (so we know where we are when we close)
-    const handleScroll = () => {
-        if (scrollRef.current) {
-            const h = scrollRef.current.clientHeight;
-            if (h > 0) {
-                const index = Math.round(scrollRef.current.scrollTop / h);
-                if (index !== currentIndex && index >= 0 && index < galleryItems.length) {
-                    setCurrentIndex(index);
-                }
-            }
-        }
-    };
-
-    const handleClose = () => {
-        const finalHistoryIndex = galleryItems[currentIndex]?.originalIndex ?? 0;
-        onClose(finalHistoryIndex);
-    };
-
-    return (
-        <div className="fixed inset-0 z-[100] bg-black animate-in fade-in duration-300">
-            {/* Close Button */}
-            <button 
-                onClick={handleClose}
-                className="absolute top-6 right-6 z-50 p-3 text-white/50 hover:text-white bg-black/20 hover:bg-white/10 backdrop-blur-md rounded-full transition-all duration-200"
-            >
-                <X size={28} />
-            </button>
-
-            {/* Vertical Swipe Container */}
-            <div 
-                ref={scrollRef}
-                onScroll={handleScroll}
-                className="w-full h-full overflow-y-auto snap-y snap-mandatory scroll-smooth no-scrollbar"
-                style={{ scrollBehavior: 'smooth' }} // Enforce smooth in CSS, though JS manual set above overrides it for init
-            >
-                {galleryItems.map((item, idx) => {
-                    const img = images.find(i => i.id === item.step.id);
-                    if (!img) return null;
-                    
-                    return (
-                        <div key={idx} className="w-full h-full flex items-center justify-center snap-center relative shrink-0">
-                            <img
-                                src={img.originalUrl || img.fileUrl}
-                                alt=""
-                                className="max-w-full max-h-full object-contain p-2 md:p-8 select-none shadow-2xl"
-                                draggable={false}
-                            />
-                        </div>
-                    );
-                })}
-            </div>
-            
-            {/* Minimal Page Indicator */}
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-none">
-                {galleryItems.map((_, i) => (
-                    <div 
-                        key={i} 
-                        className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${i === currentIndex ? 'bg-white scale-150' : 'bg-white/20'}`} 
-                    />
-                ))}
-            </div>
-        </div>
-    );
-};
-
-// --- SATELLITE NAVIGATION LAYER ---
-const SatelliteLayer: React.FC<{
-    node: ImageNode;
-    tags: Tag[];
-    onNavigate: (anchor: AnchorState) => void;
-    isMobile: boolean;
-}> = ({ node, tags, onNavigate, isMobile }) => {
-    const [openPanel, setOpenPanel] = useState<'palette' | 'tags' | null>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    // Handle click outside on mobile to close panels
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-                setOpenPanel(null);
-            }
-        };
-        // Add listener
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    const uniqueTags = useMemo(() => {
-        const allIds = [...node.tagIds, ...(node.aiTagIds || [])];
-        const resolved = allIds.map(id => tags.find(t => t.id === id)).filter(Boolean) as Tag[];
-        const concepts = resolved.filter(t => t.type !== TagType.TECHNICAL && t.type !== TagType.SEASONAL && t.label.toLowerCase() !== 'nsfw');
-        const seen = new Set<string>();
-        const final: Tag[] = [];
-        concepts.forEach(t => { if(!seen.has(t.label.toLowerCase())){ seen.add(t.label.toLowerCase()); final.push(t); } });
-        return final;
-    }, [node, tags]);
-
-    const togglePanel = (panel: 'palette' | 'tags') => {
-        setOpenPanel(prev => prev === panel ? null : panel);
-    };
-
-    const showPalette = !isMobile || openPanel === 'palette';
-    const showTags = !isMobile || openPanel === 'tags';
-
-    return (
-        <div ref={containerRef} className="absolute inset-0 pointer-events-none z-[60]">
-            {/* Left: Palette - Increased offset for landscape mobile (Dynamic Island) */}
-            <div className={`absolute bottom-8 left-8 sm:left-20 lg:bottom-12 lg:left-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 transition-all ${openPanel === 'palette' ? 'z-50' : 'z-40'}`}>
-                <RoughContainer 
-                    title="Spectral ID" 
-                    description={isMobile && !showPalette ? undefined : "Pivot via color space"} 
-                    alignText="left"
-                    onTitleClick={() => togglePanel('palette')}
-                >
-                    {showPalette && (
-                        <div className="transition-all duration-300 animate-in fade-in">
-                            <div className="flex flex-col gap-3 min-w-[140px] pt-1 lg:pt-0">
-                                {node.palette.map((color, i) => (
-                                    <button key={i} className="flex items-center gap-3 group/color cursor-pointer transition-transform hover:translate-x-1" onClick={() => onNavigate({ mode: 'COLOR', id: color })} title={color}>
-                                        <div className="w-8 h-8 rounded-full border-2 border-white/80 shadow-sm" style={{ backgroundColor: color }} />
-                                        <span className="font-hand text-xl text-zinc-500 group-hover/color:text-zinc-800 transition-colors uppercase tracking-widest pr-4">{color}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </RoughContainer>
-            </div>
-
-            {/* Right: Tags - Increased offset for landscape mobile (Dynamic Island) */}
-            <div className={`absolute bottom-8 right-8 sm:right-20 lg:bottom-12 lg:right-10 flex items-end animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100 transition-all ${openPanel === 'tags' ? 'z-50' : 'z-40'}`}>
-                <RoughContainer 
-                    title="Semantic Web" 
-                    description={isMobile && !showTags ? undefined : "Traverse concept clusters"} 
-                    alignText="right"
-                    onTitleClick={() => togglePanel('tags')}
-                >
-                    {showTags && (
-                        <div className="transition-all duration-300 animate-in fade-in">
-                            <div className="grid grid-cols-2 gap-x-8 gap-y-3 items-center max-h-[300px] overflow-y-auto no-scrollbar pr-2 pt-1 lg:pt-0">
-                                {uniqueTags.map(tag => (
-                                    <button key={tag.id} className="text-xl font-hand text-zinc-600 hover:text-indigo-600 hover:translate-x-1 transition-all text-left flex items-center gap-2 group/tag whitespace-nowrap cursor-pointer pr-2" onClick={() => onNavigate({ mode: 'TAG', id: tag.id, meta: tag })}>
-                                        <Hash size={14} className="opacity-30 group-hover/tag:opacity-100 flex-shrink-0 text-indigo-400" />
-                                        <span className="truncate max-w-[160px] pr-3">{tag.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </RoughContainer>
-            </div>
-        </div>
-    );
-};
-
-// --- HISTORY TIMELINE WRAPPER ---
-const HistoryTimeline: React.FC<{ history: AnchorState[]; images: ImageNode[]; tags: Tag[]; activeMode: ExperienceMode; nsfwFilterActive: boolean; nsfwTagId?: string; currentHero?: ImageNode; }> = ({ history, images, tags, activeMode, nsfwFilterActive, nsfwTagId, currentHero }) => {
-    const scrollRef = useRef<HTMLDivElement>(null);
-    useEffect(() => { if (activeMode === 'HISTORY' && scrollRef.current) scrollRef.current.scrollTo({ top: 0, behavior: 'instant' }); }, [activeMode]);
-    useEffect(() => { if (activeMode === 'EXPLORE' && scrollRef.current) scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' }); }, [activeMode]);
-
-    return (
-        <div ref={scrollRef} className={`absolute inset-0 z-40 bg-zinc-900/95 backdrop-blur-md overflow-y-auto snap-y snap-mandatory scroll-smooth no-scrollbar transition-opacity duration-500 ${activeMode === 'HISTORY' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-            <HistoryStream 
-                history={history} 
-                images={images} 
-                tags={tags} 
-                nsfwFilterActive={nsfwFilterActive} 
-                nsfwTagId={nsfwTagId} 
-                currentHero={currentHero} 
-                idPrefix="timeline-history-"
-            />
-        </div>
-    );
-};
-
 // --- MAIN COMPONENT ---
-const Experience: React.FC<ExperienceProps> = ({ 
-    images, 
-    tags, 
+const Experience: React.FC<ExperienceProps> = ({
+    images,
+    tags,
     anchor,
     history,
     experienceMode,
@@ -399,28 +53,26 @@ const Experience: React.FC<ExperienceProps> = ({
     const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const hoveredNodeIdRef = useRef<string | null>(null);
     const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
-    const detailScrollRef = useRef<HTMLDivElement>(null);
-    
+
     // State
     const [simNodes, setSimNodes] = useState<ExperienceNode[]>([]);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [galleryState, setGalleryState] = useState<{ isOpen: boolean, startIndex: number }>({ isOpen: false, startIndex: 0 });
-    const [showScrollTop, setShowScrollTop] = useState(false);
     const [isGuideOpen, setIsGuideOpen] = useState(false);
-    const [isMobile, setIsMobile] = useState(false); // Mobile state tracking
+    const [isMobile, setIsMobile] = useState(false);
     const [windowDimensions, setWindowDimensions] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 0, height: typeof window !== 'undefined' ? window.innerHeight : 0 });
-    
+
+    const nsfwTagId = useMemo(() => tags.find(t => t.label.trim().toLowerCase() === 'nsfw')?.id, [tags]);
+
     // Scoring Engine
     const { activePalette } = useRelevanceScoring(simNodes, setSimNodes, anchor, images, tags, nsfwFilterActive, nsfwTagId, loadingProgress);
 
     useEffect(() => {
         const handleResize = () => {
-            // Treat anything under 1024px as "Mobile" for physics and UI interaction purposes
-            // This covers landscape phones and most tablets
             setIsMobile(window.innerWidth < 1024);
             setWindowDimensions({ width: window.innerWidth, height: window.innerHeight });
         };
-        handleResize(); // Init
+        handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
@@ -434,14 +86,14 @@ const Experience: React.FC<ExperienceProps> = ({
         const metaThemeColor = document.querySelector('meta[name="theme-color"]');
         if (!metaThemeColor) return;
 
-        let color = '#faf9f6'; // Default Light
+        let color = '#faf9f6';
 
         if (galleryState.isOpen) {
-            color = '#000000'; // Black for gallery
+            color = '#000000';
         } else if (isDetailOpen || experienceMode === 'HISTORY') {
-            color = '#18181b'; // Zinc-900 for Detail or History
+            color = '#18181b';
         } else if (isGuideOpen) {
-            color = '#09090b'; // Zinc-950 for Guide
+            color = '#09090b';
         }
 
         metaThemeColor.setAttribute('content', color);
@@ -450,43 +102,17 @@ const Experience: React.FC<ExperienceProps> = ({
         };
     }, [galleryState.isOpen, isDetailOpen, experienceMode, isGuideOpen]);
 
-    // Reset scroll when opening detail view with new node
-    useEffect(() => {
-        if (isDetailOpen && detailScrollRef.current) {
-            detailScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-    }, [anchor.id, isDetailOpen]);
-
-    const nsfwTagId = useMemo(() => tags.find(t => t.label.trim().toLowerCase() === 'nsfw')?.id, [tags]);
-
     // Reset modals if anchor changes to something else
     useEffect(() => {
         if (anchor.mode !== 'IMAGE') {
             setIsDetailOpen(false);
             setGalleryState({ isOpen: false, startIndex: 0 });
-            setShowScrollTop(false);
-        } else {
-            // When entering image mode, ensure button is reset
-            setShowScrollTop(false);
         }
     }, [anchor]);
-
-    // Handlers for Scroll To Top
-    const handleDetailScroll = () => {
-        if (detailScrollRef.current) {
-            setShowScrollTop(detailScrollRef.current.scrollTop > 300);
-        }
-    };
-
-    const handleScrollToTop = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        detailScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-    };
 
     const handleCloseDetail = (e: React.MouseEvent) => {
         e.stopPropagation();
         setIsDetailOpen(false);
-        // Force a zoom reset when closing details to recenter if needed (e.g. rotated while open)
         if (anchor.mode === 'IMAGE' && containerRef.current && zoomRef.current) {
              d3.select(containerRef.current).transition().duration(750).ease(d3.easeCubicOut).call(zoomRef.current.transform, d3.zoomIdentity);
         }
@@ -495,17 +121,16 @@ const Experience: React.FC<ExperienceProps> = ({
     // 2. INITIALIZATION (Grid Layout)
     useEffect(() => {
         if(loadingProgress) return;
-        
-        // Immediate Grid Calculation for Static Startup
+
         const width = window.innerWidth;
         const height = window.innerHeight;
         const centerX = width / 2;
         const centerY = height / 2;
-        const mobile = width < 1024; // Keep this consistent with handleResize
+        const mobile = width < 1024;
 
         setSimNodes((prev: ExperienceNode[]) => {
             const existingMap = new Map<string, ExperienceNode>(prev.map(n => [n.id, n]));
-            
+
             const newNodes = images.map((img) => {
                 const existing = existingMap.get(img.id);
                 const gridSortIndex = existing?.gridSortIndex ?? Math.random();
@@ -526,7 +151,7 @@ const Experience: React.FC<ExperienceProps> = ({
                 return {
                     id: img.id,
                     original: img,
-                    x: startX, 
+                    x: startX,
                     y: startY,
                     vx: existing?.vx || 0,
                     vy: existing?.vy || 0,
@@ -535,7 +160,7 @@ const Experience: React.FC<ExperienceProps> = ({
                     currentOpacity: existing ? existing.currentOpacity : 0,
                     targetOpacity: 0.8,
                     relevanceScore: 0,
-                    isVisible, 
+                    isVisible,
                     orbitSpeed: 0.05 + (Math.random() * 0.1),
                     orbitOffset: Math.random() * Math.PI * 2,
                     orbitRadiusBase: 250 + (Math.random() * 100),
@@ -543,29 +168,26 @@ const Experience: React.FC<ExperienceProps> = ({
                 };
             });
 
-            // Force Grid Positions IMMEDIATELY if mode is NONE (Initial Load / Home)
             if (anchor.mode === 'NONE') {
                 const visibleNodes = newNodes.filter(n => n.isVisible);
                 visibleNodes.sort((a, b) => (a.gridSortIndex || 0) - (b.gridSortIndex || 0));
-                
-                // Match Physics Loop Grid Logic EXACTLY
-                const CELL_W = mobile ? 90 : 120; 
-                const CELL_H = mobile ? 90 : 120; 
+
+                const CELL_W = mobile ? 90 : 120;
+                const CELL_H = mobile ? 90 : 120;
                 const COLS = Math.max(1, Math.floor(width / CELL_W));
                 const total = visibleNodes.length;
                 const gridW = (COLS - 1) * CELL_W;
                 const ROWS = Math.ceil(total / COLS);
                 const gridH = (ROWS - 1) * CELL_H;
-                const startX = centerX - gridW / 2;
-                const startY = centerY - gridH / 2;
+                const gridStartX = centerX - gridW / 2;
+                const gridStartY = centerY - gridH / 2;
 
                 visibleNodes.forEach((node, idx) => {
                     const col = idx % COLS;
                     const row = Math.floor(idx / COLS);
-                    const tx = startX + col * CELL_W;
-                    const ty = startY + row * CELL_H;
-                    
-                    // Instant Snap
+                    const tx = gridStartX + col * CELL_W;
+                    const ty = gridStartY + row * CELL_H;
+
                     node.x = tx;
                     node.y = ty;
                     node.vx = 0;
@@ -578,14 +200,14 @@ const Experience: React.FC<ExperienceProps> = ({
             }
             return newNodes;
         });
-    }, [images, nsfwFilterActive, loadingProgress]); 
+    }, [images, nsfwFilterActive, loadingProgress]);
 
     // 3. PHYSICS LOOP
     useEffect(() => {
         if (!containerRef.current || simNodes.length === 0 || loadingProgress) return;
         const width = containerRef.current.clientWidth;
         const height = containerRef.current.clientHeight;
-        const mobile = width < 1024; // Consistent threshold
+        const mobile = width < 1024;
 
         const zoom = d3.zoom<HTMLDivElement, unknown>()
             .scaleExtent([0.1, 4])
@@ -594,7 +216,7 @@ const Experience: React.FC<ExperienceProps> = ({
                     worldRef.current.style.transform = `translate3d(${event.transform.x}px, ${event.transform.y}px, 0) scale(${event.transform.k})`;
                 }
             });
-        
+
         zoomRef.current = zoom;
         d3.select(containerRef.current).call(zoom).on("dblclick.zoom", null);
 
@@ -605,32 +227,31 @@ const Experience: React.FC<ExperienceProps> = ({
             activeNodes = simNodes.filter(n => n.isVisible && n.id !== anchor.id);
         }
 
-        // Adjust scales for mobile responsiveness
         const maxScaleByHeight = (height * (mobile ? 0.5 : 0.6)) / 288;
-        const heroScale = Math.min(Math.max(maxScaleByHeight, mobile ? 1.0 : 1.2), mobile ? 1.4 : 1.8); 
+        const heroScale = Math.min(Math.max(maxScaleByHeight, mobile ? 1.0 : 1.2), mobile ? 1.4 : 1.8);
         const heroWidth = 192 * heroScale;
         const heroRadius = Math.sqrt(heroWidth ** 2 + (heroWidth * 1.5) ** 2) / 2;
 
         const simulation = d3.forceSimulation<ExperienceNode>(simNodes)
-            .alphaTarget(anchor.mode === 'NONE' ? 0 : 0.05) 
-            .velocityDecay(anchor.mode === 'NONE' ? 0.2 : 0.3) 
+            .alphaTarget(anchor.mode === 'NONE' ? 0 : 0.05)
+            .velocityDecay(anchor.mode === 'NONE' ? 0.2 : 0.3)
             .force("charge", d3.forceManyBody<ExperienceNode>().strength((d) => {
                 if (!d.isVisible) return 0;
-                if (anchor.mode === 'NONE') return 0; 
-                if (d.id === anchor.id) return -1500; 
+                if (anchor.mode === 'NONE') return 0;
+                if (d.id === anchor.id) return -1500;
                 if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return mobile ? -15 : -30;
-                return -200; 
+                return -200;
             }))
             .force("collide", d3.forceCollide<ExperienceNode>().radius((d) => {
                  if (!d.isVisible) return 0;
                  if (anchor.mode === 'NONE') return 0;
                  if (anchor.mode === 'IMAGE') {
-                     if (d.id === anchor.id) return heroRadius * (mobile ? 0.8 : 0.95); 
-                     return mobile ? 30 : 45; // Smaller neighbor radius on mobile
+                     if (d.id === anchor.id) return heroRadius * (mobile ? 0.8 : 0.95);
+                     return mobile ? 30 : 45;
                  }
                  if (anchor.mode === 'TAG' || anchor.mode === 'COLOR') return mobile ? 20 : 30;
-                 return mobile ? 35 : 55; 
-            }).strength(0.8)); 
+                 return mobile ? 35 : 55;
+            }).strength(0.8));
 
         simulation.on("tick", () => {
             const cx = width / 2;
@@ -639,10 +260,9 @@ const Experience: React.FC<ExperienceProps> = ({
 
             simNodes.forEach((node, i) => {
                 if (!node.currentOpacity && !node.targetOpacity && !node.isVisible) {
-                     // Optimization: Skip completely invisible nodes that are settled
                      return;
                 }
-                
+
                 if (!node.isVisible && node.currentOpacity < 0.01 && node.currentScale < 0.01) {
                     node.currentOpacity = 0;
                     node.currentScale = 0;
@@ -652,12 +272,11 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
 
                 const isAnchor = anchor.mode === 'IMAGE' && node.id === anchor.id;
-                // Faster lerp for hiding to clear the view quickly
                 const lerpFactor = !node.isVisible ? 0.4 : 0.1;
 
                 if (node.isVisible && !isAnchor && anchor.mode !== 'NONE' && !['TAG', 'COLOR', 'SEASON', 'DATE', 'CAMERA', 'LENS'].includes(anchor.mode)) {
                      const floatSpeed = 0.5;
-                     const floatAmp = 0.05; 
+                     const floatAmp = 0.05;
                      node.vx = (node.vx || 0) + Math.sin(time * floatSpeed + i) * floatAmp;
                      node.vy = (node.vy || 0) + Math.cos(time * floatSpeed * 0.8 + i) * floatAmp;
                 }
@@ -667,10 +286,9 @@ const Experience: React.FC<ExperienceProps> = ({
                         const idx = activeNodes.indexOf(node);
                         if (idx !== -1) {
                             const total = activeNodes.length;
-                            // Denser grid on mobile
-                            const CELL_W = mobile ? 90 : 120; 
-                            const CELL_H = mobile ? 90 : 120; 
-                            const COLS = Math.max(1, Math.floor(width / CELL_W)); // Dynamic cols
+                            const CELL_W = mobile ? 90 : 120;
+                            const CELL_H = mobile ? 90 : 120;
+                            const COLS = Math.max(1, Math.floor(width / CELL_W));
                             const col = idx % COLS;
                             const row = Math.floor(idx / COLS);
                             const gridW = (COLS - 1) * CELL_W;
@@ -678,8 +296,8 @@ const Experience: React.FC<ExperienceProps> = ({
                             const gridH = (ROWS - 1) * CELL_H;
                             const tx = cx + (col * CELL_W) - (gridW / 2);
                             const ty = cy + (row * CELL_H) - (gridH / 2);
-                            
-                            const pull = 0.15; 
+
+                            const pull = 0.15;
                             node.vx = (node.vx || 0) + (tx - node.x) * pull;
                             node.vy = (node.vy || 0) + (ty - node.y) * pull;
                         }
@@ -692,22 +310,22 @@ const Experience: React.FC<ExperienceProps> = ({
                 }
                 else if (anchor.mode === 'IMAGE') {
                     if (isAnchor) {
-                        const targetY = height * 0.45; 
+                        const targetY = height * 0.45;
                         const k = 0.12;
-                        node.vx = (node.vx || 0) + (cx - node.x) * k; 
+                        node.vx = (node.vx || 0) + (cx - node.x) * k;
                         node.vy = (node.vy || 0) + (targetY - node.y) * k;
-                        node.vx *= 0.8; 
+                        node.vx *= 0.8;
                         node.vy *= 0.8;
                         node.targetScale = heroScale;
                         node.targetOpacity = 1;
-                    } 
+                    }
                     else if (node.isVisible) {
                         const targetY = height * 0.45;
                         const dxRaw = node.x - cx;
                         const dyRaw = node.y - targetY;
                         const distRaw = Math.sqrt(dxRaw*dxRaw + dyRaw*dyRaw) || 1;
                         const boundaryRadius = Math.max(width, height) * 0.9;
-                        
+
                         if (distRaw > boundaryRadius) {
                             const angle = Math.atan2(dyRaw, dxRaw);
                             node.x = cx + Math.cos(angle) * (boundaryRadius * 0.95);
@@ -716,22 +334,21 @@ const Experience: React.FC<ExperienceProps> = ({
                             node.vy = (node.vy || 0) * 0.1;
                         }
 
-                        const gravity = 0.035; 
+                        const gravity = 0.035;
                         node.vx = (node.vx || 0) + (cx - node.x) * gravity;
                         node.vy = (node.vy || 0) + (targetY - node.y) * gravity;
-                        
+
                         const dx = node.x - cx;
                         const dy = node.y - targetY;
                         const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-                        const swirlSpeed = 0.6; 
-                        
+                        const swirlSpeed = 0.6;
+
                         node.vx += (-dy / dist) * swirlSpeed;
                         node.vy += (dx / dist) * swirlSpeed;
-                        
-                        // Smaller neighbors on mobile
+
                         node.targetScale = node.relevanceScore > 40 ? (mobile ? 0.6 : 0.8) : (mobile ? 0.45 : 0.6);
-                        node.targetOpacity = 1.0; 
-                    } 
+                        node.targetOpacity = 1.0;
+                    }
                     else {
                         node.targetScale = 0;
                         node.targetOpacity = 0;
@@ -741,10 +358,8 @@ const Experience: React.FC<ExperienceProps> = ({
                     if (node.isVisible) {
                         const idx = activeNodes.indexOf(node);
                         const total = activeNodes.length;
-                        // Denser grid for filtered view on mobile
-                        // Adjusted for better mobile layout (3 columns preferred, smaller images)
-                        const CELL_W = mobile ? 120 : 220; 
-                        const CELL_H = mobile ? 160 : 220; 
+                        const CELL_W = mobile ? 120 : 220;
+                        const CELL_H = mobile ? 160 : 220;
                         const COLS = Math.max(1, Math.floor(width / CELL_W));
                         const row = Math.floor(idx / COLS);
                         const col = idx % COLS;
@@ -755,9 +370,8 @@ const Experience: React.FC<ExperienceProps> = ({
                         const structureStrength = 0.15;
                         node.vx = (node.vx || 0) + (tx - node.x) * structureStrength;
                         node.vy = (node.vy || 0) + (ty - node.y) * structureStrength;
-                        
-                        // Scale down on mobile to fit the tighter grid
-                        node.targetScale = mobile ? 0.55 : 0.85; 
+
+                        node.targetScale = mobile ? 0.55 : 0.85;
                         node.targetOpacity = 1;
                     } else {
                         node.targetScale = 0;
@@ -775,7 +389,7 @@ const Experience: React.FC<ExperienceProps> = ({
                     el.style.transform = `translate3d(${node.x}px, ${node.y}px, 0) scale(${node.currentScale})`;
                     el.style.opacity = node.currentOpacity.toString();
                     el.style.display = node.currentOpacity < 0.05 ? 'none' : 'block';
-                    
+
                     if (hoveredNodeIdRef.current === node.id || (anchor.mode === 'IMAGE' && node.id === anchor.id)) {
                          el.style.zIndex = node.id === anchor.id ? '2000' : '1000';
                          el.style.filter = 'none';
@@ -794,7 +408,7 @@ const Experience: React.FC<ExperienceProps> = ({
         });
 
         return () => { simulation.stop(); };
-    }, [simNodes, anchor, activePalette, loadingProgress, windowDimensions]); 
+    }, [simNodes, anchor, activePalette, loadingProgress, windowDimensions]);
 
     // 4. ZOOM RESET EFFECT
     useEffect(() => {
@@ -823,13 +437,13 @@ const Experience: React.FC<ExperienceProps> = ({
                     </filter>
                 </defs>
             </svg>
-            
-            {/* Top-Left Navigation Control - INCREASED OFFSET FOR LANDSCAPE MOBILE */}
+
+            {/* Top-Left Navigation Control */}
             {!isDetailOpen && !galleryState.isOpen && !isGuideOpen && (
                 <div className="absolute top-8 left-8 sm:left-20 lg:top-8 lg:left-8 z-[90] animate-in fade-in slide-in-from-top-4 duration-700">
-                    <RoughContainer 
-                        title="Somatic Studio" 
-                        alignText="left" 
+                    <RoughContainer
+                        title="Somatic Studio"
+                        alignText="left"
                         onTitleClick={handleTitleClick}
                     />
                 </div>
@@ -837,8 +451,8 @@ const Experience: React.FC<ExperienceProps> = ({
 
             {/* FIELD GUIDE OVERLAY */}
             {isGuideOpen && (
-                <FieldGuideOverlay 
-                    onClose={() => setIsGuideOpen(false)} 
+                <FieldGuideOverlay
+                    onClose={() => setIsGuideOpen(false)}
                     onAdminAccess={() => {
                         setIsGuideOpen(false);
                         onViewChange('WORKBENCH');
@@ -863,7 +477,7 @@ const Experience: React.FC<ExperienceProps> = ({
                 <div ref={worldRef} className="absolute inset-0 origin-top-left will-change-transform">
                     {simNodes.map(node => {
                         if (!node.isVisible && node.currentOpacity <= 0.05) return null;
-                        
+
                         const isHero = anchor.mode === 'IMAGE' && node.id === anchor.id;
                         const isEsotericSprite = anchor.mode === 'NONE' || (anchor.mode === 'IMAGE' && !isHero);
                         let sizeClasses = 'w-48';
@@ -885,7 +499,7 @@ const Experience: React.FC<ExperienceProps> = ({
                     })}
                 </div>
             </div>
-            
+
             {anchor.mode === 'NONE' && experienceMode === 'EXPLORE' && images.length > 0 && !loadingProgress && (
                 <div className="absolute bottom-8 right-8 sm:right-20 z-[60] animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500">
                      <RoughContainer title="Visual Index" description="Start your journey" alignText="right">
@@ -899,161 +513,25 @@ const Experience: React.FC<ExperienceProps> = ({
 
             {anchor.mode === 'IMAGE' && activeNode && !isDetailOpen && experienceMode === 'EXPLORE' && (<SatelliteLayer node={activeNode.original} tags={tags} onNavigate={onAnchorChange} isMobile={isMobile} />)}
             <HistoryTimeline history={history} images={images} tags={tags} activeMode={experienceMode} nsfwFilterActive={nsfwFilterActive} nsfwTagId={nsfwTagId} currentHero={activeNode?.original} />
-            
+
             {/* DETAIL VIEW OVERLAY */}
             {isDetailOpen && activeNode && experienceMode === 'EXPLORE' && (
-                <>
-                    {/* Fixed Close Button (Outside Scroll Container) - INCREASED OFFSET FOR LANDSCAPE MOBILE */}
-                    <button 
-                        className="fixed top-8 right-8 sm:right-20 z-[70] p-2 text-zinc-400 hover:text-white bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full transition-all duration-200 shadow-xl border border-white/10"
-                        onClick={handleCloseDetail}
-                        title="Close Detail View"
-                    >
-                        <X size={24} />
-                    </button>
-
-                    {/* Scroll To Top Button */}
-                    <button 
-                        onClick={handleScrollToTop}
-                        className={`fixed bottom-8 right-8 z-[70] flex flex-col items-center gap-1 transition-all duration-500 group cursor-pointer ${showScrollTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}
-                        title="Back to Top"
-                    >
-                        <ArrowUp size={32} strokeWidth={1.5} className="text-zinc-500 group-hover:text-zinc-200 transition-transform duration-300 group-hover:-translate-y-1" />
-                        <span className="font-hand text-xl text-zinc-500 group-hover:text-zinc-200 drop-shadow-md">Top</span>
-                    </button>
-
-                    {/* Scrollable Container */}
-                    <div ref={detailScrollRef} onScroll={handleDetailScroll} className="fixed inset-0 z-50 bg-zinc-900/95 backdrop-blur-md overflow-y-auto custom-scrollbar overflow-x-hidden" onClick={handleCloseDetail}>
-                        
-                        <div className="flex flex-col items-center w-full min-h-screen">
-                            {/* Responsive Grid: 
-                                - Mobile Portrait (<640px): 1 col (Stacked)
-                                - Landscape Mobile / Tablet (sm 640px+): 3 cols (Side-by-side, compact, auto center for notch clearance)
-                                - Desktop (lg 1024px+): 3 cols (Spacious)
-                            */}
-                            <div className="w-full max-w-[1920px] min-h-[78vh] grid grid-cols-1 sm:grid-cols-[120px_auto_120px] md:grid-cols-[140px_auto_140px] lg:grid-cols-[160px_1fr_160px] xl:grid-cols-[minmax(250px,350px)_1fr_minmax(250px,350px)] gap-12 sm:gap-4 lg:gap-12 p-8 sm:px-12 sm:py-4 lg:p-12 items-center mx-auto sm:justify-center" onClick={(e) => e.stopPropagation()}>
-                                {/* Left Panel */}
-                                <div className="flex flex-col gap-16 sm:gap-6 lg:gap-16 h-full justify-center order-2 sm:order-1 items-center sm:items-end text-center sm:text-right col-span-1">
-                                    {/* 1. Spectral ID (Moved Top & Increased Size) */}
-                                    <div className="relative group w-40 h-40 sm:w-24 sm:h-24 md:w-28 md:h-28 lg:w-48 lg:h-48 lg:mr-8 flex-shrink-0">
-                                        <div className="absolute inset-0 bg-white/5 rounded-full blur-xl animate-pulse" />
-                                        <EsotericSprite node={activeNode} />
-                                        <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-lg sm:text-xs md:text-xs lg:text-lg font-hand text-zinc-500 opacity-60 whitespace-nowrap pr-4">Spectral ID</span>
-                                    </div>
-
-                                    {/* 2. Date Info */}
-                                    <div className="flex items-center gap-4 sm:gap-2 lg:gap-4">
-                                        <div className="flex flex-col items-center sm:items-end gap-1 text-zinc-400">
-                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'SEASON', id: activeNode.original.inferredSeason }); setIsDetailOpen(false); }} className="text-4xl sm:text-2xl md:text-xl lg:text-4xl text-zinc-200 font-bold flex items-center gap-3 sm:gap-1.5 lg:gap-3 font-hand hover:text-amber-300 transition-colors pr-4 sm:pr-2 lg:pr-4">
-                                                {activeNode.original.inferredSeason}
-                                                {activeNode.original.inferredSeason === 'Summer' ? <Sun size={28} className="sm:w-6 sm:h-6 md:w-5 md:h-5 lg:w-7 lg:h-7" /> : activeNode.original.inferredSeason === 'Winter' ? <Thermometer size={28} className="sm:w-6 sm:h-6 md:w-5 md:h-5 lg:w-7 lg:h-7" /> : <Cloud size={28} className="sm:w-6 sm:h-6 md:w-5 md:h-5 lg:w-7 lg:h-7" />}
-                                            </button>
-                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'DATE', id: activeNode.original.captureTimestamp.toString(), meta: activeNode.original.captureTimestamp }); setIsDetailOpen(false); }} className="text-2xl sm:text-lg md:text-base lg:text-2xl flex items-center gap-2 sm:gap-1 lg:gap-2 font-hand text-zinc-300 hover:text-blue-300 transition-colors pr-4 sm:pr-2 lg:pr-4">
-                                                {new Date(activeNode.original.captureTimestamp).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
-                                            </button>
-                                            <span className="text-xl sm:text-base md:text-sm lg:text-xl italic opacity-70 font-hand pointer-events-none pr-4 sm:pr-2 lg:pr-4">{new Date(activeNode.original.captureTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                        </div>
-                                        <div className="hidden sm:block"><ScribbleConnector direction="right" length="60px" /></div>
-                                    </div>
-
-                                    {/* 3. Palette */}
-                                    <div className="flex items-start gap-4 sm:gap-2 lg:gap-4">
-                                        <div className="flex flex-col items-center sm:items-end gap-4 sm:gap-2 lg:gap-4">
-                                            <h3 className="text-2xl sm:text-lg md:text-base lg:text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 sm:gap-1 lg:gap-2 flex-row-reverse pr-4 sm:pr-2 lg:pr-4"><Palette size={20} className="sm:w-4 sm:h-4 md:w-4 md:h-4 lg:w-5 lg:h-5" /> Palette</h3>
-                                            <div className="flex flex-col gap-3 sm:gap-1.5 lg:gap-3">
-                                                {activeNode.original.palette.map((color, i) => (
-                                                    <div key={i} className="flex items-center gap-3 sm:gap-1.5 lg:gap-3 group cursor-pointer flex-row-reverse" onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'COLOR', id: color, meta: color }); setIsDetailOpen(false); }}>
-                                                        <div className="w-8 h-8 sm:w-6 sm:h-6 md:w-5 md:h-5 lg:w-8 lg:h-8 rounded-full border border-white/20 group-hover:scale-110 transition-transform shadow-md" style={{ backgroundColor: color }} />
-                                                        <span className="font-hand text-xl sm:text-base md:text-sm lg:text-xl text-zinc-500 group-hover:text-zinc-300 transition-colors pr-4 sm:pr-2 lg:pr-4">{color}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="hidden sm:block"><ScribbleConnector direction="right" length="40px" /></div>
-                                    </div>
-                                </div>
-
-                                {/* Center Image (Hero) */}
-                                <div className="flex items-center justify-center h-full relative group order-1 sm:order-2 col-span-1 sm:col-span-1">
-                                    <div 
-                                        className="relative bg-white p-3 sm:p-1.5 lg:p-3 rounded-sm shadow-2xl transition-transform duration-500 group-hover:scale-[1.01] cursor-zoom-in rotate-1 sm:rotate-0" 
-                                        onClick={() => setGalleryState({ isOpen: true, startIndex: 0 })}
-                                    >
-                                        <img src={activeNode.original.originalUrl || activeNode.original.fileUrl} alt="" className="max-h-[50vh] sm:max-h-[85vh] w-auto max-w-[85vw] sm:max-w-[40vw] lg:max-w-[50vw] object-contain bg-zinc-100" />
-                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 pointer-events-none">
-                                            <Maximize2 size={48} className="text-white drop-shadow-md sm:w-8 sm:h-8 lg:w-12 lg:h-12" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Right Panel */}
-                                <div className="flex flex-col gap-16 sm:gap-6 lg:gap-16 h-full justify-center order-3 items-center sm:items-start text-center sm:text-left col-span-1">
-                                    <div className="flex items-center gap-4 sm:gap-2 lg:gap-4">
-                                        <div className="hidden sm:block"><ScribbleConnector direction="left" length="60px" /></div>
-                                        <div className="flex flex-col items-center sm:items-start gap-1 text-zinc-400">
-                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'CAMERA', id: activeNode.original.cameraModel }); setIsDetailOpen(false); }} className="text-3xl sm:text-xl md:text-base lg:text-3xl text-zinc-200 font-bold flex items-center gap-3 sm:gap-1.5 lg:gap-3 font-hand hover:text-emerald-300 transition-colors pr-4 sm:pr-0">
-                                                <Camera size={24} className="opacity-70 sm:w-5 sm:h-5 md:w-5 md:h-5 lg:w-6 lg:h-6" />{activeNode.original.cameraModel}
-                                            </button>
-                                            <button onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'LENS', id: activeNode.original.lensModel }); setIsDetailOpen(false); }} className="text-2xl sm:text-lg md:text-sm lg:text-2xl italic opacity-80 font-hand text-zinc-500 ml-1 sm:ml-0 hover:text-amber-300 transition-colors text-left pr-4 sm:pr-0">
-                                                {activeNode.original.lensModel}
-                                            </button>
-                                            <div className="flex flex-col gap-1 mt-3 sm:mt-1 lg:mt-3 ml-2 sm:ml-0 font-hand text-xl sm:text-sm md:text-xs lg:text-xl text-zinc-400 opacity-80 pointer-events-none pr-4 sm:pr-0 items-center sm:items-start">
-                                                <span className="flex items-center gap-2 sm:gap-1 lg:gap-2"><Aperture size={16} className="sm:w-3 sm:h-3 md:w-4 md:h-4 lg:w-4 lg:h-4" /> {activeNode.original.aperture}</span>
-                                                <span className="flex items-center gap-2 sm:gap-1 lg:gap-2"><Timer size={16} className="sm:w-3 sm:h-3 md:w-4 md:h-4 lg:w-4 lg:h-4" /> {activeNode.original.shutterSpeed}s</span>
-                                                <span className="flex items-center gap-2 sm:gap-1 lg:gap-2"><Gauge size={16} className="sm:w-3 sm:h-3 md:w-4 md:h-4 lg:w-4 lg:h-4" /> ISO {activeNode.original.iso}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-4 sm:gap-2 lg:gap-4">
-                                        <div className="hidden sm:block"><ScribbleConnector direction="left" length="40px" /></div>
-                                        <div className="flex flex-col items-center sm:items-start gap-2 sm:gap-1 lg:gap-2 w-full">
-                                            <h3 className="text-2xl sm:text-lg md:text-base lg:text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 sm:gap-1 lg:gap-2 mb-2 sm:mb-1 lg:mb-2 pr-4 sm:pr-0"><Hash size={20} className="sm:w-4 sm:h-4 md:w-4 md:h-4 lg:w-5 lg:h-5" /> Concepts</h3>
-                                            <div className="grid grid-cols-2 sm:grid-cols-1 gap-x-6 sm:gap-x-2 lg:gap-x-6 gap-y-2 sm:gap-y-0.5 lg:gap-y-2 text-left overflow-y-auto max-h-[400px] sm:max-h-[50vh] lg:max-h-[400px] pr-4 sm:pr-2 lg:pr-4 w-full no-scrollbar relative z-10">
-                                                {(() => { 
-                                                    const allTagIds = Array.from(new Set([...activeNode.original.tagIds, ...(activeNode.original.aiTagIds || [])])); 
-                                                    const candidates = allTagIds.map(tid => tags.find(t => t.id === tid)).filter((t): t is Tag => { if (!t) return false; if (t.type === TagType.TECHNICAL || t.type === TagType.SEASONAL) return false; if (t.label.trim().toLowerCase() === 'nsfw') return false; return true; }); 
-                                                    const seenLabels = new Set<string>(); 
-                                                    const visibleTags: Tag[] = []; 
-                                                    candidates.forEach(t => { const key = t.label.toLowerCase().trim(); if (!seenLabels.has(key)) { seenLabels.add(key); visibleTags.push(t); } }); 
-                                                    return visibleTags.map(tag => (
-                                                        <button key={tag.id} onClick={(e) => { e.stopPropagation(); onAnchorChange({ mode: 'TAG', id: tag.id, meta: tag }); setIsDetailOpen(false); }} className="font-hand text-xl sm:text-lg md:text-base lg:text-xl text-zinc-400 hover:text-zinc-100 hover:scale-105 transition-all duration-200 justify-self-start w-full text-left pr-4 sm:pr-0 whitespace-normal break-words leading-tight py-1 sm:py-0.5" title={tag.label}>
-                                                            {tag.label}
-                                                        </button>
-                                                    )); 
-                                                })()}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {history.length > 1 && (
-                                <div className="w-full relative pb-32" onClick={(e) => e.stopPropagation()}>
-                                     <div className="flex flex-col items-center justify-center pt-2 pb-4 opacity-40">
-                                        <ArrowDown className="text-zinc-500" size={32} strokeWidth={1.5} />
-                                        <span className="font-hand text-zinc-500 text-2xl mt-2">History Trail</span>
-                                     </div>
-                                     <HistoryStream 
-                                        history={history.slice(1)} 
-                                        images={images} 
-                                        tags={tags} 
-                                        nsfwFilterActive={nsfwFilterActive} 
-                                        nsfwTagId={nsfwTagId} 
-                                        currentHero={activeNode.original} 
-                                        onItemClick={(index) => setGalleryState({ isOpen: true, startIndex: index })}
-                                        baseIndexOffset={1}
-                                        idPrefix="detail-history-"
-                                     />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </>
+                <DetailView
+                    activeNode={activeNode}
+                    images={images}
+                    tags={tags}
+                    history={history}
+                    onAnchorChange={(newAnchor) => { onAnchorChange(newAnchor); setIsDetailOpen(false); }}
+                    onClose={handleCloseDetail}
+                    onOpenGallery={(startIndex) => setGalleryState({ isOpen: true, startIndex })}
+                    nsfwFilterActive={nsfwFilterActive}
+                    nsfwTagId={nsfwTagId}
+                />
             )}
-            
+
             {/* FULLSCREEN GALLERY OVERLAY */}
             {galleryState.isOpen && (
-                <FullscreenVerticalGallery
+                <Gallery
                     history={history}
                     images={images}
                     tags={tags}
@@ -1062,17 +540,14 @@ const Experience: React.FC<ExperienceProps> = ({
                     nsfwTagId={nsfwTagId}
                     onClose={(finalHistoryIndex) => {
                         setGalleryState({ isOpen: false, startIndex: 0 });
-                        
-                        // SNAP LOGIC (For both Detail View and History View)
+
                         setTimeout(() => {
-                            // 1. Try to snap the Detail View history trail (if visible)
                             const detailId = `detail-history-item-${finalHistoryIndex}`;
                             const detailEl = document.getElementById(detailId);
                             if (detailEl) {
                                 detailEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }
 
-                            // 2. Try to snap the Main Timeline (if visible in History Mode)
                             const timelineId = `timeline-history-item-${finalHistoryIndex}`;
                             const timelineEl = document.getElementById(timelineId);
                             if (timelineEl) {
