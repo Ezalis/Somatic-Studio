@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as d3 from 'd3';
 import { ImageNode, Tag, TagType, ExperienceNode, ViewMode, ExperienceMode, AnchorState, ExperienceContext } from '../types';
 import { 
-    X, Camera, Maximize2, Calendar, Aperture, Hash, Palette, 
+    X, Camera, Maximize2, Aperture, Hash, Palette,
     ArrowDown, ArrowUp, Sun, Cloud, Thermometer, Gauge, Timer,
     Shield
 } from 'lucide-react';
@@ -391,9 +391,9 @@ const Experience: React.FC<ExperienceProps> = ({
     history,
     experienceMode,
     onAnchorChange,
-    onContextUpdate,
+    onContextUpdate: _onContextUpdate,
     onViewChange,
-    onExperienceModeChange,
+    onExperienceModeChange: _onExperienceModeChange,
     nsfwFilterActive,
     loadingProgress,
     isAIAnalyzing,
@@ -417,7 +417,7 @@ const Experience: React.FC<ExperienceProps> = ({
     const [windowDimensions, setWindowDimensions] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 0, height: typeof window !== 'undefined' ? window.innerHeight : 0 });
     
     // Derived Data State
-    const [commonTags, setCommonTags] = useState<Tag[]>([]);
+    const [_commonTags, setCommonTags] = useState<Tag[]>([]);
     const [activePalette, setActivePalette] = useState<string[]>([]);
 
     useEffect(() => {
@@ -703,7 +703,7 @@ const Experience: React.FC<ExperienceProps> = ({
         setSimNodes((prev: ExperienceNode[]) => {
             const existingMap = new Map<string, ExperienceNode>(prev.map(n => [n.id, n]));
             
-            const newNodes = images.map((img, idx) => {
+            const newNodes = images.map((img) => {
                 const existing = existingMap.get(img.id);
                 const gridSortIndex = existing?.gridSortIndex ?? Math.random();
                 const startX = existing ? existing.x : centerX;
