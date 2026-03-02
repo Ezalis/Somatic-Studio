@@ -4,7 +4,8 @@ import { getCachedPalette, saveCachedPalette, getCachedAITagsForFile, getCachedT
 
 const ALBUM_NAME = 'SomaticStudio';
 const API_BASE = '/api/immich';
-const BATCH_SIZE = 4;
+const DETAIL_BATCH_SIZE = 12;  // Asset detail GETs are lightweight
+const PALETTE_BATCH_SIZE = 6;  // Palette extraction involves image download + CPU work
 
 // --- CLIP Smart Search Tag Definitions ---
 // Each entry maps a display label to a CLIP-optimized query phrase.
@@ -261,22 +262,29 @@ export async function hydrateFromImmich(
     onProgress: (current: number, total: number) => void,
     onBatchLoaded: (nodes: ImageNode[]) => void
 ): Promise<{ images: ImageNode[]; tags: Tag[] }> {
+    // Signal loading immediately (total=0 means "discovering")
+    onProgress(0, 0);
+
     // 1. Find album
     const albumId = await findAlbum();
 
     // 2. Get all assets with EXIF
     const assets = await getAlbumAssets(albumId);
     const total = assets.length;
-    onProgress(0, total);
+    const progressTotal = total * 2; // Phase 1: details (0→N), Phase 2: palettes (N→2N)
+    onProgress(0, progressTotal);
 
-    // 3. Fetch per-asset details (for tags) — batch to avoid overwhelming the server
+    // 3. Fetch per-asset details (for tags) — Phase 1 progress
     const detailedAssets: ImmichAsset[] = [];
-    for (let i = 0; i < assets.length; i += BATCH_SIZE) {
-        const batch = assets.slice(i, i + BATCH_SIZE);
+    let detailsProcessed = 0;
+    for (let i = 0; i < assets.length; i += DETAIL_BATCH_SIZE) {
+        const batch = assets.slice(i, i + DETAIL_BATCH_SIZE);
         const details = await Promise.all(
             batch.map(a => getAssetDetail(a.id).catch(() => a))
         );
         detailedAssets.push(...details);
+        detailsProcessed += batch.length;
+        onProgress(Math.min(detailsProcessed, total), progressTotal);
     }
 
     // 4. Build native tags from Immich
@@ -316,12 +324,12 @@ export async function hydrateFromImmich(
 
     const allTags = [...nativeTags, ...Array.from(technicalTagMap.values()), ...restoredDefs];
 
-    // 6. Convert assets to ImageNodes and extract palettes in batches
+    // 6. Convert assets to ImageNodes and extract palettes — Phase 2 progress
     const allNodes: ImageNode[] = [];
-    let processed = 0;
+    let palettesProcessed = 0;
 
-    for (let i = 0; i < detailedAssets.length; i += BATCH_SIZE) {
-        const batch = detailedAssets.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < detailedAssets.length; i += PALETTE_BATCH_SIZE) {
+        const batch = detailedAssets.slice(i, i + PALETTE_BATCH_SIZE);
         const batchNodes: ImageNode[] = [];
 
         await Promise.all(
@@ -353,8 +361,8 @@ export async function hydrateFromImmich(
             onBatchLoaded(batchNodes);
         }
 
-        processed += batch.length;
-        onProgress(Math.min(processed, total), total);
+        palettesProcessed += batch.length;
+        onProgress(Math.min(total + palettesProcessed, progressTotal), progressTotal);
 
         // Small delay to keep UI responsive
         await new Promise(resolve => setTimeout(resolve, 20));
