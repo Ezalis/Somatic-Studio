@@ -103,7 +103,7 @@ const Gallery: React.FC<GalleryProps> = ({ history, images, tags, startHistoryIn
                                 previewSrc={img.fileUrl}
                                 fullSrc={img.originalUrl}
                                 className="w-full h-full place-items-center"
-                                imgClassName="max-w-full max-h-full object-contain p-2 md:p-8 select-none shadow-2xl"
+                                imgClassName="max-w-[100vw] max-h-[100vh] object-contain p-2 md:p-8 select-none shadow-2xl"
                                 loading="lazy"
                             />
                         </div>
