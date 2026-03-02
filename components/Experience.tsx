@@ -108,6 +108,16 @@ const Experience: React.FC<ExperienceProps> = ({
         };
     }, [galleryState.isOpen, isDetailOpen, experienceMode, isGuideOpen]);
 
+    // Preload original image when an image is anchored
+    useEffect(() => {
+        if (anchor.mode !== 'IMAGE') return;
+        const img = images.find(i => i.id === anchor.id);
+        if (!img?.originalUrl) return;
+        const preloader = new Image();
+        preloader.src = img.originalUrl;
+        return () => { preloader.src = ''; };
+    }, [anchor.mode, anchor.id, images]);
+
     // Reset modals if anchor changes to something else
     useEffect(() => {
         if (anchor.mode !== 'IMAGE') {
