@@ -260,7 +260,8 @@ function buildTagsFromImmichNative(
 
 export async function hydrateFromImmich(
     onProgress: (current: number, total: number) => void,
-    onBatchLoaded: (nodes: ImageNode[]) => void
+    onBatchLoaded: (nodes: ImageNode[]) => void,
+    onPreviewReady?: (urls: string[]) => void
 ): Promise<{ images: ImageNode[]; tags: Tag[] }> {
     // Signal loading immediately (total=0 means "discovering")
     onProgress(0, 0);
@@ -273,6 +274,13 @@ export async function hydrateFromImmich(
     const total = assets.length;
     const progressTotal = total * 2; // Phase 1: details (0→N), Phase 2: palettes (N→2N)
     onProgress(0, progressTotal);
+
+    // Send a random sample of thumbnail URLs for the loading screen
+    if (onPreviewReady && total > 0) {
+        const shuffled = [...assets].sort(() => Math.random() - 0.5);
+        const sample = shuffled.slice(0, Math.min(8, total));
+        onPreviewReady(sample.map(a => getThumbnailUrl(a.id)));
+    }
 
     // 3. Fetch per-asset details (for tags) — Phase 1 progress
     const detailedAssets: ImmichAsset[] = [];

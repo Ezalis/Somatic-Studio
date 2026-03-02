@@ -14,6 +14,7 @@ const App: React.FC = () => {
     const [images, setImages] = useState<ImageNode[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
     const [loadingProgress, setLoadingProgress] = useState<{current: number, total: number} | null>(null);
+    const [previewUrls, setPreviewUrls] = useState<string[]>([]);
     const [isInitializing, setIsInitializing] = useState(true);
 
     // AI State (CLIP Smart Search)
@@ -50,7 +51,8 @@ const App: React.FC = () => {
                             const uniqueNew = newBatch.filter(i => !ids.has(i.id));
                             return [...prev, ...uniqueNew].sort((a, b) => a.captureTimestamp - b.captureTimestamp);
                         });
-                    }
+                    },
+                    (urls) => setPreviewUrls(urls)
                 );
 
                 setTags(loadedTags);
@@ -111,7 +113,8 @@ const App: React.FC = () => {
                             const uniqueNew = newBatch.filter(i => !ids.has(i.id));
                             return [...prev, ...uniqueNew].sort((a, b) => a.captureTimestamp - b.captureTimestamp);
                         });
-                    }
+                    },
+                    (urls) => setPreviewUrls(urls)
                 );
 
                 setTags(loadedTags);
@@ -312,6 +315,7 @@ const App: React.FC = () => {
                         onExperienceModeChange={setExperienceMode}
                         nsfwFilterActive={nsfwFilterActive}
                         loadingProgress={loadingProgress}
+                        previewUrls={previewUrls}
                         isAIAnalyzing={isAIAnalyzing}
                         analysisProgress={analysisProgress}
                     />
