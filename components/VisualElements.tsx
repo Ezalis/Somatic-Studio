@@ -140,8 +140,7 @@ export const LoadingOverlay: React.FC<{
     progress: { current: number, total: number };
     images: ImageNode[];
     tags: Tag[];
-    previewUrls?: string[];
-}> = ({ progress, images, tags, previewUrls = [] }) => {
+}> = ({ progress, images, tags }) => {
     const latestImage = images.length > 0 ? images[images.length - 1] : null;
 
     // Robust percentage calculation
@@ -179,30 +178,6 @@ export const LoadingOverlay: React.FC<{
         }
     }, [images, tags]);
 
-    // Stagger-reveal preview thumbnails one at a time
-    const [visiblePreviews, setVisiblePreviews] = useState(0);
-    useEffect(() => {
-        if (previewUrls.length === 0) return;
-        setVisiblePreviews(0);
-        let i = 0;
-        const interval = setInterval(() => {
-            i++;
-            setVisiblePreviews(i);
-            if (i >= previewUrls.length) clearInterval(interval);
-        }, 2200);
-        return () => clearInterval(interval);
-    }, [previewUrls]);
-
-    // Stable random positions for preview thumbnails
-    const previewPositions = useMemo(() =>
-        previewUrls.map((_, i) => ({
-            x: 8 + ((i * 37 + 13) % 70),
-            y: 5 + ((i * 53 + 7) % 75),
-            rotation: ((i * 17 + 3) % 25) - 12,
-            scale: 0.85 + ((i * 13) % 30) / 100,
-        })),
-    [previewUrls]);
-
     const polaroidRotation = useMemo(() => (Math.random() - 0.5) * 6, [latestImage]);
 
     return (
@@ -212,23 +187,6 @@ export const LoadingOverlay: React.FC<{
                  {floatingItems.map(item => (
                      <div key={item.id} className="absolute text-white/20 text-lg md:text-2xl animate-in fade-in zoom-in duration-1000 fill-mode-forwards pr-4" style={{ left: `${item.x}%`, top: `${item.y}%`, transform: `rotate(${item.rotation}deg)`, animationDelay: `${item.delay}s` }}>
                          {item.type === 'COLOR' ? (<div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full" style={{backgroundColor: item.text}} /><span className="font-mono text-sm">{item.text}</span></div>) : (item.text)}
-                     </div>
-                 ))}
-             </div>
-             {/* Streaming preview thumbnails */}
-             <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                 {previewUrls.slice(0, visiblePreviews).map((url, i) => (
-                     <div
-                         key={url}
-                         className="absolute w-20 h-20 md:w-28 md:h-28 rounded-sm overflow-hidden shadow-lg animate-in fade-in zoom-in-75 duration-1000 fill-mode-forwards"
-                         style={{
-                             left: `${previewPositions[i].x}%`,
-                             top: `${previewPositions[i].y}%`,
-                             transform: `rotate(${previewPositions[i].rotation}deg) scale(${previewPositions[i].scale})`,
-                             opacity: 0.12,
-                         }}
-                     >
-                         <img src={url} alt="" className="w-full h-full object-cover grayscale" />
                      </div>
                  ))}
              </div>

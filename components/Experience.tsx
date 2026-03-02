@@ -37,7 +37,6 @@ interface ExperienceProps {
     onExperienceModeChange: (mode: ExperienceMode) => void;
     nsfwFilterActive: boolean;
     loadingProgress?: { current: number, total: number } | null;
-    previewUrls?: string[];
     isAIAnalyzing?: boolean;
     analysisProgress?: number;
 }
@@ -397,7 +396,6 @@ const Experience: React.FC<ExperienceProps> = ({
     onExperienceModeChange,
     nsfwFilterActive,
     loadingProgress,
-    previewUrls,
     isAIAnalyzing,
     analysisProgress
 }) => {
@@ -1045,7 +1043,7 @@ const Experience: React.FC<ExperienceProps> = ({
                 />
             )}
 
-            {loadingProgress && (loadingProgress.total === 0 || loadingProgress.current < loadingProgress.total) && (<LoadingOverlay progress={loadingProgress} images={images} tags={tags} previewUrls={previewUrls} />)}
+            {loadingProgress && (loadingProgress.total === 0 || loadingProgress.current < loadingProgress.total) && (<LoadingOverlay progress={loadingProgress} images={images} tags={tags} />)}
             {isAIAnalyzing && (
                 <div className="absolute bottom-0 left-0 right-0 z-[70] pointer-events-none">
                     <div className="h-1 bg-zinc-200/50">
