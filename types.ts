@@ -117,6 +117,22 @@ export interface ScoreBreakdown {
     technical: number;
 }
 
+export interface PhysicsConfig {
+    velocityDecay: number;
+    velocityDecayIdle: number;
+    swirlSpeed: number;
+    floatPerturbation: number;
+    floatSpeed: number;
+    heroGravity: number;
+    neighborGravity: number;
+    gridPull: number;
+    filterGridPull: number;
+    damping: number;
+    lerpVisible: number;
+    lerpHidden: number;
+    boundaryScale: number;
+}
+
 export interface ExperienceContext {
     commonTags: Tag[];
     activePalette: string[];
