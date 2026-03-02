@@ -260,8 +260,7 @@ function buildTagsFromImmichNative(
 
 export async function hydrateFromImmich(
     onProgress: (current: number, total: number) => void,
-    onBatchLoaded: (nodes: ImageNode[]) => void,
-    onPreviewReady?: (urls: string[]) => void
+    onBatchLoaded: (nodes: ImageNode[]) => void
 ): Promise<{ images: ImageNode[]; tags: Tag[] }> {
     // Signal loading immediately (total=0 means "discovering")
     onProgress(0, 0);
@@ -274,13 +273,6 @@ export async function hydrateFromImmich(
     const total = assets.length;
     const progressTotal = total * 2; // Phase 1: details (0→N), Phase 2: palettes (N→2N)
     onProgress(0, progressTotal);
-
-    // Send a random sample of thumbnail URLs for the loading screen
-    if (onPreviewReady && total > 0) {
-        const shuffled = [...assets].sort(() => Math.random() - 0.5);
-        const sample = shuffled.slice(0, Math.min(8, total));
-        onPreviewReady(sample.map(a => getThumbnailUrl(a.id)));
-    }
 
     // 3. Fetch per-asset details (for tags) — Phase 1 progress
     const detailedAssets: ImmichAsset[] = [];
@@ -332,41 +324,51 @@ export async function hydrateFromImmich(
 
     const allTags = [...nativeTags, ...Array.from(technicalTagMap.values()), ...restoredDefs];
 
-    // 6. Convert assets to ImageNodes and extract palettes — Phase 2 progress
+    // 6a. Create ImageNodes immediately (empty palettes) — feed the loading overlay
     const allNodes: ImageNode[] = [];
+    for (const asset of detailedAssets) {
+        try {
+            const nativeTagIds = assetTagMap.get(asset.id) || [];
+            const node = assetToImageNode(asset, nativeTags, nativeTagIds);
+
+            if (nativeTagIds.length === 0) {
+                const cachedAiTags = getCachedAITagsForFile(asset.id);
+                if (cachedAiTags.length > 0) {
+                    node.aiTagIds = [...new Set([...node.aiTagIds, ...cachedAiTags])];
+                }
+            }
+
+            allNodes.push(node);
+        } catch (e) {
+            console.error(`Failed to create node for ${asset.originalFileName}:`, e);
+        }
+    }
+
+    // Send nodes to UI in batches so the polaroid animates through them
+    for (let i = 0; i < allNodes.length; i += PALETTE_BATCH_SIZE) {
+        onBatchLoaded(allNodes.slice(i, i + PALETTE_BATCH_SIZE));
+    }
+
+    // 6b. Extract palettes and update nodes — Phase 2 progress
     let palettesProcessed = 0;
 
-    for (let i = 0; i < detailedAssets.length; i += PALETTE_BATCH_SIZE) {
-        const batch = detailedAssets.slice(i, i + PALETTE_BATCH_SIZE);
-        const batchNodes: ImageNode[] = [];
+    for (let i = 0; i < allNodes.length; i += PALETTE_BATCH_SIZE) {
+        const batch = allNodes.slice(i, i + PALETTE_BATCH_SIZE);
 
         await Promise.all(
-            batch.map(async (asset) => {
+            batch.map(async (node) => {
                 try {
-                    const nativeTagIds = assetTagMap.get(asset.id) || [];
-                    const node = assetToImageNode(asset, nativeTags, nativeTagIds);
-
-                    // Only fall back to IndexedDB cache if Immich has zero tags for this asset
-                    if (nativeTagIds.length === 0) {
-                        const cachedAiTags = getCachedAITagsForFile(asset.id);
-                        if (cachedAiTags.length > 0) {
-                            node.aiTagIds = [...new Set([...node.aiTagIds, ...cachedAiTags])];
-                        }
-                    }
-
-                    // Extract palette from thumbnail
-                    node.palette = await extractPaletteFromAsset(asset.id);
-
-                    batchNodes.push(node);
+                    node.palette = await extractPaletteFromAsset(node.id);
                 } catch (e) {
-                    console.error(`Failed to process asset ${asset.originalFileName}:`, e);
+                    console.error(`Failed to extract palette for ${node.fileName}:`, e);
                 }
             })
         );
 
-        allNodes.push(...batchNodes);
-        if (batchNodes.length > 0) {
-            onBatchLoaded(batchNodes);
+        // Send palette-updated nodes back so the UI can merge them
+        const updatedBatch = batch.filter(n => n.palette.length > 0);
+        if (updatedBatch.length > 0) {
+            onBatchLoaded(updatedBatch);
         }
 
         palettesProcessed += batch.length;

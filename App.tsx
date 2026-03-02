@@ -14,7 +14,6 @@ const App: React.FC = () => {
     const [images, setImages] = useState<ImageNode[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
     const [loadingProgress, setLoadingProgress] = useState<{current: number, total: number} | null>(null);
-    const [previewUrls, setPreviewUrls] = useState<string[]>([]);
     const [isInitializing, setIsInitializing] = useState(true);
 
     // AI State (CLIP Smart Search)
@@ -47,12 +46,22 @@ const App: React.FC = () => {
                     },
                     (newBatch) => {
                         setImages(prev => {
-                            const ids = new Set(prev.map(i => i.id));
-                            const uniqueNew = newBatch.filter(i => !ids.has(i.id));
-                            return [...prev, ...uniqueNew].sort((a, b) => a.captureTimestamp - b.captureTimestamp);
+                            const prevMap = new Map(prev.map(i => [i.id, i]));
+                            let changed = false;
+                            for (const node of newBatch) {
+                                const existing = prevMap.get(node.id);
+                                if (!existing) {
+                                    prevMap.set(node.id, node);
+                                    changed = true;
+                                } else if (node.palette.length > 0 && existing.palette.length === 0) {
+                                    prevMap.set(node.id, { ...existing, palette: node.palette });
+                                    changed = true;
+                                }
+                            }
+                            if (!changed) return prev;
+                            return Array.from(prevMap.values()).sort((a, b) => a.captureTimestamp - b.captureTimestamp);
                         });
-                    },
-                    (urls) => setPreviewUrls(urls)
+                    }
                 );
 
                 setTags(loadedTags);
@@ -109,12 +118,22 @@ const App: React.FC = () => {
                     },
                     (newBatch) => {
                         setImages(prev => {
-                            const ids = new Set(prev.map(i => i.id));
-                            const uniqueNew = newBatch.filter(i => !ids.has(i.id));
-                            return [...prev, ...uniqueNew].sort((a, b) => a.captureTimestamp - b.captureTimestamp);
+                            const prevMap = new Map(prev.map(i => [i.id, i]));
+                            let changed = false;
+                            for (const node of newBatch) {
+                                const existing = prevMap.get(node.id);
+                                if (!existing) {
+                                    prevMap.set(node.id, node);
+                                    changed = true;
+                                } else if (node.palette.length > 0 && existing.palette.length === 0) {
+                                    prevMap.set(node.id, { ...existing, palette: node.palette });
+                                    changed = true;
+                                }
+                            }
+                            if (!changed) return prev;
+                            return Array.from(prevMap.values()).sort((a, b) => a.captureTimestamp - b.captureTimestamp);
                         });
-                    },
-                    (urls) => setPreviewUrls(urls)
+                    }
                 );
 
                 setTags(loadedTags);
@@ -315,7 +334,6 @@ const App: React.FC = () => {
                         onExperienceModeChange={setExperienceMode}
                         nsfwFilterActive={nsfwFilterActive}
                         loadingProgress={loadingProgress}
-                        previewUrls={previewUrls}
                         isAIAnalyzing={isAIAnalyzing}
                         analysisProgress={analysisProgress}
                     />
