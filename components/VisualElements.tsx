@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ImageNode, Tag, TagType, ExperienceNode, AnchorState } from '../types';
+import { ImageNode, Tag, ExperienceNode, AnchorState } from '../types';
 import { getIntersectionAttributes, hexToRgbVals } from '../services/dataService';
 import { 
     Activity, Camera, Sun, Cloud, Thermometer, Calendar, Clock, 
-    Hash, Palette, Aperture, LayoutGrid, Snowflake, Gauge, Timer 
+    Hash, Palette, Aperture, LayoutGrid, Snowflake
 } from 'lucide-react';
 
 // --- Procedural Sprite Component ---
@@ -419,8 +419,8 @@ export const HistoryStream: React.FC<{
                             
                             {/* Desktop Annotations */}
                             <div className="hidden md:block"><Annotation side="left" compact verticalOffset={0} isCurved={true}><div className="flex flex-col gap-2 items-end">{colorMatches.slice(0, 3).map((pair, idx) => (<div key={idx} className="flex items-center gap-2"><span className="text-xs font-mono opacity-50 uppercase">{pair.cA}</span><div className="flex -space-x-1"><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cA}} /><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cB}} /></div></div>))}{techMatches.length > 0 && (<div className="mt-1 text-right">{techMatches.map((t, idx) => (<span key={idx} className="block text-zinc-400 text-sm">{t}</span>))}</div>)}</div></Annotation></div>
-                            <div className="hidden md:block"><Annotation side="right" compact verticalOffset={0} isCurved={false}><div className="flex flex-col gap-1 items-start text-zinc-400">{commonTags.slice(0, 4).map((tag, idx) => (<div key={tag.id} className="flex items-center gap-2"><Hash size={12} className="opacity-50" /><span>{tag.label}</span></div>))}{commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}</div></Annotation></div>
-                            
+                            <div className="hidden md:block"><Annotation side="right" compact verticalOffset={0} isCurved={false}><div className="flex flex-col gap-1 items-start text-zinc-400">{commonTags.slice(0, 4).map((tag) => (<div key={tag.id} className="flex items-center gap-2"><Hash size={12} className="opacity-50" /><span>{tag.label}</span></div>))}{commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}</div></Annotation></div>
+
                             {/* Mobile Info */}
                             <MobileConnectionInfo colorMatches={colorMatches} techMatches={techMatches} commonTags={commonTags} />
                         </div>
@@ -489,7 +489,7 @@ export const HistoryStream: React.FC<{
                         {step.mode === 'IMAGE' && (() => {
                             const img = images.find(i => i.id === step.id);
                             if (!img) return null;
-                            const { dateSide, techSide, tilt, verticalOffset, isCurved, seed } = getAnnotationLayout(img.id);
+                            const { dateSide, techSide, tilt, isCurved } = getAnnotationLayout(img.id);
                             const dateObj = new Date(img.captureTimestamp);
                             const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                             const dateStr = dateObj.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
@@ -566,7 +566,7 @@ export const HistoryStream: React.FC<{
                                                 
                                                 {/* Desktop Annotations */}
                                                 <div className="hidden md:block"><Annotation side="left" compact verticalOffset={0} isCurved={true}><div className="flex flex-col gap-2 items-end">{colorMatches.slice(0, 3).map((pair, idx) => (<div key={idx} className="flex items-center gap-2"><span className="text-xs font-mono opacity-50 uppercase">{pair.cA}</span><div className="flex -space-x-1"><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cA}} /><div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: pair.cB}} /></div></div>))}{techMatches.length > 0 && (<div className="mt-1 text-right">{techMatches.map((t, idx) => (<span key={idx} className="block text-zinc-400 text-sm">{t}</span>))}</div>)}</div></Annotation></div>
-                                                <div className="hidden md:block"><Annotation side="right" compact verticalOffset={0} isCurved={false}><div className="flex flex-col gap-1 items-start text-zinc-400">{commonTags.slice(0, 4).map((tag, idx) => (<div key={tag.id} className="flex items-center gap-2"><Hash size={12} className="opacity-50" /><span>{tag.label}</span></div>))}{commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}</div></Annotation></div>
+                                                <div className="hidden md:block"><Annotation side="right" compact verticalOffset={0} isCurved={false}><div className="flex flex-col gap-1 items-start text-zinc-400">{commonTags.slice(0, 4).map((tag) => (<div key={tag.id} className="flex items-center gap-2"><Hash size={12} className="opacity-50" /><span>{tag.label}</span></div>))}{commonTags.length > 4 && <span className="text-xs opacity-50 italic">+{commonTags.length - 4} more...</span>}</div></Annotation></div>
                                                 
                                                 {/* Mobile Info */}
                                                 <MobileConnectionInfo colorMatches={colorMatches} techMatches={techMatches} commonTags={commonTags} />

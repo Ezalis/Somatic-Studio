@@ -79,6 +79,7 @@ export interface ExperienceNode extends SimulationNodeDatum {
     currentOpacity: number;
     targetOpacity: number;
     relevanceScore: number;
+    scoreBreakdown?: ScoreBreakdown;
     isVisible: boolean;
     
     // Orbit/Grid Props (Procedural Layouts)
@@ -106,6 +107,30 @@ export interface AnchorState {
     mode: AnchorMode;
     id: string; // UUID, TagID, Hex Color, Timestamp (string), or Model Name
     meta?: any; // Tag object, Color string, etc.
+}
+
+export interface ScoreBreakdown {
+    total: number;
+    temporal: number;
+    thematic: number;
+    visual: number;
+    technical: number;
+}
+
+export interface PhysicsConfig {
+    velocityDecay: number;
+    velocityDecayIdle: number;
+    swirlSpeed: number;
+    floatPerturbation: number;
+    floatSpeed: number;
+    heroGravity: number;
+    neighborGravity: number;
+    gridPull: number;
+    filterGridPull: number;
+    damping: number;
+    lerpVisible: number;
+    lerpHidden: number;
+    boundaryScale: number;
 }
 
 export interface ExperienceContext {
