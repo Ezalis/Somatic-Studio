@@ -32,8 +32,9 @@ export const EsotericSprite = React.memo(({ node, scoreBreakdown }: { node: Expe
                 </filter>
                 {halo && (
                     <radialGradient id={`halo-${node.id}`}>
-                        <stop offset="0%" stopColor={halo.color} stopOpacity={halo.intensity * 0.6} />
-                        <stop offset="60%" stopColor={halo.color} stopOpacity={halo.intensity * 0.25} />
+                        <stop offset="0%" stopColor={halo.color} stopOpacity={halo.intensity * 0.9} />
+                        <stop offset="40%" stopColor={halo.color} stopOpacity={halo.intensity * 0.5} />
+                        <stop offset="75%" stopColor={halo.color} stopOpacity={halo.intensity * 0.15} />
                         <stop offset="100%" stopColor={halo.color} stopOpacity={0} />
                     </radialGradient>
                 )}
@@ -41,7 +42,7 @@ export const EsotericSprite = React.memo(({ node, scoreBreakdown }: { node: Expe
             {halo && (
                 <circle
                     cx="50" cy="50"
-                    r={48 + halo.intensity * 7}
+                    r={70 + halo.intensity * 20}
                     fill={`url(#halo-${node.id})`}
                     className="animate-pulse"
                     style={{ animationDuration: `${5 + (seed % 4)}s` }}
