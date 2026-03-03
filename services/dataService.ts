@@ -78,7 +78,8 @@ export function getZoneTarget(
     heroCy: number,
     rank: number,
     totalVisible: number,
-    mobile: boolean
+    mobile: boolean,
+    clusterAngles?: Map<ZoneName, number>
 ): ZoneTarget {
     const dims = (['temporal', 'thematic', 'visual', 'technical'] as const)
         .map(key => ({ key, value: Math.max(0, breakdown[key]) }));
@@ -89,11 +90,23 @@ export function getZoneTarget(
     let dy = 0;
 
     if (totalPositive > 0) {
-        for (const d of dims) {
-            const vec = ZONE_VECTORS[d.key];
-            const weight = d.value / totalPositive;
-            dx += vec.dx * weight;
-            dy += vec.dy * weight;
+        if (clusterAngles && clusterAngles.size > 0) {
+            // Dynamic cluster angles
+            for (const d of dims) {
+                const angle = clusterAngles.get(d.key);
+                if (angle === undefined) continue;
+                const weight = d.value / totalPositive;
+                dx += Math.cos(angle) * weight;
+                dy += Math.sin(angle) * weight;
+            }
+        } else {
+            // Fallback: fixed compass vectors
+            for (const d of dims) {
+                const vec = ZONE_VECTORS[d.key];
+                const weight = d.value / totalPositive;
+                dx += vec.dx * weight;
+                dy += vec.dy * weight;
+            }
         }
     } else {
         // Fallback: spread evenly using rank as angle
@@ -275,6 +288,25 @@ export function groupNodesByZone(neighbors: ExperienceNode[]): Map<ZoneName, Exp
         groups.set(zone, list);
     }
     return groups;
+}
+
+/**
+ * Compute evenly-spaced angular positions for populated zones.
+ * Angles start from top (-π/2) and proceed clockwise.
+ * Only zones with at least one member get an angle.
+ */
+export function computeClusterAngles(neighbors: ExperienceNode[]): Map<ZoneName, number> {
+    const groups = groupNodesByZone(neighbors);
+    const populated = ZONE_KEYS.filter(key => (groups.get(key)?.length ?? 0) > 0);
+    if (populated.length === 0) return new Map();
+
+    const step = (2 * Math.PI) / populated.length;
+    const startAngle = -Math.PI / 2;
+    const angles = new Map<ZoneName, number>();
+    populated.forEach((zone, i) => {
+        angles.set(zone, startAngle + i * step);
+    });
+    return angles;
 }
 
 function summarizeTemporalZone(nodes: ExperienceNode[], anchorImg: ImageNode): ZoneSummary {
