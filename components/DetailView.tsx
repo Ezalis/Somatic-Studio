@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ImageNode, Tag, TagType, ExperienceNode, AnchorState } from '../types';
+import { ImageNode, Tag, TagType, ExperienceNode, AnchorState, NeighborhoodSummary, ZoneName } from '../types';
 import {
     X, Camera, Maximize2, Aperture, Hash, Palette,
     ArrowDown, ArrowUp, Sun, Cloud, Thermometer, Gauge, Timer
@@ -17,6 +17,7 @@ interface DetailViewProps {
     onOpenGallery: (startIndex: number) => void;
     nsfwFilterActive: boolean;
     nsfwTagId?: string;
+    neighborhoodSummary?: NeighborhoodSummary | null;
 }
 
 const DetailView: React.FC<DetailViewProps> = ({
@@ -29,6 +30,7 @@ const DetailView: React.FC<DetailViewProps> = ({
     onOpenGallery,
     nsfwFilterActive,
     nsfwTagId,
+    neighborhoodSummary,
 }) => {
     const detailScrollRef = useRef<HTMLDivElement>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
@@ -180,6 +182,40 @@ const DetailView: React.FC<DetailViewProps> = ({
                             </div>
                         </div>
                     </div>
+
+                    {neighborhoodSummary && neighborhoodSummary.totalNeighbors > 0 && (
+                        <div className="w-full max-w-3xl mx-auto px-8 py-4" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex flex-col items-center justify-center pt-2 pb-4 opacity-40">
+                                <ArrowDown className="text-zinc-500" size={32} strokeWidth={1.5} />
+                                <span className="font-hand text-zinc-500 text-2xl mt-2">Neighborhood</span>
+                            </div>
+                            <p className="font-hand text-xl sm:text-2xl text-zinc-400 text-center leading-relaxed max-w-2xl mx-auto">
+                                {neighborhoodSummary.narrative}
+                            </p>
+                            <div className="flex flex-wrap justify-center gap-3 mt-6">
+                                {neighborhoodSummary.zones.map(z => {
+                                    const chipColors: Record<ZoneName, string> = {
+                                        temporal:  'text-blue-400 border-blue-400/30',
+                                        thematic:  'text-purple-400 border-purple-400/30',
+                                        visual:    'text-amber-400 border-amber-400/30',
+                                        technical: 'text-green-400 border-green-400/30',
+                                    };
+                                    const dotColors: Record<ZoneName, string> = {
+                                        temporal:  'bg-blue-400',
+                                        thematic:  'bg-purple-400',
+                                        visual:    'bg-amber-400',
+                                        technical: 'bg-green-400',
+                                    };
+                                    return (
+                                        <span key={z.zone} className={`font-hand text-lg px-3 py-1 rounded-full border flex items-center gap-2 ${chipColors[z.zone]}`}>
+                                            <span className={`w-2 h-2 rounded-full ${dotColors[z.zone]}`} />
+                                            {z.count} {z.label}
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {history.length > 1 && (
                         <div className="w-full relative pb-32" onClick={(e) => e.stopPropagation()}>

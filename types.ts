@@ -125,12 +125,29 @@ export interface PhysicsConfig {
     floatSpeed: number;
     heroGravity: number;
     neighborGravity: number;
+    zoneGravity: number;
+    localSwirlSpeed: number;
     gridPull: number;
     filterGridPull: number;
     damping: number;
     lerpVisible: number;
     lerpHidden: number;
     boundaryScale: number;
+}
+
+export type ZoneName = 'temporal' | 'thematic' | 'visual' | 'technical';
+
+export interface ZoneSummary {
+    zone: ZoneName;
+    count: number;
+    label: string;      // "Same Session", "Portrait, Studio", "Warm Tones", "X-T4"
+    sublabel: string;   // "5 from Mar 2", "6 shared concepts", "4 palette matches"
+}
+
+export interface NeighborhoodSummary {
+    zones: ZoneSummary[];
+    totalNeighbors: number;
+    narrative: string;   // Natural language paragraph
 }
 
 export interface ExperienceContext {

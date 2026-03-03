@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
-import { ImageNode, Tag, ExperienceNode, ViewMode, ExperienceMode, AnchorState, ExperienceContext } from '../types';
+import { ImageNode, Tag, ExperienceNode, ViewMode, ExperienceMode, AnchorState, ExperienceContext, NeighborhoodSummary, ZoneName } from '../types';
+import { buildNeighborhoodSummary } from '../services/dataService';
 
 // Import visual components
-import { EsotericSprite, LoadingOverlay, RoughContainer } from './VisualElements';
+import { EsotericSprite, LoadingOverlay, RoughContainer, ScribbleConnector } from './VisualElements';
 
 // Import extracted components
 import FieldGuideOverlay from './FieldGuideOverlay';
@@ -237,6 +238,15 @@ const Experience: React.FC<ExperienceProps> = ({
     const handleMouseLeave = (node: ExperienceNode) => { hoveredNodeIdRef.current = null; const el = nodeRefs.current.get(node.id); if (el) { if (node.id === anchor.id) el.style.zIndex = '2000'; else el.style.zIndex = Math.floor(node.currentScale * 100).toString(); } };
     const activeNode = useMemo(() => simNodes.find(n => n.id === anchor.id), [simNodes, anchor]);
 
+    const neighborhoodSummary = useMemo((): NeighborhoodSummary | null => {
+        if (anchor.mode !== 'IMAGE') return null;
+        const anchorImg = images.find(i => i.id === anchor.id);
+        if (!anchorImg) return null;
+        const neighbors = simNodes.filter(n => n.isVisible && n.id !== anchor.id && n.scoreBreakdown);
+        if (neighbors.length === 0) return null;
+        return buildNeighborhoodSummary(neighbors, anchorImg, tags);
+    }, [simNodes, anchor, images, tags]);
+
     return (
         <div className="relative w-full h-full bg-[#faf9f6] overflow-hidden font-mono select-none">
             <svg className="absolute w-0 h-0">
@@ -283,6 +293,67 @@ const Experience: React.FC<ExperienceProps> = ({
             )}
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-in-out" style={{ background: anchor.mode !== 'NONE' && activePalette.length > 0 ? `radial-gradient(circle at 50% 30%, ${activePalette[0]}1A, transparent 70%), radial-gradient(circle at 85% 85%, ${activePalette[1] || activePalette[0]}15, transparent 60%), radial-gradient(circle at 15% 75%, ${activePalette[2] || activePalette[0]}10, transparent 60%)` : '#faf9f6' }} />)}
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-multiply" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />)}
+            {/* Zone gradient washes + labels (IMAGE mode only) */}
+            {anchor.mode === 'IMAGE' && (
+                <div className="absolute inset-0 z-[5] pointer-events-none">
+                    {/* Temporal zone — top (blue) */}
+                    <div className="absolute top-0 left-1/4 right-1/4 h-1/2" style={{
+                        background: 'radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.05) 0%, transparent 70%)',
+                    }} />
+                    {/* Thematic zone — right (purple) */}
+                    <div className="absolute top-1/4 bottom-1/4 right-0 w-1/2" style={{
+                        background: 'radial-gradient(ellipse at 100% 50%, rgba(139,92,246,0.05) 0%, transparent 70%)',
+                    }} />
+                    {/* Visual zone — bottom (amber) */}
+                    <div className="absolute bottom-0 left-1/4 right-1/4 h-1/2" style={{
+                        background: 'radial-gradient(ellipse at 50% 100%, rgba(245,158,11,0.05) 0%, transparent 70%)',
+                    }} />
+                    {/* Technical zone — left (green) */}
+                    <div className="absolute top-1/4 bottom-1/4 left-0 w-1/2" style={{
+                        background: 'radial-gradient(ellipse at 0% 50%, rgba(34,197,94,0.05) 0%, transparent 70%)',
+                    }} />
+                    {/* Zone annotations — dynamic Field Notes or static fallback */}
+                    {neighborhoodSummary ? (
+                        <>
+                            {neighborhoodSummary.zones.map(z => {
+                                const posClasses: Record<ZoneName, string> = {
+                                    temporal:  'top-4 left-1/2 -translate-x-1/2 text-center',
+                                    thematic:  'right-4 top-1/2 -translate-y-1/2 text-right hidden sm:flex',
+                                    visual:    'bottom-4 left-1/2 -translate-x-1/2 text-center',
+                                    technical: 'left-4 top-1/2 -translate-y-1/2 text-left hidden sm:flex',
+                                };
+                                const colorClasses: Record<ZoneName, string> = {
+                                    temporal:  'text-blue-400',
+                                    thematic:  'text-purple-400',
+                                    visual:    'text-amber-400',
+                                    technical: 'text-green-400',
+                                };
+                                const scribbleDir: Record<ZoneName, 'down' | 'left' | 'up' | 'right'> = {
+                                    temporal:  'down',
+                                    thematic:  'left',
+                                    visual:    'up',
+                                    technical: 'right',
+                                };
+                                return (
+                                    <div key={z.zone} className={`absolute flex flex-col items-center gap-1 select-none animate-in fade-in duration-700 ${posClasses[z.zone]}`}>
+                                        <span className={`font-hand text-sm lg:text-lg opacity-60 ${colorClasses[z.zone]}`}>{z.label}</span>
+                                        <span className={`font-hand text-xs lg:text-sm opacity-40 ${colorClasses[z.zone]}`}>{z.sublabel}</span>
+                                        <ScribbleConnector direction={scribbleDir[z.zone]} length="30px" />
+                                    </div>
+                                );
+                            })}
+                        </>
+                    ) : (
+                        <>
+                            <div className="absolute top-6 left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-widest text-blue-500/25 select-none">TIME</div>
+                            <div className="absolute right-6 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase tracking-widest text-purple-500/25 select-none">THEME</div>
+                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-widest text-amber-500/25 select-none">COLOR</div>
+                            <div className="absolute left-6 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase tracking-widest text-green-500/25 select-none">TECH</div>
+                        </>
+                    )}
+                </div>
+            )}
+
             <div ref={containerRef} className="absolute inset-0 top-0 cursor-move active:cursor-grabbing z-10 pb-0">
                 <div ref={worldRef} className="absolute inset-0 origin-top-left will-change-transform">
                     {simNodes.map(node => {
@@ -336,6 +407,7 @@ const Experience: React.FC<ExperienceProps> = ({
                     onOpenGallery={(startIndex) => setGalleryState({ isOpen: true, startIndex })}
                     nsfwFilterActive={nsfwFilterActive}
                     nsfwTagId={nsfwTagId}
+                    neighborhoodSummary={neighborhoodSummary}
                 />
             )}
 

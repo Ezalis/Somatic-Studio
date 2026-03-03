@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ImageNode, Tag, ExperienceNode, AnchorState, ScoreBreakdown } from '../types';
-import { getIntersectionAttributes, hexToRgbVals, blendDimensionColors } from '../services/dataService';
+import { getIntersectionAttributes, hexToRgbVals, getDimensionPips } from '../services/dataService';
 import { 
     Activity, Camera, Sun, Cloud, Thermometer, Calendar, Clock, 
     Hash, Palette, Aperture, LayoutGrid, Snowflake
@@ -21,7 +21,7 @@ export const EsotericSprite = React.memo(({ node, scoreBreakdown }: { node: Expe
         return Math.abs(h);
     };
     const seed = hash(node.id);
-    const halo = scoreBreakdown ? blendDimensionColors(scoreBreakdown) : null;
+    const pips = scoreBreakdown ? getDimensionPips(scoreBreakdown) : [];
 
     return (
         <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md overflow-visible" shapeRendering="geometricPrecision">
@@ -30,24 +30,12 @@ export const EsotericSprite = React.memo(({ node, scoreBreakdown }: { node: Expe
                     <feGaussianBlur stdDeviation="3" result="blur" />
                     <feComposite in="SourceGraphic" in2="blur" operator="over" />
                 </filter>
-                {halo && (
-                    <radialGradient id={`halo-${node.id}`}>
-                        <stop offset="0%" stopColor={halo.color} stopOpacity={halo.intensity * 0.9} />
-                        <stop offset="40%" stopColor={halo.color} stopOpacity={halo.intensity * 0.5} />
-                        <stop offset="75%" stopColor={halo.color} stopOpacity={halo.intensity * 0.15} />
-                        <stop offset="100%" stopColor={halo.color} stopOpacity={0} />
-                    </radialGradient>
+                {pips.length > 0 && (
+                    <filter id={`pip-glow-${node.id}`} x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="1" />
+                    </filter>
                 )}
             </defs>
-            {halo && (
-                <circle
-                    cx="50" cy="50"
-                    r={70 + halo.intensity * 20}
-                    fill={`url(#halo-${node.id})`}
-                    className="animate-pulse"
-                    style={{ animationDuration: `${5 + (seed % 4)}s` }}
-                />
-            )}
             <g filter={`url(#glow-${node.id})`}>
                 {palette.slice(1).map((color, i) => {
                     const angle = (seed + i * 73) % 360;
@@ -74,6 +62,15 @@ export const EsotericSprite = React.memo(({ node, scoreBreakdown }: { node: Expe
                     style={{ animationDuration: `${3 + (seed % 5)}s` }}
                 />
             </g>
+            {pips.map(pip => (
+                <circle
+                    key={pip.dimension}
+                    cx={pip.cx} cy={pip.cy}
+                    r={pip.radius}
+                    fill={pip.color}
+                    filter={`url(#pip-glow-${node.id})`}
+                />
+            ))}
         </svg>
     );
 }, (prev, next) => prev.node.id === next.node.id && prev.scoreBreakdown?.total === next.scoreBreakdown?.total);
