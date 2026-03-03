@@ -65,7 +65,7 @@ export function blendDimensionColors(breakdown: ScoreBreakdown): { color: string
     const g = Math.round(dims.reduce((s, d) => s + DIMENSION_COLORS[d.key][1] * d.value, 0) / totalWeight);
     const b = Math.round(dims.reduce((s, d) => s + DIMENSION_COLORS[d.key][2] * d.value, 0) / totalWeight);
 
-    const intensity = Math.min(1, Math.max(0.15, breakdown.total / 600));
+    const intensity = Math.min(1, Math.max(0.3, breakdown.total / 600));
 
     return { color: `rgb(${r},${g},${b})`, intensity };
 }
