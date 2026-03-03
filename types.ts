@@ -133,6 +133,10 @@ export interface PhysicsConfig {
     lerpVisible: number;
     lerpHidden: number;
     boundaryScale: number;
+    heroEquilibriumGravity: number;
+    heroVelocityDamping: number;
+    cameraPanSpeed: number;
+    comfortZoneRatio: number;
 }
 
 export type ZoneName = 'temporal' | 'thematic' | 'visual' | 'technical';

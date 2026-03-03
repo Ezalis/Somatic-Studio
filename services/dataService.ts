@@ -481,4 +481,53 @@ export function buildNeighborhoodSummary(
     return { zones, totalNeighbors: neighbors.length, narrative };
 }
 
+// --- HERO EQUILIBRIUM ---
+
+/**
+ * Compute the hero's dynamic equilibrium position based on neighbor positions.
+ * Places the hero on the opposite side of viewport center from the weighted neighbor centroid,
+ * clamped to a comfort zone (margin on each side).
+ */
+export function computeHeroEquilibrium(
+    neighbors: ExperienceNode[],
+    viewportWidth: number,
+    viewportHeight: number,
+    comfortZoneRatio: number
+): { x: number; y: number } {
+    const cx = viewportWidth / 2;
+    const cy = viewportHeight / 2;
+
+    if (neighbors.length === 0) return { x: cx, y: cy };
+
+    // Weighted centroid of visible neighbors
+    let totalWeight = 0;
+    let weightedX = 0;
+    let weightedY = 0;
+    for (const n of neighbors) {
+        const w = Math.max(n.relevanceScore, 1);
+        weightedX += n.x * w;
+        weightedY += n.y * w;
+        totalWeight += w;
+    }
+    const centroidX = weightedX / totalWeight;
+    const centroidY = weightedY / totalWeight;
+
+    // Offset hero opposite to the centroid, scaled by 0.4 to prevent overreaction
+    const offsetX = (centroidX - cx) * 0.4;
+    const offsetY = (centroidY - cy) * 0.4;
+    let heroX = cx - offsetX;
+    let heroY = cy - offsetY;
+
+    // Clamp to comfort zone bounds
+    const margin = (1 - comfortZoneRatio) / 2;
+    const minX = viewportWidth * margin;
+    const maxX = viewportWidth * (1 - margin);
+    const minY = viewportHeight * margin;
+    const maxY = viewportHeight * (1 - margin);
+    heroX = Math.max(minX, Math.min(maxX, heroX));
+    heroY = Math.max(minY, Math.min(maxY, heroY));
+
+    return { x: heroX, y: heroY };
+}
+
 // processImageFile and hydrateGalleryAssets removed — image loading now handled by immichService.ts

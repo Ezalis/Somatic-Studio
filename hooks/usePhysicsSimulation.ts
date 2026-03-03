@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import { ExperienceNode, AnchorState, PhysicsConfig, ZoneName } from '../types';
-import { getZoneTarget } from '../services/dataService';
+import { getZoneTarget, computeHeroEquilibrium } from '../services/dataService';
 
 export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
     velocityDecay: 0.45,
@@ -19,6 +19,10 @@ export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
     lerpVisible: 0.1,
     lerpHidden: 0.4,
     boundaryScale: 0.9,
+    heroEquilibriumGravity: 0.025,
+    heroVelocityDamping: 0.95,
+    cameraPanSpeed: 0.03,
+    comfortZoneRatio: 0.7,
 };
 
 function getHeroMetrics(dims: { width: number; height: number }) {
@@ -41,7 +45,8 @@ export function usePhysicsSimulation(
     loadingProgress: { current: number; total: number } | null | undefined,
     windowDimensions: { width: number; height: number },
     config?: Partial<PhysicsConfig>,
-    clusterAngles?: Map<ZoneName, number>
+    clusterAngles?: Map<ZoneName, number>,
+    disabled?: boolean
 ): { zoomRef: React.MutableRefObject<d3.ZoomBehavior<HTMLDivElement, unknown> | null> } {
     const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
     const simulationRef = useRef<d3.Simulation<ExperienceNode, undefined> | null>(null);
@@ -54,6 +59,14 @@ export function usePhysicsSimulation(
     const dimensionsRef = useRef(windowDimensions);
     const configRef = useRef<PhysicsConfig>({ ...DEFAULT_PHYSICS_CONFIG, ...config });
     const clusterAnglesRef = useRef<Map<ZoneName, number>>(new Map());
+    const disabledRef = useRef(disabled ?? false);
+
+    // Phase 1: Dynamic hero equilibrium refs
+    const heroEquilibriumRef = useRef<{ x: number; y: number }>({ x: windowDimensions.width / 2, y: windowDimensions.height / 2 });
+    const heroPositionRef = useRef<{ x: number; y: number }>({ x: windowDimensions.width / 2, y: windowDimensions.height * 0.45 });
+
+    // Phase 2: Camera tracking — user interaction guard
+    const userInteractingRef = useRef(false);
 
     // Apply D3 force configuration based on current anchor mode and dimensions
     function applyForces(sim: d3.Simulation<ExperienceNode, undefined>) {
@@ -107,14 +120,18 @@ export function usePhysicsSimulation(
                 }
             });
 
+        // Phase 2: Track user interaction for camera pan guard
+        zoom.on("start.interaction", () => { userInteractingRef.current = true; });
+        zoom.on("end.interaction", () => { userInteractingRef.current = false; });
+
         zoomRef.current = zoom;
         d3.select(containerRef.current).call(zoom).on("dblclick.zoom", null);
     }, []);
 
-    // --- SIMULATION LIFECYCLE (create once when ready, destroy on loading) ---
+    // --- SIMULATION LIFECYCLE (create once when ready, destroy on loading/disabled) ---
     const hasNodes = simNodes.length > 0;
     useEffect(() => {
-        if (!containerRef.current || loadingProgress || !hasNodes) {
+        if (!containerRef.current || loadingProgress || !hasNodes || disabledRef.current) {
             if (simulationRef.current) {
                 simulationRef.current.stop();
                 simulationRef.current = null;
@@ -143,6 +160,21 @@ export function usePhysicsSimulation(
             const mobile = dims.width < 1024;
             const time = Date.now() / 1000;
             const { heroScale } = getHeroMetrics(dims);
+
+            // Phase 1: Compute dynamic hero equilibrium before per-node loop (IMAGE mode only)
+            if (a.mode === 'IMAGE') {
+                const equilibrium = computeHeroEquilibrium(activeNodes, dims.width, dims.height, cfg.comfortZoneRatio);
+                heroEquilibriumRef.current = equilibrium;
+
+                // Capture actual hero position
+                const heroNode = nodes.find(n => n.id === a.id);
+                if (heroNode) {
+                    heroPositionRef.current = { x: heroNode.x, y: heroNode.y };
+                }
+            }
+
+            const heroPosX = heroPositionRef.current.x;
+            const heroPosY = heroPositionRef.current.y;
 
             nodes.forEach((node, i) => {
                 if (!node.currentOpacity && !node.targetOpacity && !node.isVisible) return;
@@ -193,48 +225,49 @@ export function usePhysicsSimulation(
                 }
                 else if (a.mode === 'IMAGE') {
                     if (isAnchor) {
-                        const targetY = dims.height * 0.45;
-                        node.vx = (node.vx || 0) + (cx - node.x) * cfg.heroGravity;
-                        node.vy = (node.vy || 0) + (targetY - node.y) * cfg.heroGravity;
-                        node.vx *= 0.8;
-                        node.vy *= 0.8;
+                        // Phase 1: Dynamic equilibrium gravity (replaces fixed center gravity)
+                        const eq = heroEquilibriumRef.current;
+                        node.vx = (node.vx || 0) + (eq.x - node.x) * cfg.heroEquilibriumGravity;
+                        node.vy = (node.vy || 0) + (eq.y - node.y) * cfg.heroEquilibriumGravity;
+                        node.vx *= cfg.heroVelocityDamping;
+                        node.vy *= cfg.heroVelocityDamping;
                         node.targetScale = heroScale;
                         node.targetOpacity = 1;
                     }
                     else if (node.isVisible) {
-                        const targetY = dims.height * 0.45;
+                        // Phase 1: Boundary containment relative to hero position
                         const boundaryRadius = Math.max(dims.width, dims.height) * cfg.boundaryScale;
-                        const dxRaw = node.x - cx;
-                        const dyRaw = node.y - targetY;
+                        const dxRaw = node.x - heroPosX;
+                        const dyRaw = node.y - heroPosY;
                         const distRaw = Math.sqrt(dxRaw * dxRaw + dyRaw * dyRaw) || 1;
 
                         if (distRaw > boundaryRadius) {
                             const angle = Math.atan2(dyRaw, dxRaw);
-                            node.x = cx + Math.cos(angle) * (boundaryRadius * 0.95);
-                            node.y = targetY + Math.sin(angle) * (boundaryRadius * 0.95);
+                            node.x = heroPosX + Math.cos(angle) * (boundaryRadius * 0.95);
+                            node.y = heroPosY + Math.sin(angle) * (boundaryRadius * 0.95);
                             node.vx = (node.vx || 0) * 0.1;
                             node.vy = (node.vy || 0) * 0.1;
                         }
 
-                        // Zone-targeted gravity: pull toward dimension-weighted compass position
+                        // Zone-targeted gravity relative to hero position
                         if (node.scoreBreakdown) {
                             const rank = activeNodes.indexOf(node);
                             const totalVisible = activeNodes.length;
-                            const zoneTarget = getZoneTarget(node.scoreBreakdown, cx, targetY, Math.max(0, rank), totalVisible, mobile, clusterAnglesRef.current);
+                            const zoneTarget = getZoneTarget(node.scoreBreakdown, heroPosX, heroPosY, Math.max(0, rank), totalVisible, mobile, clusterAnglesRef.current);
 
                             node.vx = (node.vx || 0) + (zoneTarget.x - node.x) * cfg.zoneGravity;
                             node.vy = (node.vy || 0) + (zoneTarget.y - node.y) * cfg.zoneGravity;
 
-                            // Local swirl around zone target (not global center)
+                            // Local swirl around zone target
                             const localDx = node.x - zoneTarget.x;
                             const localDy = node.y - zoneTarget.y;
                             const localDist = Math.sqrt(localDx * localDx + localDy * localDy) || 1;
                             node.vx += (-localDy / localDist) * cfg.localSwirlSpeed;
                             node.vy += (localDx / localDist) * cfg.localSwirlSpeed;
                         } else {
-                            // Fallback: gentle pull toward center
-                            node.vx = (node.vx || 0) + (cx - node.x) * cfg.neighborGravity;
-                            node.vy = (node.vy || 0) + (targetY - node.y) * cfg.neighborGravity;
+                            // Fallback: gentle pull toward hero
+                            node.vx = (node.vx || 0) + (heroPosX - node.x) * cfg.neighborGravity;
+                            node.vy = (node.vy || 0) + (heroPosY - node.y) * cfg.neighborGravity;
                         }
 
                         node.targetScale = node.relevanceScore > 40 ? (mobile ? 0.6 : 0.8) : (mobile ? 0.45 : 0.6);
@@ -298,6 +331,37 @@ export function usePhysicsSimulation(
                     }
                 }
             });
+
+            // Phase 2: Camera tracking — pan when hero approaches comfort zone edges
+            if (a.mode === 'IMAGE' && !userInteractingRef.current && containerRef.current && zoomRef.current) {
+                const heroNode = nodes.find(n => n.id === a.id);
+                if (heroNode) {
+                    const currentTransform = d3.zoomTransform(containerRef.current);
+                    const heroScreenX = heroNode.x * currentTransform.k + currentTransform.x;
+                    const heroScreenY = heroNode.y * currentTransform.k + currentTransform.y;
+
+                    const margin = (1 - cfg.comfortZoneRatio) / 2;
+                    const minX = dims.width * margin;
+                    const maxX = dims.width * (1 - margin);
+                    const minY = dims.height * margin;
+                    const maxY = dims.height * (1 - margin);
+
+                    let panDx = 0;
+                    let panDy = 0;
+                    if (heroScreenX < minX) panDx = minX - heroScreenX;
+                    else if (heroScreenX > maxX) panDx = maxX - heroScreenX;
+                    if (heroScreenY < minY) panDy = minY - heroScreenY;
+                    else if (heroScreenY > maxY) panDy = maxY - heroScreenY;
+
+                    const panMag = Math.sqrt(panDx * panDx + panDy * panDy);
+                    if (panMag > 1) {
+                        const newX = currentTransform.x + panDx * cfg.cameraPanSpeed;
+                        const newY = currentTransform.y + panDy * cfg.cameraPanSpeed;
+                        const newTransform = d3.zoomIdentity.translate(newX, newY).scale(currentTransform.k);
+                        zoomRef.current.transform(d3.select(containerRef.current), newTransform);
+                    }
+                }
+            }
         });
 
         simulationRef.current = sim;
@@ -307,6 +371,15 @@ export function usePhysicsSimulation(
             simulationRef.current = null;
         };
     }, [hasNodes, loadingProgress]);
+
+    // --- SYNC: disabled ---
+    useEffect(() => {
+        disabledRef.current = disabled ?? false;
+        if (disabledRef.current && simulationRef.current) {
+            simulationRef.current.stop();
+            simulationRef.current = null;
+        }
+    }, [disabled]);
 
     // --- SYNC: simNodes (update simulation nodes without recreation) ---
     useEffect(() => {
@@ -323,6 +396,11 @@ export function usePhysicsSimulation(
     useEffect(() => {
         anchorRef.current = anchor;
         recomputeActiveNodes();
+
+        // Reset hero equilibrium to viewport center on anchor change
+        const dims = dimensionsRef.current;
+        heroEquilibriumRef.current = { x: dims.width / 2, y: dims.height / 2 };
+        heroPositionRef.current = { x: dims.width / 2, y: dims.height * 0.45 };
 
         if (simulationRef.current) {
             // Zero all node velocities to eliminate jolts on anchor change
