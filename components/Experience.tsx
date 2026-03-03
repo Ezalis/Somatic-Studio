@@ -4,7 +4,7 @@ import { ImageNode, Tag, ExperienceNode, ViewMode, ExperienceMode, AnchorState, 
 import { buildNeighborhoodSummary } from '../services/dataService';
 
 // Import visual components
-import { EsotericSprite, LoadingOverlay, RoughContainer, ScribbleConnector } from './VisualElements';
+import { EsotericSprite, LoadingOverlay, RoughContainer } from './VisualElements';
 
 // Import extracted components
 import FieldGuideOverlay from './FieldGuideOverlay';
@@ -293,64 +293,23 @@ const Experience: React.FC<ExperienceProps> = ({
             )}
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-in-out" style={{ background: anchor.mode !== 'NONE' && activePalette.length > 0 ? `radial-gradient(circle at 50% 30%, ${activePalette[0]}1A, transparent 70%), radial-gradient(circle at 85% 85%, ${activePalette[1] || activePalette[0]}15, transparent 60%), radial-gradient(circle at 15% 75%, ${activePalette[2] || activePalette[0]}10, transparent 60%)` : '#faf9f6' }} />)}
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-multiply" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />)}
-            {/* Zone gradient washes + labels (IMAGE mode only) */}
-            {anchor.mode === 'IMAGE' && (
+            {/* Field Notes annotations (IMAGE mode only, when neighborhood data available) */}
+            {anchor.mode === 'IMAGE' && neighborhoodSummary && (
                 <div className="absolute inset-0 z-[5] pointer-events-none">
-                    {/* Temporal zone — top (blue) */}
-                    <div className="absolute top-0 left-1/4 right-1/4 h-1/2" style={{
-                        background: 'radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.05) 0%, transparent 70%)',
-                    }} />
-                    {/* Thematic zone — right (purple) */}
-                    <div className="absolute top-1/4 bottom-1/4 right-0 w-1/2" style={{
-                        background: 'radial-gradient(ellipse at 100% 50%, rgba(139,92,246,0.05) 0%, transparent 70%)',
-                    }} />
-                    {/* Visual zone — bottom (amber) */}
-                    <div className="absolute bottom-0 left-1/4 right-1/4 h-1/2" style={{
-                        background: 'radial-gradient(ellipse at 50% 100%, rgba(245,158,11,0.05) 0%, transparent 70%)',
-                    }} />
-                    {/* Technical zone — left (green) */}
-                    <div className="absolute top-1/4 bottom-1/4 left-0 w-1/2" style={{
-                        background: 'radial-gradient(ellipse at 0% 50%, rgba(34,197,94,0.05) 0%, transparent 70%)',
-                    }} />
-                    {/* Zone annotations — dynamic Field Notes or static fallback */}
-                    {neighborhoodSummary ? (
-                        <>
-                            {neighborhoodSummary.zones.map(z => {
-                                const posClasses: Record<ZoneName, string> = {
-                                    temporal:  'top-4 left-1/2 -translate-x-1/2 text-center',
-                                    thematic:  'right-4 top-1/2 -translate-y-1/2 text-right hidden sm:flex',
-                                    visual:    'bottom-4 left-1/2 -translate-x-1/2 text-center',
-                                    technical: 'left-4 top-1/2 -translate-y-1/2 text-left hidden sm:flex',
-                                };
-                                const colorClasses: Record<ZoneName, string> = {
-                                    temporal:  'text-blue-400',
-                                    thematic:  'text-purple-400',
-                                    visual:    'text-amber-400',
-                                    technical: 'text-green-400',
-                                };
-                                const scribbleDir: Record<ZoneName, 'down' | 'left' | 'up' | 'right'> = {
-                                    temporal:  'down',
-                                    thematic:  'left',
-                                    visual:    'up',
-                                    technical: 'right',
-                                };
-                                return (
-                                    <div key={z.zone} className={`absolute flex flex-col items-center gap-1 select-none animate-in fade-in duration-700 ${posClasses[z.zone]}`}>
-                                        <span className={`font-hand text-sm lg:text-lg opacity-60 ${colorClasses[z.zone]}`}>{z.label}</span>
-                                        <span className={`font-hand text-xs lg:text-sm opacity-40 ${colorClasses[z.zone]}`}>{z.sublabel}</span>
-                                        <ScribbleConnector direction={scribbleDir[z.zone]} length="30px" />
-                                    </div>
-                                );
-                            })}
-                        </>
-                    ) : (
-                        <>
-                            <div className="absolute top-6 left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-widest text-blue-500/25 select-none">TIME</div>
-                            <div className="absolute right-6 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase tracking-widest text-purple-500/25 select-none">THEME</div>
-                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-widest text-amber-500/25 select-none">COLOR</div>
-                            <div className="absolute left-6 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase tracking-widest text-green-500/25 select-none">TECH</div>
-                        </>
-                    )}
+                    {neighborhoodSummary.zones.map(z => {
+                        const posClasses: Record<ZoneName, string> = {
+                            temporal:  'top-4 left-1/2 -translate-x-1/2 text-center',
+                            thematic:  'right-4 top-1/2 -translate-y-1/2 text-right hidden sm:flex',
+                            visual:    'bottom-4 left-1/2 -translate-x-1/2 text-center',
+                            technical: 'left-4 top-1/2 -translate-y-1/2 text-left hidden sm:flex',
+                        };
+                        return (
+                            <div key={z.zone} className={`absolute flex flex-col items-center gap-1 select-none animate-in fade-in duration-700 ${posClasses[z.zone]}`}>
+                                <span className="font-hand text-sm lg:text-lg opacity-60 text-zinc-600">{z.label}</span>
+                                <span className="font-hand text-xs lg:text-sm opacity-40 text-zinc-500">{z.sublabel}</span>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 
@@ -373,7 +332,7 @@ const Experience: React.FC<ExperienceProps> = ({
                         return (
                             <div key={node.id} ref={(el) => { if (el) nodeRefs.current.set(node.id, el); else nodeRefs.current.delete(node.id); }} className="absolute top-0 left-0 w-0 h-0">
                                 <div onClick={(e) => handleNodeClick(node.id, e)} onMouseEnter={() => handleMouseEnter(node)} onMouseLeave={() => handleMouseLeave(node)} className={`absolute -translate-x-1/2 -translate-y-1/2 ${sizeClasses} transition-all duration-300 cursor-pointer ${isHero ? '' : 'hover:scale-105'}`}>
-                                    {isEsotericSprite ? (<EsotericSprite node={node} scoreBreakdown={anchor.mode === 'IMAGE' ? node.scoreBreakdown : undefined} />) : (<img src={node.original.fileUrl} alt="" className={`w-full h-auto rounded-md pointer-events-none bg-white transition-all duration-500 ${isHero ? 'ring-4 ring-white/50' : 'ring-1 ring-black/5'}`} loading="lazy" />)}
+                                    {isEsotericSprite ? (<EsotericSprite node={node} />) : (<img src={node.original.fileUrl} alt="" className={`w-full h-auto rounded-md pointer-events-none bg-white transition-all duration-500 ${isHero ? 'ring-4 ring-white/50' : 'ring-1 ring-black/5'}`} loading="lazy" />)}
                                 </div>
                             </div>
                         );
@@ -392,7 +351,7 @@ const Experience: React.FC<ExperienceProps> = ({
                 </div>
             )}
 
-            {anchor.mode === 'IMAGE' && activeNode && !isDetailOpen && experienceMode === 'EXPLORE' && (<SatelliteLayer node={activeNode.original} tags={tags} onNavigate={onAnchorChange} isMobile={isMobile} />)}
+            {anchor.mode === 'IMAGE' && activeNode && !isDetailOpen && experienceMode === 'EXPLORE' && (<SatelliteLayer node={activeNode.original} tags={tags} onNavigate={onAnchorChange} />)}
             <HistoryTimeline history={history} images={images} tags={tags} activeMode={experienceMode} nsfwFilterActive={nsfwFilterActive} nsfwTagId={nsfwTagId} currentHero={activeNode?.original} />
 
             {/* DETAIL VIEW OVERLAY */}

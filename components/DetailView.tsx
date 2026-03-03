@@ -1,10 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ImageNode, Tag, TagType, ExperienceNode, AnchorState, NeighborhoodSummary, ZoneName } from '../types';
+import { ImageNode, Tag, TagType, ExperienceNode, AnchorState, NeighborhoodSummary } from '../types';
 import {
     X, Camera, Maximize2, Aperture, Hash, Palette,
     ArrowDown, ArrowUp, Sun, Cloud, Thermometer, Gauge, Timer
 } from 'lucide-react';
-import { EsotericSprite, ScribbleConnector, HistoryStream } from './VisualElements';
+import { EsotericSprite, HistoryStream } from './VisualElements';
 import ProgressiveImage from './ProgressiveImage';
 
 interface DetailViewProps {
@@ -105,7 +105,6 @@ const DetailView: React.FC<DetailViewProps> = ({
                                     </button>
                                     <span className="text-xl sm:text-base md:text-sm lg:text-xl italic opacity-70 font-hand pointer-events-none pr-4 sm:pr-2 lg:pr-4">{new Date(activeNode.original.captureTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                 </div>
-                                <div className="hidden sm:block"><ScribbleConnector direction="right" length="60px" /></div>
                             </div>
 
                             {/* 3. Palette */}
@@ -121,7 +120,6 @@ const DetailView: React.FC<DetailViewProps> = ({
                                         ))}
                                     </div>
                                 </div>
-                                <div className="hidden sm:block"><ScribbleConnector direction="right" length="40px" /></div>
                             </div>
                         </div>
 
@@ -145,7 +143,6 @@ const DetailView: React.FC<DetailViewProps> = ({
                         {/* Right Panel */}
                         <div className="flex flex-col gap-16 sm:gap-6 lg:gap-16 h-full justify-center order-3 items-center sm:items-start text-center sm:text-left col-span-1">
                             <div className="flex items-center gap-4 sm:gap-2 lg:gap-4">
-                                <div className="hidden sm:block"><ScribbleConnector direction="left" length="60px" /></div>
                                 <div className="flex flex-col items-center sm:items-start gap-1 text-zinc-400">
                                     <button onClick={(e) => handleNavigate({ mode: 'CAMERA', id: activeNode.original.cameraModel }, e)} className="text-3xl sm:text-xl md:text-base lg:text-3xl text-zinc-200 font-bold flex items-center gap-3 sm:gap-1.5 lg:gap-3 font-hand hover:text-emerald-300 transition-colors pr-4 sm:pr-0">
                                         <Camera size={24} className="opacity-70 sm:w-5 sm:h-5 md:w-5 md:h-5 lg:w-6 lg:h-6" />{activeNode.original.cameraModel}
@@ -161,7 +158,6 @@ const DetailView: React.FC<DetailViewProps> = ({
                                 </div>
                             </div>
                             <div className="flex items-start gap-4 sm:gap-2 lg:gap-4">
-                                <div className="hidden sm:block"><ScribbleConnector direction="left" length="40px" /></div>
                                 <div className="flex flex-col items-center sm:items-start gap-2 sm:gap-1 lg:gap-2 w-full">
                                     <h3 className="text-2xl sm:text-lg md:text-base lg:text-2xl font-hand font-bold text-zinc-500 flex items-center gap-2 sm:gap-1 lg:gap-2 mb-2 sm:mb-1 lg:mb-2 pr-4 sm:pr-0"><Hash size={20} className="sm:w-4 sm:h-4 md:w-4 md:h-4 lg:w-5 lg:h-5" /> Concepts</h3>
                                     <div className="grid grid-cols-2 sm:grid-cols-1 gap-x-6 sm:gap-x-2 lg:gap-x-6 gap-y-2 sm:gap-y-0.5 lg:gap-y-2 text-left overflow-y-auto max-h-[400px] sm:max-h-[50vh] lg:max-h-[400px] pr-4 sm:pr-2 lg:pr-4 w-full no-scrollbar relative z-10">
@@ -193,26 +189,12 @@ const DetailView: React.FC<DetailViewProps> = ({
                                 {neighborhoodSummary.narrative}
                             </p>
                             <div className="flex flex-wrap justify-center gap-3 mt-6">
-                                {neighborhoodSummary.zones.map(z => {
-                                    const chipColors: Record<ZoneName, string> = {
-                                        temporal:  'text-blue-400 border-blue-400/30',
-                                        thematic:  'text-purple-400 border-purple-400/30',
-                                        visual:    'text-amber-400 border-amber-400/30',
-                                        technical: 'text-green-400 border-green-400/30',
-                                    };
-                                    const dotColors: Record<ZoneName, string> = {
-                                        temporal:  'bg-blue-400',
-                                        thematic:  'bg-purple-400',
-                                        visual:    'bg-amber-400',
-                                        technical: 'bg-green-400',
-                                    };
-                                    return (
-                                        <span key={z.zone} className={`font-hand text-lg px-3 py-1 rounded-full border flex items-center gap-2 ${chipColors[z.zone]}`}>
-                                            <span className={`w-2 h-2 rounded-full ${dotColors[z.zone]}`} />
-                                            {z.count} {z.label}
-                                        </span>
-                                    );
-                                })}
+                                {neighborhoodSummary.zones.map(z => (
+                                    <span key={z.zone} className="font-hand text-lg px-3 py-1 rounded-full border text-zinc-400 border-zinc-500/30 flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-zinc-400" />
+                                        {z.count} {z.label}
+                                    </span>
+                                ))}
                             </div>
                         </div>
                     )}

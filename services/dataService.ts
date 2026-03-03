@@ -42,16 +42,9 @@ export const getMinPaletteDistance = (p1: string[], p2: string[]): number => {
     return min;
 };
 
-// --- ZONE LAYOUT & DIMENSION PIPS ---
+// --- ZONE LAYOUT ---
 
-const DIMENSION_COLORS: Record<string, string> = {
-    temporal:  '#3b82f6',  // blue
-    thematic:  '#8b5cf6',  // purple
-    visual:    '#f59e0b',  // amber
-    technical: '#22c55e',  // green
-};
-
-// Max expected score per dimension (for normalizing pip radius)
+// Max expected score per dimension (for normalizing zone strength)
 export const DIMENSION_MAX: Record<string, number> = {
     temporal:  520,
     thematic:  150,
@@ -72,14 +65,6 @@ export interface ZoneTarget {
     y: number;
     angle: number;
     distance: number;
-}
-
-export interface DimensionPip {
-    dimension: string;
-    color: string;
-    radius: number;
-    cx: number;
-    cy: number;
 }
 
 /**
@@ -134,38 +119,6 @@ export function getZoneTarget(
         angle,
         distance,
     };
-}
-
-/**
- * Compute dimension pip specifications for an EsotericSprite.
- * Returns one pip per active dimension (score > 0), positioned at cardinal SVG points.
- * Pip radius is proportional to dimension score, normalized per dimension range.
- */
-export function getDimensionPips(breakdown: ScoreBreakdown): DimensionPip[] {
-    // Cardinal positions in a 100×100 SVG viewBox
-    const PIP_POSITIONS: Record<string, { cx: number; cy: number }> = {
-        temporal:  { cx: 50, cy: 2 },
-        thematic:  { cx: 98, cy: 50 },
-        visual:    { cx: 50, cy: 98 },
-        technical: { cx: 2, cy: 50 },
-    };
-
-    const pips: DimensionPip[] = [];
-    for (const key of ['temporal', 'thematic', 'visual', 'technical'] as const) {
-        const value = breakdown[key];
-        if (value <= 0) continue;
-
-        const normalized = Math.min(1, value / DIMENSION_MAX[key]);
-        const radius = Math.max(3, normalized * 8);
-
-        pips.push({
-            dimension: key,
-            color: DIMENSION_COLORS[key],
-            radius,
-            ...PIP_POSITIONS[key],
-        });
-    }
-    return pips;
 }
 
 export const extractColorPalette = (img: HTMLImageElement): string[] => {
