@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ImageNode, Tag, ExperienceNode, AnchorState, ScoreBreakdown } from '../types';
-import { getIntersectionAttributes, hexToRgbVals, getDimensionPips } from '../services/dataService';
+import { ImageNode, Tag, ExperienceNode, AnchorState } from '../types';
+import { getIntersectionAttributes, hexToRgbVals } from '../services/dataService';
 import { 
     Activity, Camera, Sun, Cloud, Thermometer, Calendar, Clock, 
     Hash, Palette, Aperture, LayoutGrid, Snowflake
 } from 'lucide-react';
 
 // --- Procedural Sprite Component ---
-export const EsotericSprite = React.memo(({ node, scoreBreakdown }: { node: ExperienceNode; scoreBreakdown?: ScoreBreakdown }) => {
+export const EsotericSprite = React.memo(({ node }: { node: ExperienceNode }) => {
     // Robust fallback for palette
     const palette = (node.original.palette && node.original.palette.length > 0)
         ? node.original.palette
@@ -21,59 +21,34 @@ export const EsotericSprite = React.memo(({ node, scoreBreakdown }: { node: Expe
         return Math.abs(h);
     };
     const seed = hash(node.id);
-    const pips = scoreBreakdown ? getDimensionPips(scoreBreakdown) : [];
 
     return (
         <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md overflow-visible" shapeRendering="geometricPrecision">
-            <defs>
-                <filter id={`glow-${node.id}`} x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="3" result="blur" />
-                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                </filter>
-                {pips.length > 0 && (
-                    <filter id={`pip-glow-${node.id}`} x="-50%" y="-50%" width="200%" height="200%">
-                        <feGaussianBlur stdDeviation="1" />
-                    </filter>
-                )}
-            </defs>
-            <g filter={`url(#glow-${node.id})`}>
-                {palette.slice(1).map((color, i) => {
-                    const angle = (seed + i * 73) % 360;
-                    const dist = 10 + (seed % 15);
-                    const rx = 20 + ((seed + i) % 15);
-                    const ry = 20 + ((seed * (i+1)) % 15);
-                    const tx = 50 + dist * Math.cos(angle * Math.PI / 180);
-                    const ty = 50 + dist * Math.sin(angle * Math.PI / 180);
+            {palette.slice(1).map((color, i) => {
+                const angle = (seed + i * 73) % 360;
+                const dist = 10 + (seed % 15);
+                const rx = 20 + ((seed + i) % 15);
+                const ry = 20 + ((seed * (i+1)) % 15);
+                const tx = 50 + dist * Math.cos(angle * Math.PI / 180);
+                const ty = 50 + dist * Math.sin(angle * Math.PI / 180);
 
-                    return (
-                        <ellipse
-                            key={i}
-                            cx={tx} cy={ty} rx={rx} ry={ry}
-                            fill={color}
-                            fillOpacity={0.6}
-                            transform={`rotate(${(seed * (i+1)) % 360}, ${tx}, ${ty})`}
-                        />
-                    );
-                })}
-                <circle
-                    cx="50" cy="50" r={15 + Math.min(tagCount, 15)}
-                    fill={palette[0]}
-                    className="animate-pulse"
-                    style={{ animationDuration: `${3 + (seed % 5)}s` }}
-                />
-            </g>
-            {pips.map(pip => (
-                <circle
-                    key={pip.dimension}
-                    cx={pip.cx} cy={pip.cy}
-                    r={pip.radius}
-                    fill={pip.color}
-                    filter={`url(#pip-glow-${node.id})`}
-                />
-            ))}
+                return (
+                    <ellipse
+                        key={i}
+                        cx={tx} cy={ty} rx={rx} ry={ry}
+                        fill={color}
+                        fillOpacity={0.6}
+                        transform={`rotate(${(seed * (i+1)) % 360}, ${tx}, ${ty})`}
+                    />
+                );
+            })}
+            <circle
+                cx="50" cy="50" r={15 + Math.min(tagCount, 15)}
+                fill={palette[0]}
+            />
         </svg>
     );
-}, (prev, next) => prev.node.id === next.node.id && prev.scoreBreakdown?.total === next.scoreBreakdown?.total);
+}, (prev, next) => prev.node.id === next.node.id);
 
 // --- Procedural Hand-Drawn Arrow Component ---
 export const GreasePencilArrow: React.FC<{ seed: number, className?: string }> = ({ seed, className }) => {
