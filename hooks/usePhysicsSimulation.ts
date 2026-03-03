@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
-import { ExperienceNode, AnchorState, PhysicsConfig } from '../types';
+import { ExperienceNode, AnchorState, PhysicsConfig, ZoneName } from '../types';
 import { getZoneTarget } from '../services/dataService';
 
 export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
@@ -40,7 +40,8 @@ export function usePhysicsSimulation(
     activePalette: string[],
     loadingProgress: { current: number; total: number } | null | undefined,
     windowDimensions: { width: number; height: number },
-    config?: Partial<PhysicsConfig>
+    config?: Partial<PhysicsConfig>,
+    clusterAngles?: Map<ZoneName, number>
 ): { zoomRef: React.MutableRefObject<d3.ZoomBehavior<HTMLDivElement, unknown> | null> } {
     const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
     const simulationRef = useRef<d3.Simulation<ExperienceNode, undefined> | null>(null);
@@ -52,6 +53,7 @@ export function usePhysicsSimulation(
     const activeNodesRef = useRef<ExperienceNode[]>([]);
     const dimensionsRef = useRef(windowDimensions);
     const configRef = useRef<PhysicsConfig>({ ...DEFAULT_PHYSICS_CONFIG, ...config });
+    const clusterAnglesRef = useRef<Map<ZoneName, number>>(new Map());
 
     // Apply D3 force configuration based on current anchor mode and dimensions
     function applyForces(sim: d3.Simulation<ExperienceNode, undefined>) {
@@ -218,7 +220,7 @@ export function usePhysicsSimulation(
                         if (node.scoreBreakdown) {
                             const rank = activeNodes.indexOf(node);
                             const totalVisible = activeNodes.length;
-                            const zoneTarget = getZoneTarget(node.scoreBreakdown, cx, targetY, Math.max(0, rank), totalVisible, mobile);
+                            const zoneTarget = getZoneTarget(node.scoreBreakdown, cx, targetY, Math.max(0, rank), totalVisible, mobile, clusterAnglesRef.current);
 
                             node.vx = (node.vx || 0) + (zoneTarget.x - node.x) * cfg.zoneGravity;
                             node.vy = (node.vy || 0) + (zoneTarget.y - node.y) * cfg.zoneGravity;
@@ -350,6 +352,11 @@ export function usePhysicsSimulation(
     useEffect(() => {
         configRef.current = { ...DEFAULT_PHYSICS_CONFIG, ...config };
     }, [config]);
+
+    // --- SYNC: clusterAngles ---
+    useEffect(() => {
+        clusterAnglesRef.current = clusterAngles || new Map();
+    }, [clusterAngles]);
 
     return { zoomRef };
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { ImageNode, Tag, ExperienceNode, ViewMode, ExperienceMode, AnchorState, ExperienceContext, NeighborhoodSummary, ZoneName } from '../types';
-import { buildNeighborhoodSummary } from '../services/dataService';
+import { buildNeighborhoodSummary, computeClusterAngles } from '../services/dataService';
 
 // Import visual components
 import { EsotericSprite, LoadingOverlay, RoughContainer } from './VisualElements';
@@ -68,10 +68,20 @@ const Experience: React.FC<ExperienceProps> = ({
     // Scoring Engine
     const { activePalette } = useRelevanceScoring(simNodes, setSimNodes, anchor, images, tags, nsfwFilterActive, nsfwTagId, loadingProgress);
 
+    // Cluster angles for dynamic zone layout
+    const clusterAngles = useMemo((): Map<ZoneName, number> => {
+        if (anchor.mode !== 'IMAGE') return new Map();
+        const neighbors = simNodes.filter(n => n.isVisible && n.id !== anchor.id && n.scoreBreakdown);
+        if (neighbors.length === 0) return new Map();
+        return computeClusterAngles(neighbors);
+    }, [simNodes, anchor]);
+
     // Physics Simulation
     const { zoomRef } = usePhysicsSimulation(
         containerRef, worldRef, nodeRefs, hoveredNodeIdRef,
-        simNodes, anchor, activePalette, loadingProgress, windowDimensions
+        simNodes, anchor, activePalette, loadingProgress, windowDimensions,
+        undefined,       // config (default)
+        clusterAngles
     );
 
     useEffect(() => {
@@ -294,17 +304,50 @@ const Experience: React.FC<ExperienceProps> = ({
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-in-out" style={{ background: anchor.mode !== 'NONE' && activePalette.length > 0 ? `radial-gradient(circle at 50% 30%, ${activePalette[0]}1A, transparent 70%), radial-gradient(circle at 85% 85%, ${activePalette[1] || activePalette[0]}15, transparent 60%), radial-gradient(circle at 15% 75%, ${activePalette[2] || activePalette[0]}10, transparent 60%)` : '#faf9f6' }} />)}
             {anchor.mode !== 'IMAGE' && (<div className="absolute inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-multiply" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />)}
             {/* Field Notes annotations (IMAGE mode only, when neighborhood data available) */}
-            {anchor.mode === 'IMAGE' && neighborhoodSummary && (
+            {anchor.mode === 'IMAGE' && neighborhoodSummary && clusterAngles.size > 0 && (
                 <div className="absolute inset-0 z-[5] pointer-events-none">
                     {neighborhoodSummary.zones.map(z => {
-                        const posClasses: Record<ZoneName, string> = {
-                            temporal:  'top-4 left-1/2 -translate-x-1/2 text-center',
-                            thematic:  'right-4 top-1/2 -translate-y-1/2 text-right hidden sm:flex',
-                            visual:    'bottom-4 left-1/2 -translate-x-1/2 text-center',
-                            technical: 'left-4 top-1/2 -translate-y-1/2 text-left hidden sm:flex',
-                        };
+                        const angle = clusterAngles.get(z.zone);
+                        if (angle === undefined) return null;
+
+                        const cos = Math.cos(angle);
+                        const sin = Math.sin(angle);
+                        const absCos = Math.abs(cos);
+                        const absSin = Math.abs(sin);
+
+                        const edgePx = 16;
+                        const isVerticalEdge = absSin >= absCos;
+                        const isHorizontalEdge = !isVerticalEdge;
+
+                        let style: React.CSSProperties;
+                        let alignClass: string;
+
+                        if (isVerticalEdge) {
+                            const isTop = sin < 0;
+                            const offsetPct = cos * 15;
+                            style = {
+                                left: `calc(50% + ${offsetPct}%)`,
+                                transform: 'translateX(-50%)',
+                                ...(isTop ? { top: edgePx } : { bottom: edgePx }),
+                            };
+                            alignClass = 'text-center';
+                        } else {
+                            const isRight = cos > 0;
+                            const offsetPct = sin * 15;
+                            style = {
+                                top: `calc(50% + ${offsetPct}%)`,
+                                transform: 'translateY(-50%)',
+                                ...(isRight ? { right: edgePx } : { left: edgePx }),
+                            };
+                            alignClass = isRight ? 'text-right' : 'text-left';
+                        }
+
                         return (
-                            <div key={z.zone} className={`absolute flex flex-col items-center gap-1 select-none animate-in fade-in duration-700 ${posClasses[z.zone]}`}>
+                            <div
+                                key={z.zone}
+                                className={`absolute flex flex-col items-center gap-1 select-none animate-in fade-in duration-700 ${alignClass} ${isHorizontalEdge ? 'hidden sm:flex' : ''}`}
+                                style={style}
+                            >
                                 <span className="font-hand text-sm lg:text-lg opacity-60 text-zinc-600">{z.label}</span>
                                 <span className="font-hand text-xs lg:text-sm opacity-40 text-zinc-500">{z.sublabel}</span>
                             </div>
