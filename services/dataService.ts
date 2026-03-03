@@ -1,4 +1,4 @@
-import { ImageNode, Tag, TagType, ExperienceNode, ScoreBreakdown } from '../types';
+import { ImageNode, Tag, TagType, ExperienceNode, ScoreBreakdown, ZoneName, ZoneSummary, NeighborhoodSummary } from '../types';
 
 // --- Utilities ---
 
@@ -42,32 +42,130 @@ export const getMinPaletteDistance = (p1: string[], p2: string[]): number => {
     return min;
 };
 
-// --- SCORE DIMENSION COLORS ---
+// --- ZONE LAYOUT & DIMENSION PIPS ---
 
-const DIMENSION_COLORS: Record<string, [number, number, number]> = {
-    temporal:  [59, 130, 246],  // blue   #3b82f6
-    thematic:  [139, 92, 246],  // purple #8b5cf6
-    visual:    [245, 158, 11],  // amber  #f59e0b
-    technical: [34, 197, 94],   // green  #22c55e
+const DIMENSION_COLORS: Record<string, string> = {
+    temporal:  '#3b82f6',  // blue
+    thematic:  '#8b5cf6',  // purple
+    visual:    '#f59e0b',  // amber
+    technical: '#22c55e',  // green
 };
 
-export function blendDimensionColors(breakdown: ScoreBreakdown): { color: string; intensity: number } {
+// Max expected score per dimension (for normalizing pip radius)
+export const DIMENSION_MAX: Record<string, number> = {
+    temporal:  520,
+    thematic:  150,
+    visual:    200,
+    technical: 20,
+};
+
+// Zone compass vectors: temporal=top(-Y), thematic=right(+X), visual=bottom(+Y), technical=left(-X)
+const ZONE_VECTORS: Record<string, { dx: number; dy: number }> = {
+    temporal:  { dx: 0, dy: -1 },
+    thematic:  { dx: 1, dy: 0 },
+    visual:    { dx: 0, dy: 1 },
+    technical: { dx: -1, dy: 0 },
+};
+
+export interface ZoneTarget {
+    x: number;
+    y: number;
+    angle: number;
+    distance: number;
+}
+
+export interface DimensionPip {
+    dimension: string;
+    color: string;
+    radius: number;
+    cx: number;
+    cy: number;
+}
+
+/**
+ * Compute the zone-targeted position for a neighbor node.
+ * Direction is a weighted blend of zone vectors based on positive dimension scores.
+ * Distance from hero is inversely proportional to score rank (closest = highest scoring).
+ */
+export function getZoneTarget(
+    breakdown: ScoreBreakdown,
+    heroCx: number,
+    heroCy: number,
+    rank: number,
+    totalVisible: number,
+    mobile: boolean
+): ZoneTarget {
     const dims = (['temporal', 'thematic', 'visual', 'technical'] as const)
-        .map(key => ({ key, value: Math.max(0, breakdown[key]) }))
-        .filter(d => d.value > 0)
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 2);
+        .map(key => ({ key, value: Math.max(0, breakdown[key]) }));
 
-    if (dims.length === 0) return { color: 'rgb(161,161,170)', intensity: 0 };
+    const totalPositive = dims.reduce((s, d) => s + d.value, 0);
 
-    const totalWeight = dims.reduce((s, d) => s + d.value, 0);
-    const r = Math.round(dims.reduce((s, d) => s + DIMENSION_COLORS[d.key][0] * d.value, 0) / totalWeight);
-    const g = Math.round(dims.reduce((s, d) => s + DIMENSION_COLORS[d.key][1] * d.value, 0) / totalWeight);
-    const b = Math.round(dims.reduce((s, d) => s + DIMENSION_COLORS[d.key][2] * d.value, 0) / totalWeight);
+    let dx = 0;
+    let dy = 0;
 
-    const intensity = Math.min(1, Math.max(0.3, breakdown.total / 600));
+    if (totalPositive > 0) {
+        for (const d of dims) {
+            const vec = ZONE_VECTORS[d.key];
+            const weight = d.value / totalPositive;
+            dx += vec.dx * weight;
+            dy += vec.dy * weight;
+        }
+    } else {
+        // Fallback: spread evenly using rank as angle
+        const angle = (rank / Math.max(1, totalVisible)) * Math.PI * 2;
+        dx = Math.cos(angle);
+        dy = Math.sin(angle);
+    }
 
-    return { color: `rgb(${r},${g},${b})`, intensity };
+    const angle = Math.atan2(dy, dx);
+    const vecLen = Math.sqrt(dx * dx + dy * dy) || 1;
+    const normDx = dx / vecLen;
+    const normDy = dy / vecLen;
+
+    // Distance: closest ring for rank 0, farthest for last rank
+    const minDist = mobile ? 140 : 190;
+    const maxDist = mobile ? 300 : 450;
+    const t = totalVisible <= 1 ? 0 : rank / (totalVisible - 1);
+    const distance = minDist + t * (maxDist - minDist);
+
+    return {
+        x: heroCx + normDx * distance,
+        y: heroCy + normDy * distance,
+        angle,
+        distance,
+    };
+}
+
+/**
+ * Compute dimension pip specifications for an EsotericSprite.
+ * Returns one pip per active dimension (score > 0), positioned at cardinal SVG points.
+ * Pip radius is proportional to dimension score, normalized per dimension range.
+ */
+export function getDimensionPips(breakdown: ScoreBreakdown): DimensionPip[] {
+    // Cardinal positions in a 100×100 SVG viewBox
+    const PIP_POSITIONS: Record<string, { cx: number; cy: number }> = {
+        temporal:  { cx: 50, cy: 2 },
+        thematic:  { cx: 98, cy: 50 },
+        visual:    { cx: 50, cy: 98 },
+        technical: { cx: 2, cy: 50 },
+    };
+
+    const pips: DimensionPip[] = [];
+    for (const key of ['temporal', 'thematic', 'visual', 'technical'] as const) {
+        const value = breakdown[key];
+        if (value <= 0) continue;
+
+        const normalized = Math.min(1, value / DIMENSION_MAX[key]);
+        const radius = Math.max(3, normalized * 8);
+
+        pips.push({
+            dimension: key,
+            color: DIMENSION_COLORS[key],
+            radius,
+            ...PIP_POSITIONS[key],
+        });
+    }
+    return pips;
 }
 
 export const extractColorPalette = (img: HTMLImageElement): string[] => {
@@ -189,5 +287,213 @@ export const getRelatedTagsFromNodes = (nodes: ExperienceNode[], tags: Tag[], co
         return true;
     });
 };
+
+// --- ZONE SUMMARIZATION ---
+
+const ZONE_KEYS: ZoneName[] = ['temporal', 'thematic', 'visual', 'technical'];
+
+/**
+ * Determine which zone a node belongs to by comparing normalized dimension scores.
+ * Highest normalized value wins.
+ */
+export function getDominantZone(breakdown: ScoreBreakdown): ZoneName {
+    let best: ZoneName = 'temporal';
+    let bestNorm = -Infinity;
+    for (const key of ZONE_KEYS) {
+        const norm = breakdown[key] / DIMENSION_MAX[key];
+        if (norm > bestNorm) {
+            bestNorm = norm;
+            best = key;
+        }
+    }
+    return best;
+}
+
+/**
+ * Group neighbor nodes into zones by their dominant scoring dimension.
+ */
+export function groupNodesByZone(neighbors: ExperienceNode[]): Map<ZoneName, ExperienceNode[]> {
+    const groups = new Map<ZoneName, ExperienceNode[]>();
+    for (const node of neighbors) {
+        if (!node.scoreBreakdown) continue;
+        const zone = getDominantZone(node.scoreBreakdown);
+        const list = groups.get(zone) || [];
+        list.push(node);
+        groups.set(zone, list);
+    }
+    return groups;
+}
+
+function summarizeTemporalZone(nodes: ExperienceNode[], anchorImg: ImageNode): ZoneSummary {
+    const anchorDate = new Date(anchorImg.captureTimestamp);
+    const anchorDay = anchorDate.toDateString();
+    const sameDay = nodes.filter(n => new Date(n.original.captureTimestamp).toDateString() === anchorDay);
+    const oneWeekMs = 7 * 24 * 3600 * 1000;
+    const sameWeek = nodes.filter(n => Math.abs(n.original.captureTimestamp - anchorImg.captureTimestamp) < oneWeekMs);
+
+    let label: string;
+    let sublabel: string;
+
+    if (sameDay.length === nodes.length) {
+        label = 'Same Session';
+        const monthDay = anchorDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        sublabel = `${nodes.length} from ${monthDay}`;
+    } else if (sameWeek.length >= nodes.length * 0.7) {
+        label = 'Same Week';
+        const monthDay = anchorDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        sublabel = `${nodes.length} near ${monthDay}`;
+    } else {
+        const season = anchorImg.inferredSeason;
+        const year = anchorDate.getFullYear();
+        label = `${season} ${year}`;
+        sublabel = `${nodes.length} seasonal neighbors`;
+    }
+
+    return { zone: 'temporal', count: nodes.length, label, sublabel };
+}
+
+function summarizeThematicZone(nodes: ExperienceNode[], anchorImg: ImageNode, allTags: Tag[]): ZoneSummary {
+    const anchorTagSet = new Set([...anchorImg.tagIds, ...(anchorImg.aiTagIds || [])]);
+    const tagCounts: Record<string, number> = {};
+
+    for (const node of nodes) {
+        const nodeTags = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
+        for (const tid of nodeTags) {
+            if (anchorTagSet.has(tid)) {
+                tagCounts[tid] = (tagCounts[tid] || 0) + 1;
+            }
+        }
+    }
+
+    const sorted = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+    const topTags = sorted.slice(0, 2).map(([id]) => {
+        const t = allTags.find(tag => tag.id === id);
+        return t ? t.label : '';
+    }).filter(Boolean);
+
+    const label = topTags.length > 0 ? topTags.join(', ') : 'Shared Concepts';
+    const totalShared = sorted.length;
+    const sublabel = `${nodes.length} with ${totalShared} shared concept${totalShared !== 1 ? 's' : ''}`;
+
+    return { zone: 'thematic', count: nodes.length, label, sublabel };
+}
+
+function summarizeVisualZone(nodes: ExperienceNode[], anchorImg: ImageNode, allTags: Tag[]): ZoneSummary {
+    const allTagIds = [...anchorImg.tagIds, ...(anchorImg.aiTagIds || [])];
+    const mono = isMonochrome(allTags, allTagIds);
+
+    if (mono) {
+        return { zone: 'visual', count: nodes.length, label: 'Monochrome', sublabel: `${nodes.length} palette matches` };
+    }
+
+    // Determine warm/cool/neutral by averaging R vs B channels across zone node palettes
+    let totalR = 0;
+    let totalB = 0;
+    let samples = 0;
+    for (const node of nodes) {
+        for (const hex of node.original.palette) {
+            const [r, , b] = hexToRgbVals(hex);
+            totalR += r;
+            totalB += b;
+            samples++;
+        }
+    }
+
+    let label: string;
+    if (samples === 0) {
+        label = 'Color Kin';
+    } else {
+        const avgR = totalR / samples;
+        const avgB = totalB / samples;
+        if (avgR > avgB + 20) label = 'Warm Tones';
+        else if (avgB > avgR + 20) label = 'Cool Palette';
+        else label = 'Neutral Tones';
+    }
+
+    return { zone: 'visual', count: nodes.length, label, sublabel: `${nodes.length} palette match${nodes.length !== 1 ? 'es' : ''}` };
+}
+
+function summarizeTechnicalZone(nodes: ExperienceNode[], anchorImg: ImageNode): ZoneSummary {
+    const camera = anchorImg.cameraModel;
+    const lens = anchorImg.lensModel;
+
+    const cameraMatches = nodes.filter(n => n.original.cameraModel === camera && camera !== 'Unknown Camera');
+    const lensMatches = nodes.filter(n => n.original.lensModel === lens && lens !== 'Unknown Lens');
+
+    let label: string;
+    let sublabel: string;
+
+    if (cameraMatches.length > 0 && lensMatches.length > 0) {
+        label = camera;
+        sublabel = `${nodes.length} on ${camera.split(' ').pop()} + ${lens.split(' ').pop()}`;
+    } else if (cameraMatches.length > 0) {
+        label = camera;
+        sublabel = `${nodes.length} on ${camera}`;
+    } else if (lensMatches.length > 0) {
+        label = lens;
+        sublabel = `${nodes.length} with ${lens}`;
+    } else {
+        label = 'Same Setup';
+        sublabel = `${nodes.length} similar settings`;
+    }
+
+    return { zone: 'technical', count: nodes.length, label, sublabel };
+}
+
+/**
+ * Build a complete neighborhood summary: zone groupings, summaries, and narrative.
+ */
+export function buildNeighborhoodSummary(
+    neighbors: ExperienceNode[],
+    anchorImg: ImageNode,
+    allTags: Tag[]
+): NeighborhoodSummary {
+    const groups = groupNodesByZone(neighbors);
+    const zones: ZoneSummary[] = [];
+
+    const summarizers: Record<ZoneName, (nodes: ExperienceNode[]) => ZoneSummary> = {
+        temporal:  (nodes) => summarizeTemporalZone(nodes, anchorImg),
+        thematic:  (nodes) => summarizeThematicZone(nodes, anchorImg, allTags),
+        visual:    (nodes) => summarizeVisualZone(nodes, anchorImg, allTags),
+        technical: (nodes) => summarizeTechnicalZone(nodes, anchorImg),
+    };
+
+    for (const key of ZONE_KEYS) {
+        const nodes = groups.get(key);
+        if (!nodes || nodes.length === 0) continue;
+        zones.push(summarizers[key](nodes));
+    }
+
+    // Build narrative
+    const parts: string[] = [];
+    for (const z of zones) {
+        switch (z.zone) {
+            case 'temporal':
+                parts.push(`${z.count} from the same ${z.label.toLowerCase().includes('session') ? 'shooting session' : z.label.toLowerCase().includes('week') ? 'week' : 'season'}`);
+                break;
+            case 'thematic':
+                parts.push(`${z.count} sharing ${z.label} themes`);
+                break;
+            case 'visual':
+                parts.push(`${z.count} with ${z.label.toLowerCase()}`);
+                break;
+            case 'technical':
+                parts.push(`${z.count} shot on the same ${z.label}`);
+                break;
+        }
+    }
+
+    let narrative: string;
+    if (parts.length === 0) {
+        narrative = `This image connects to ${neighbors.length} neighbors.`;
+    } else if (parts.length === 1) {
+        narrative = `This image connects to ${neighbors.length} neighbor${neighbors.length !== 1 ? 's' : ''} — ${parts[0]}.`;
+    } else {
+        const last = parts.pop()!;
+        narrative = `This image connects to ${neighbors.length} neighbors — ${parts.join(', ')}, and ${last}.`;
+    }
+
+    return { zones, totalNeighbors: neighbors.length, narrative };
+}
 
 // processImageFile and hydrateGalleryAssets removed — image loading now handled by immichService.ts

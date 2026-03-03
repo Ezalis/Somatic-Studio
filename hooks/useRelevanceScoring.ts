@@ -164,7 +164,7 @@ export function scoreAllNodes(
         const neighbors = scoredNodes.filter(n => n.id !== anchor.id && n.relevanceScore > 0);
         neighbors.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-        const visibleCount = Math.min(12, neighbors.length);
+        const visibleCount = Math.min(18, neighbors.length);
         const visibleNeighborIds = new Set(neighbors.slice(0, visibleCount).map(n => n.id));
 
         scoredNodes.forEach(n => {

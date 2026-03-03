@@ -236,13 +236,13 @@ describe('scoreAllNodes — IMAGE mode', () => {
         expect(scoredNodes[0].relevanceScore).toBe(10000);
     });
 
-    it('limits visible neighbors to 12', () => {
+    it('limits visible neighbors to 18', () => {
         const anchorImg = makeImage({ id: 'anchor', captureTimestamp: 1000 });
         const images: ImageNode[] = [anchorImg];
         const nodes: ExperienceNode[] = [makeNode(anchorImg)];
 
-        // Create 20 neighbors with positive scores (same day)
-        for (let i = 0; i < 20; i++) {
+        // Create 25 neighbors with positive scores (same day)
+        for (let i = 0; i < 25; i++) {
             const img = makeImage({ id: `img-${i}`, captureTimestamp: 1000 + i * 1000 });
             images.push(img);
             nodes.push(makeNode(img));
@@ -252,7 +252,7 @@ describe('scoreAllNodes — IMAGE mode', () => {
         const { scoredNodes } = scoreAllNodes(nodes, anchor, images, [], getTagById([]), false, undefined);
 
         const visibleNeighbors = scoredNodes.filter(n => n.isVisible && n.id !== 'anchor');
-        expect(visibleNeighbors.length).toBe(12);
+        expect(visibleNeighbors.length).toBe(18);
     });
 });
 

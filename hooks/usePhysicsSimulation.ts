@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import { ExperienceNode, AnchorState, PhysicsConfig } from '../types';
+import { getZoneTarget } from '../services/dataService';
 
 export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
     velocityDecay: 0.45,
@@ -10,6 +11,8 @@ export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
     floatSpeed: 0.5,
     heroGravity: 0.12,
     neighborGravity: 0.035,
+    zoneGravity: 0.05,
+    localSwirlSpeed: 0.2,
     gridPull: 0.15,
     filterGridPull: 0.15,
     damping: 0.9,
@@ -71,7 +74,7 @@ export function usePhysicsSimulation(
                 if (a.mode === 'NONE') return 0;
                 if (a.mode === 'IMAGE') {
                     if (d.id === a.id) return heroRadius * (mobile ? 0.8 : 0.95);
-                    return mobile ? 30 : 45;
+                    return mobile ? 25 : 35;
                 }
                 if (a.mode === 'TAG' || a.mode === 'COLOR') return mobile ? 20 : 30;
                 return mobile ? 35 : 55;
@@ -198,10 +201,10 @@ export function usePhysicsSimulation(
                     }
                     else if (node.isVisible) {
                         const targetY = dims.height * 0.45;
+                        const boundaryRadius = Math.max(dims.width, dims.height) * cfg.boundaryScale;
                         const dxRaw = node.x - cx;
                         const dyRaw = node.y - targetY;
                         const distRaw = Math.sqrt(dxRaw * dxRaw + dyRaw * dyRaw) || 1;
-                        const boundaryRadius = Math.max(dims.width, dims.height) * cfg.boundaryScale;
 
                         if (distRaw > boundaryRadius) {
                             const angle = Math.atan2(dyRaw, dxRaw);
@@ -211,15 +214,26 @@ export function usePhysicsSimulation(
                             node.vy = (node.vy || 0) * 0.1;
                         }
 
-                        node.vx = (node.vx || 0) + (cx - node.x) * cfg.neighborGravity;
-                        node.vy = (node.vy || 0) + (targetY - node.y) * cfg.neighborGravity;
+                        // Zone-targeted gravity: pull toward dimension-weighted compass position
+                        if (node.scoreBreakdown) {
+                            const rank = activeNodes.indexOf(node);
+                            const totalVisible = activeNodes.length;
+                            const zoneTarget = getZoneTarget(node.scoreBreakdown, cx, targetY, Math.max(0, rank), totalVisible, mobile);
 
-                        const dx = node.x - cx;
-                        const dy = node.y - targetY;
-                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                            node.vx = (node.vx || 0) + (zoneTarget.x - node.x) * cfg.zoneGravity;
+                            node.vy = (node.vy || 0) + (zoneTarget.y - node.y) * cfg.zoneGravity;
 
-                        node.vx += (-dy / dist) * cfg.swirlSpeed;
-                        node.vy += (dx / dist) * cfg.swirlSpeed;
+                            // Local swirl around zone target (not global center)
+                            const localDx = node.x - zoneTarget.x;
+                            const localDy = node.y - zoneTarget.y;
+                            const localDist = Math.sqrt(localDx * localDx + localDy * localDy) || 1;
+                            node.vx += (-localDy / localDist) * cfg.localSwirlSpeed;
+                            node.vy += (localDx / localDist) * cfg.localSwirlSpeed;
+                        } else {
+                            // Fallback: gentle pull toward center
+                            node.vx = (node.vx || 0) + (cx - node.x) * cfg.neighborGravity;
+                            node.vy = (node.vy || 0) + (targetY - node.y) * cfg.neighborGravity;
+                        }
 
                         node.targetScale = node.relevanceScore > 40 ? (mobile ? 0.6 : 0.8) : (mobile ? 0.45 : 0.6);
                         node.targetOpacity = 1.0;
