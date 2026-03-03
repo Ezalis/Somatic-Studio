@@ -70,29 +70,43 @@ Two modes shape the interface: **Experience** is the exploration space — a phy
 | Styling | Tailwind CSS v4 (build-time via `@tailwindcss/vite`) |
 | Physics / Layout | D3.js 7.9 (force simulation) |
 | Image Service | [Immich](https://immich.app/) — images, EXIF, ML tags, CLIP Smart Search |
+| Icons | [Lucide React](https://lucide.dev/) |
 | Build | Vite 6 |
+| Linting | ESLint + typescript-eslint (errors-only config) |
+| Testing | Vitest (jsdom environment) |
 | Fonts | `@fontsource` (Inter, JetBrains Mono, Caveat) |
 | Storage | IndexedDB (client-side palette cache + user tag edits) |
 
 ### File Structure
 
 ```
-index.html                → SPA shell, inline styles
-index.css                 → Tailwind entry (@import "tailwindcss")
-index.tsx                 → React entry, fontsource imports
-App.tsx                   → Root component, global state, view routing
+index.html                       → SPA shell, inline styles
+index.css                        → Tailwind entry (@import "tailwindcss")
+index.tsx                        → React entry, fontsource imports
+App.tsx                          → Root component, global state, view routing
 ├── components/
-│   ├── Experience.tsx    → Visual exploration (D3 physics, grid, focus views)
-│   ├── Workbench.tsx     → Admin/curation list view (tagging, search, batch ops)
-│   └── VisualElements.tsx→ Shared visuals (EsotericSprite, LoadingOverlay, HistoryStream, FieldGuide)
+│   ├── Experience.tsx           → Visual exploration (D3 physics, grid, focus views)
+│   ├── Workbench.tsx            → Admin/curation list view (tagging, search, batch ops)
+│   ├── VisualElements.tsx       → Shared visuals (EsotericSprite, LoadingOverlay, HistoryStream)
+│   ├── DetailView.tsx           → Image detail overlay (metadata, tags, EXIF)
+│   ├── FieldGuideOverlay.tsx    → Onboarding overlay explaining the navigation metaphor
+│   ├── Gallery.tsx              → Fullscreen vertical snap-scroll gallery
+│   ├── HistoryTimeline.tsx      → Fullscreen chronological exploration history
+│   ├── ProgressiveImage.tsx     → Preview→full-res crossfade image loader
+│   └── SatelliteLayer.tsx       → Spectral ID + Semantic Web side panels
+├── hooks/
+│   ├── useRelevanceScoring.ts   → Relevance scoring with per-dimension breakdown
+│   ├── usePhysicsSimulation.ts  → D3 force simulation with configurable physics
+│   └── __tests__/
+│       └── useRelevanceScoring.test.ts → Scoring engine test suite
 ├── services/
-│   ├── immichService.ts  → Immich API: album discovery, asset loading, CLIP Smart Search
-│   ├── dataService.ts    → Color palette extraction, color math, relationship scoring
-│   └── resourceService.ts→ IndexedDB persistence (palette cache, user tag edits)
+│   ├── immichService.ts         → Immich API: album discovery, asset loading, CLIP Smart Search
+│   ├── dataService.ts           → Color palette extraction, color math, relationship scoring
+│   └── resourceService.ts       → IndexedDB persistence (palette cache, user tag edits)
 ├── scripts/
-│   └── migrate-legacy-tags.mjs → One-time migration of Gemini AI tags into Immich
-├── types.ts              → Data models (ImageNode, Tag, ExperienceNode, AnchorState)
-└── vite.config.ts        → Tailwind plugin, Immich proxy, Docker polling
+│   └── migrate-legacy-tags.mjs  → One-time migration of Gemini AI tags into Immich
+├── types.ts                     → Data models (ImageNode, Tag, ExperienceNode, ScoreBreakdown)
+└── vite.config.ts               → Tailwind plugin, Immich proxy, Docker polling
 ```
 
 ### Data Flow
@@ -109,7 +123,12 @@ graph TD
     ResourceService -->|IndexedDB| App
     App --> Experience[Experience.tsx]
     App --> Workbench[Workbench.tsx]
+    Experience --> Scoring[useRelevanceScoring]
+    Experience --> Physics[usePhysicsSimulation]
     Experience --> VisualElements[VisualElements.tsx]
+    Experience --> DetailView[DetailView.tsx]
+    Experience --> SatelliteLayer[SatelliteLayer.tsx]
+    Experience --> Gallery[Gallery.tsx]
 ```
 
 #### Hydration Sequence
@@ -183,6 +202,8 @@ IMMICH_API_KEY=your_api_key_here
 ```bash
 npm install
 npm run dev        # localhost:3000
+npm run lint       # ESLint (errors-only)
+npm run test       # Vitest (single run)
 ```
 
 On first load, the app discovers the `SomaticStudio` album, fetches EXIF metadata for each asset, and extracts color palettes from thumbnails (batched, ~20ms delay between groups). Subsequent loads use the IndexedDB palette cache.
@@ -191,44 +212,65 @@ For Docker deployment, see the `compose-templates/somatic-studio/` directory in 
 
 ## Roadmap
 
-### Near-Term
+Tracked on [GitHub Projects](https://github.com/users/Ezalis/projects/1) with milestones M1–M4.
 
-- [ ] Generate `package-lock.json` for faster Docker builds (`npm ci`)
-- [ ] Configure Nginx proxy for Immich in production
+### Completed
 
-### Features
+- [x] **M1: Structural Foundation** — Scoring engine extraction, physics hook, UI component decomposition, ESLint, Vitest, package-lock.json
+- [x] Immich CLIP Smart Search (replaced Gemini AI)
+- [x] Nginx upstream keepalive + browser cache headers
+- [x] Deterministic builds (`package-lock.json`)
+
+### Up Next — M2: Navigation Intelligence
+
+- [ ] Score indicator glow halos on neighbor sprites
+- [ ] Intersection hover cards (shared attributes between anchor and neighbor)
+- [ ] Keyboard navigation + browser history (arrow keys, URL state, back button)
+- [ ] Context-aware satellite panels + temporal thread
+
+### Future
+
+<details>
+<summary><strong>M3: AI Pipeline</strong></summary>
+
+- [ ] Hybrid AI tagging architecture (ADR)
+- [ ] Server-side AI proxy endpoint
+- [ ] Claude Vision rich tagging
+- [ ] Embedding-based similarity scoring
+
+</details>
+
+<details>
+<summary><strong>M4: 3D Prototype</strong></summary>
+
+- [ ] Rendering abstraction layer
+- [ ] Three.js/R3F scene setup
+- [ ] 3D navigation with depth
+
+</details>
+
+<details>
+<summary><strong>Backlog</strong></summary>
 
 - [ ] Image upload via drag-and-drop or file picker
 - [ ] Persistent exploration state across sessions
 - [ ] Tag management UI (rename, merge, delete)
 - [ ] Advanced search (date range, ISO, aperture, color similarity)
-- [ ] Keyboard navigation in Experience mode
-- [ ] InsightSnapshot capture and replay
-- [ ] Image deletion from UI
-- [ ] Bulk import with auto-tagging
-- [ ] Dark mode for UI chrome
-
-### Visual & UX
-
 - [ ] Cluster visualization (shoot-day / semantic groups)
 - [ ] Color wheel navigation
 - [ ] Timeline view (days / months / years)
-- [ ] Comparison mode (side-by-side with intersection attributes)
-- [ ] Animation polish (smoother anchor transitions, entry/exit effects)
-
-<details>
-<summary><strong>Infrastructure (long-term)</strong></summary>
-
+- [ ] Dark mode for UI chrome
 - [ ] CI/CD pipeline (GitHub Actions → SSH → Docker rebuild)
 - [ ] Nginx reverse proxy with SSL (Let's Encrypt / Tailscale)
-- [ ] Image optimization pipeline (thumbnails, WebP variants)
-- [ ] Automated backup strategy
-- [ ] Health check endpoint
 - [ ] Multi-user support
 
 </details>
 
 ## Migration History
+
+### M1: Structural Foundation (March 2026)
+
+Refactored the monolithic Experience.tsx into clean modules: extracted `useRelevanceScoring` hook (scoring engine with per-dimension `ScoreBreakdown`), `usePhysicsSimulation` hook (D3 force sim with `PhysicsConfig`), and six UI components (`DetailView`, `FieldGuideOverlay`, `Gallery`, `HistoryTimeline`, `ProgressiveImage`, `SatelliteLayer`). Added progressive image loading with preview→full-res crossfade. Established developer tooling: ESLint + typescript-eslint, Vitest with jsdom, and committed `package-lock.json` for deterministic builds.
 
 ### Immich Integration (March 2026)
 
@@ -236,7 +278,7 @@ Migrated from local gallery + Gemini AI to Immich as the single image service. I
 
 ### Docker Self-Hosting (March 2026)
 
-Migrated from Google AI Studio CDN hosting to self-hosted Docker containers. Development server on port 3001 (Vite dev with hot reload), production on port 3100 (Nginx serving Vite build output).
+Migrated from Google AI Studio CDN hosting to self-hosted Docker containers. Development server on port 3001 (Vite dev with hot reload), production on port 3100 (Nginx serving Vite build output). Nginx configured with upstream keepalive (16 connections) and 7-day browser cache on image responses.
 
 ### Origin
 

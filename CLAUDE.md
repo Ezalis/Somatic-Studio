@@ -10,27 +10,43 @@ A photography asset management and discovery system — a "living web of memory,
 | Styling | Tailwind CSS v4 (build-time via `@tailwindcss/vite`) |
 | Physics/Layout | D3.js 7.9 (force simulation) |
 | Image Service | Immich (docker-01:2283) — images, EXIF, ML tags, CLIP Smart Search |
+| Icons | Lucide React |
 | Build | Vite 6 |
+| Linting | ESLint + typescript-eslint (errors-only config) |
+| Testing | Vitest (jsdom environment) |
 | Fonts | @fontsource (Inter, JetBrains Mono, Caveat) |
 | Storage | IndexedDB (client-side, palette cache + user tag edits) |
 
 ## Architecture
 
 ```
-index.html          → SPA shell, inline styles
-index.css           → Tailwind entry (@import "tailwindcss")
-index.tsx           → React entry, fontsource imports
-App.tsx             → Root component, global state, view routing
+index.html                    → SPA shell, inline styles
+index.css                     → Tailwind entry (@import "tailwindcss")
+index.tsx                     → React entry, fontsource imports
+App.tsx                       → Root component, global state, view routing
 ├── components/
-│   ├── Experience.tsx      → Visual exploration interface (D3 physics, grid, focus views)
-│   ├── Workbench.tsx       → Admin/curation list view (tagging, search, batch ops)
-│   └── VisualElements.tsx  → Shared visuals (EsotericSprite, LoadingOverlay, HistoryStream, FieldGuide)
+│   ├── Experience.tsx        → Visual exploration (D3 physics, grid, focus views)
+│   ├── Workbench.tsx         → Admin/curation list view (tagging, search, batch ops)
+│   ├── VisualElements.tsx    → Shared visuals (EsotericSprite, LoadingOverlay, HistoryStream)
+│   ├── DetailView.tsx        → Image detail overlay (metadata, tags, EXIF)
+│   ├── FieldGuideOverlay.tsx → Onboarding overlay explaining the navigation metaphor
+│   ├── Gallery.tsx           → Fullscreen vertical snap-scroll gallery
+│   ├── HistoryTimeline.tsx   → Fullscreen chronological exploration history
+│   ├── ProgressiveImage.tsx  → Preview→full-res crossfade image loader
+│   └── SatelliteLayer.tsx    → Spectral ID + Semantic Web side panels
+├── hooks/
+│   ├── useRelevanceScoring.ts   → Relevance scoring with per-dimension breakdown
+│   ├── usePhysicsSimulation.ts  → D3 force simulation with configurable physics
+│   └── __tests__/
+│       └── useRelevanceScoring.test.ts → Scoring engine test suite
 ├── services/
-│   ├── immichService.ts    → Immich API: album discovery, asset loading, CLIP Smart Search
-│   ├── dataService.ts      → Color palette extraction, color math, relationship scoring
-│   └── resourceService.ts  → IndexedDB persistence (palette cache, user tag edits)
-├── types.ts                → Data models (ImageNode, Tag, ExperienceNode, AnchorState)
-└── vite.config.ts          → Tailwind plugin, Immich proxy, Docker polling
+│   ├── immichService.ts      → Immich API: album discovery, asset loading, CLIP Smart Search
+│   ├── dataService.ts        → Color palette extraction, color math, relationship scoring
+│   └── resourceService.ts    → IndexedDB persistence (palette cache, user tag edits)
+├── scripts/
+│   └── migrate-legacy-tags.mjs → One-time migration of Gemini AI tags into Immich
+├── types.ts                  → Data models (ImageNode, Tag, ExperienceNode, AnchorState, ScoreBreakdown)
+└── vite.config.ts            → Tailwind plugin, Immich proxy, Docker polling
 ```
 
 ## Key Concepts
@@ -74,7 +90,7 @@ App.tsx             → Root component, global state, view routing
 All Immich API calls go through `/api/immich/*` — the proxy rewrites to Immich's `/api/*` and injects the API key server-side. The browser never sees the key.
 
 - **Dev:** Vite proxy in `vite.config.ts`
-- **Prod:** Nginx proxy block in `nginx/default.conf` (DockerAdmin repo)
+- **Prod:** Nginx proxy block in `nginx/default.conf.template` (DockerAdmin repo) — upstream keepalive (16 connections), 7-day browser cache on image responses
 
 ## Environment Variables
 
@@ -82,6 +98,7 @@ All Immich API calls go through `/api/immich/*` — the proxy rewrites to Immich
 |----------|----------|---------|
 | `IMMICH_API_KEY` | Yes | Immich API key for image service access |
 | `IMMICH_URL` | No | Immich server URL (default: `http://192.168.50.66:2283`) |
+| `IMMICH_BACKEND` | No | Immich host:port for Nginx upstream (default: `192.168.50.66:2283`, no `http://` prefix) |
 
 ## Development
 
@@ -90,6 +107,9 @@ npm install
 npm run dev        # Vite dev server at localhost:3000
 npm run build      # Production build to dist/
 npm run preview    # Preview production build
+npm run lint       # ESLint (errors-only, TypeScript-aware)
+npm run test       # Vitest (single run)
+npm run test:watch # Vitest (watch mode)
 ```
 
 ## Deployment (Docker on docker-01)
@@ -99,7 +119,7 @@ npm run preview    # Preview production build
 | Production | 3100 | `http://docker-01:3100` / `http://192.168.50.66:3100` |
 | Development | 3001 | `http://docker-01:3001` / `http://192.168.50.66:3001` |
 
-**Current branch state:** Production runs `main`. Development runs `feature/immich-integration`.
+**Current branch state:** Both production and development run `main` (feature branches switched per milestone).
 
 ```bash
 # Update production
@@ -107,9 +127,9 @@ ssh -i ~/.ssh/id_ed25519_dockeradmin thensomethingnew@docker-01 \
   "cd ~/somatic-studio-src && git pull origin main && \
    cd ~/compose-stacks/somatic-studio && docker compose --profile prod up -d --build"
 
-# Update dev (feature branch)
+# Update dev (switch BRANCH as needed)
 ssh -i ~/.ssh/id_ed25519_dockeradmin thensomethingnew@docker-01 \
-  "cd ~/somatic-studio-src && git pull origin feature/immich-integration && \
+  "cd ~/somatic-studio-src && git fetch origin && git checkout BRANCH && git pull && \
    cd ~/compose-stacks/somatic-studio && docker compose --profile dev up -d --build"
 
 # View logs
@@ -129,11 +149,10 @@ Migrated from local gallery + Gemini AI to Immich image service:
 - Removed `exifr`, `@google/genai`, process shim plugin
 - API key injected server-side via proxy (Vite dev / Nginx prod)
 
-### 2026-03-01: Dev Deployment (feature/immich-integration)
-- Dev server (docker-01:3001) switched from `main` to `feature/immich-integration`
+### 2026-03-01: Dev Deployment
+- Dev server (docker-01:3001) runs feature branches during active milestone work, `main` otherwise
 - docker-compose.yml updated: removed `somatic-studio-data` volume, added `IMMICH_API_KEY`/`IMMICH_URL` env vars
 - `.env` files created on remote (source repo + compose stack) with Immich API key
-- Prod (docker-01:3100) unchanged, still on `main`
 
 ### 2026-03-01: Legacy AI Tag Migration to Immich
 Migrated original Gemini AI tags from `main:public/resources/AI-tags.json` into Immich via one-time script:
@@ -153,9 +172,26 @@ Migrated original Gemini AI tags from `main:public/resources/AI-tags.json` into 
 - Tighter search params: `size: 10`, top-5 position cutoff, 30% penetration limit
 - Tags written back to Immich as `SomaticStudio/*` via `syncTagsToImmich()`
 
+### 2026-03-02: M1 Structural Foundation
+Refactored Experience.tsx from a monolithic ~2000-line component into clean modules:
+- **Scoring engine** — Extracted `useRelevanceScoring` hook with `ScoreBreakdown` per-dimension type; scoring logic moved to `dataService.ts`
+- **Physics simulation** — Extracted `usePhysicsSimulation` hook with `PhysicsConfig`; tuned for slower movement and gentler transitions
+- **UI components** — Extracted `DetailView`, `FieldGuideOverlay`, `Gallery`, `HistoryTimeline`, `ProgressiveImage`, `SatelliteLayer` from inline rendering
+- **Progressive image loading** — Preview→full-res crossfade using CSS Grid stacking (no layout shift)
+- **Developer tooling** — Added ESLint + typescript-eslint (errors-only), Vitest with jsdom, `package-lock.json`
+- **Test suite** — Scoring engine tests covering dimension isolation, breakdown structure, anchor-self scoring
+
+### 2026-03-02: Hero Image Performance Fix
+Fixed slow hero image load on production (Nginx) vs dev (Vite):
+- **Deferred preload** — Original-image preload in Experience.tsx now waits 1s before starting, so the ~267KB preview loads without the multi-MB original competing for bandwidth
+- **Nginx upstream keepalive** — Added `upstream immich_backend` with `keepalive 16` to reuse TCP connections to Immich (previously opened a new connection per request)
+- **Browser cache headers** — Added `expires 7d` + `Cache-Control: public, max-age=604800` on Immich image responses; thumbnails/previews cached for 7 days
+- **New env var** — `IMMICH_BACKEND` (host:port, no protocol) added to docker-compose.yml for the `upstream` block
+- Nginx config now requires `proxy_http_version 1.1` + `Connection ""` for keepalive to work
+
 ### 2026-03-01: Docker Self-Hosting
 Migrated from Google AI Studio (CDN-hosted) to self-hosted Docker:
-- Dockerfiles use `npm install` (not `npm ci`) since no lockfile is committed
+- Dockerfiles use `npm ci` with committed `package-lock.json` for deterministic builds
 
 ## Known Data Issues
 
@@ -163,39 +199,50 @@ Migrated from Google AI Studio (CDN-hosted) to self-hosted Docker:
 
 ---
 
-## Future Roadmap
+## Roadmap
 
-### High Priority
+Tracked on [GitHub Projects](https://github.com/users/Ezalis/projects/1) with milestones M1–M4.
 
+### Completed
+
+- [x] **M1: Structural Foundation** — Scoring engine, physics simulation, UI component extraction, ESLint, Vitest, package-lock.json (#1–#6)
 - [x] **Replace Gemini with Immich CLIP Smart Search** — Immich provides ML auto-tags and CLIP semantic search, eliminating the Google API dependency
-- [ ] **Generate package-lock.json** — Install Node.js locally, run `npm install`, commit the lockfile so Docker builds can use faster `npm ci`
-- [ ] **Configure Nginx proxy for Immich** — Add `/api/immich/` proxy block to nginx config in DockerAdmin repo for production
+- [x] **Configure Nginx proxy for Immich** — Nginx upstream keepalive + 7d cache headers for image responses (DockerAdmin repo)
+- [x] **Generate package-lock.json** — Deterministic builds, Docker can use `npm ci`
 
-### Features
+### M2: Navigation Intelligence (Next)
 
-- [ ] **Image upload via UI** — Drag-and-drop or file picker to add new images directly through the app (currently requires adding to `public/gallery/` and updating tags.json)
-- [ ] **Persistent exploration state** — Save/restore anchor, history, and view state across sessions (currently resets on page reload)
-- [ ] **InsightSnapshot recording** — The `InsightSnapshot` type exists in types.ts but isn't used yet; implement capture and replay of exploration moments
-- [ ] **Tag management UI** — Create, rename, merge, and delete tags from the Workbench; currently tags can only be added, not edited
-- [ ] **Image deletion** — Remove images from the gallery through the UI
-- [ ] **Bulk image import** — Batch upload with automatic EXIF extraction and AI tagging
-- [ ] **Advanced search** — Filter by date range, ISO range, aperture range, color similarity
-- [ ] **Keyboard navigation** — Arrow keys to traverse neighbors in Experience mode, Escape to return to grid
-- [ ] **Dark mode** — The CSS already has a black background; extend to a full dark theme for the UI chrome
+- [ ] **Score indicator glow halos** — Visual relevance feedback on neighbor sprites (#7)
+- [ ] **Intersection hover cards** — Show shared attributes between anchor and hovered neighbor (#8)
+- [ ] **Keyboard navigation + browser history** — Arrow keys, Enter/Escape, URL state, back button (#9)
+- [ ] **Context-aware panels + temporal thread** — Neighborhood-weighted satellites, timeline strip (#10)
 
-### Visual & UX
+### M3: AI Pipeline
 
-- [ ] **Cluster visualization** — Show shoot-day clusters or semantic groups as visual regions on the grid
-- [ ] **Color wheel navigation** — Interactive color picker to find images by dominant hue
-- [ ] **Timeline view** — Chronological strip showing images across days/months/years
-- [ ] **Comparison mode** — Side-by-side view of two images with their intersection attributes
-- [ ] **Animation polish** — Smoother transitions between anchor changes, entry/exit animations for satellites
+- [ ] **Hybrid AI tagging architecture (ADR)** (#11)
+- [ ] **Server-side AI proxy endpoint** (#12)
+- [ ] **Claude Vision rich tagging** (#13)
+- [ ] **Embedding-based similarity scoring** (#14)
+
+### M4: 3D Prototype
+
+- [ ] **Rendering abstraction layer** (#15)
+- [ ] **Three.js/R3F scene setup** (#16)
+- [ ] **3D navigation with depth** (#17)
+
+### Backlog
+
+- [ ] Image upload via drag-and-drop or file picker (currently requires adding to Immich directly)
+- [ ] Persistent exploration state across sessions
+- [ ] Tag management UI (rename, merge, delete)
+- [ ] Advanced search (date range, ISO, aperture, color similarity)
+- [ ] InsightSnapshot capture and replay
+- [ ] Dark mode for UI chrome
 
 ### Infrastructure
 
-- [ ] **CI/CD pipeline** — Auto-deploy on push to main (GitHub Actions → SSH → docker compose rebuild)
-- [ ] **Nginx reverse proxy with SSL** — Add HTTPS via Let's Encrypt or Tailscale certs
-- [ ] **Image optimization pipeline** — Generate thumbnails and WebP variants during build for faster loading
-- [ ] **Backup strategy** — Automated backup of IndexedDB exports and gallery images
-- [ ] **Health check endpoint** — Simple `/health` route for monitoring
-- [ ] **Multi-user support** — Separate galleries/tag databases per user (long-term)
+- [ ] CI/CD pipeline (GitHub Actions → SSH → Docker rebuild)
+- [ ] Nginx reverse proxy with SSL (Let's Encrypt / Tailscale)
+- [ ] Image optimization pipeline (thumbnails, WebP variants)
+- [ ] Health check endpoint
+- [ ] Multi-user support (long-term)
