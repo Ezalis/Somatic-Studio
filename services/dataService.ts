@@ -1,4 +1,4 @@
-import { ImageNode, Tag, TagType, ExperienceNode } from '../types';
+import { ImageNode, Tag, TagType, ExperienceNode, ScoreBreakdown } from '../types';
 
 // --- Utilities ---
 
@@ -41,6 +41,34 @@ export const getMinPaletteDistance = (p1: string[], p2: string[]): number => {
     }
     return min;
 };
+
+// --- SCORE DIMENSION COLORS ---
+
+const DIMENSION_COLORS: Record<string, [number, number, number]> = {
+    temporal:  [59, 130, 246],  // blue   #3b82f6
+    thematic:  [139, 92, 246],  // purple #8b5cf6
+    visual:    [245, 158, 11],  // amber  #f59e0b
+    technical: [34, 197, 94],   // green  #22c55e
+};
+
+export function blendDimensionColors(breakdown: ScoreBreakdown): { color: string; intensity: number } {
+    const dims = (['temporal', 'thematic', 'visual', 'technical'] as const)
+        .map(key => ({ key, value: Math.max(0, breakdown[key]) }))
+        .filter(d => d.value > 0)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 2);
+
+    if (dims.length === 0) return { color: 'rgb(161,161,170)', intensity: 0 };
+
+    const totalWeight = dims.reduce((s, d) => s + d.value, 0);
+    const r = Math.round(dims.reduce((s, d) => s + DIMENSION_COLORS[d.key][0] * d.value, 0) / totalWeight);
+    const g = Math.round(dims.reduce((s, d) => s + DIMENSION_COLORS[d.key][1] * d.value, 0) / totalWeight);
+    const b = Math.round(dims.reduce((s, d) => s + DIMENSION_COLORS[d.key][2] * d.value, 0) / totalWeight);
+
+    const intensity = Math.min(1, Math.max(0.15, breakdown.total / 600));
+
+    return { color: `rgb(${r},${g},${b})`, intensity };
+}
 
 export const extractColorPalette = (img: HTMLImageElement): string[] => {
     const canvas = document.createElement('canvas');
