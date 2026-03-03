@@ -12,6 +12,7 @@ import Gallery from './Gallery';
 import SatelliteLayer from './SatelliteLayer';
 import HistoryTimeline from './HistoryTimeline';
 import DetailView from './DetailView';
+import MobileHeroLayout from './MobileHeroLayout';
 
 // Import hooks
 import { useRelevanceScoring } from '../hooks/useRelevanceScoring';
@@ -61,6 +62,7 @@ const Experience: React.FC<ExperienceProps> = ({
     const [galleryState, setGalleryState] = useState<{ isOpen: boolean, startIndex: number }>({ isOpen: false, startIndex: 0 });
     const [isGuideOpen, setIsGuideOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    const [isCompactLayout, setIsCompactLayout] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
     const [windowDimensions, setWindowDimensions] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 0, height: typeof window !== 'undefined' ? window.innerHeight : 0 });
 
     const nsfwTagId = useMemo(() => tags.find(t => t.label.trim().toLowerCase() === 'nsfw')?.id, [tags]);
@@ -76,17 +78,20 @@ const Experience: React.FC<ExperienceProps> = ({
         return computeClusterAngles(neighbors);
     }, [simNodes, anchor]);
 
-    // Physics Simulation
+    // Physics Simulation (disabled in compact mobile layout with IMAGE anchor)
+    const physicsDisabled = isCompactLayout && anchor.mode === 'IMAGE';
     const { zoomRef } = usePhysicsSimulation(
         containerRef, worldRef, nodeRefs, hoveredNodeIdRef,
         simNodes, anchor, activePalette, loadingProgress, windowDimensions,
         undefined,       // config (default)
-        clusterAngles
+        clusterAngles,
+        physicsDisabled
     );
 
     useEffect(() => {
         const handleResize = () => {
             setIsMobile(window.innerWidth < 1024);
+            setIsCompactLayout(window.innerWidth < 768);
             setWindowDimensions({ width: window.innerWidth, height: window.innerHeight });
         };
         handleResize();
@@ -356,7 +361,19 @@ const Experience: React.FC<ExperienceProps> = ({
                 </div>
             )}
 
-            <div ref={containerRef} className="absolute inset-0 top-0 cursor-move active:cursor-grabbing z-10 pb-0">
+            {/* Mobile hero card layout (< 768px, IMAGE mode) */}
+            {isCompactLayout && anchor.mode === 'IMAGE' && activeNode && !isDetailOpen && !galleryState.isOpen && (
+                <MobileHeroLayout
+                    heroNode={activeNode}
+                    neighbors={simNodes.filter(n => n.isVisible && n.id !== anchor.id)}
+                    tags={tags}
+                    onAnchorChange={onAnchorChange}
+                    onHeroClick={() => setIsDetailOpen(true)}
+                />
+            )}
+
+            {/* Physics canvas (hidden when compact mobile IMAGE layout is active) */}
+            <div ref={containerRef} className={`absolute inset-0 top-0 cursor-move active:cursor-grabbing z-10 pb-0 ${isCompactLayout && anchor.mode === 'IMAGE' ? 'hidden' : ''}`}>
                 <div ref={worldRef} className="absolute inset-0 origin-top-left will-change-transform">
                     {simNodes.map(node => {
                         if (!node.isVisible && node.currentOpacity <= 0.05) return null;
