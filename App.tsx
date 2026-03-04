@@ -4,6 +4,7 @@ import { initDatabase, clearDatabase, saveTagDefinitions, saveAITagsForFile } fr
 import { hydrateFromImmich, generateClipTags, syncTagsToImmich } from './services/immichService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
+import NavigationPrototype from './components/NavigationPrototype';
 import { LoadingOverlay } from './components/VisualElements';
 import { LayoutGrid, Network, HardDrive, Shield, ShieldAlert, Trash2, RefreshCw } from 'lucide-react';
 
@@ -229,8 +230,40 @@ const App: React.FC = () => {
         }
     };
 
+    // --- SIMPLE ROUTE STATE ---
+    const [pathname, setPathname] = useState(window.location.pathname);
+
+    useEffect(() => {
+        const onPopState = () => setPathname(window.location.pathname);
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, []);
+
+    const isPrototype = pathname === '/prototype';
+
+    const handleExitPrototype = () => {
+        window.history.pushState({}, '', '/');
+        setPathname('/');
+    };
+
     if (isInitializing) {
         return <div className="fixed inset-0 bg-black z-[9999]" />;
+    }
+
+    // Prototype view — completely separate from main app
+    if (isPrototype) {
+        if (loadingProgress) {
+            return (
+                <div className="fixed inset-0 bg-[#faf9f6] flex items-center justify-center">
+                    <div className="text-center">
+                        <p className="text-sm text-zinc-400 tracking-widest uppercase" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            Loading {loadingProgress.current} / {loadingProgress.total > 0 ? loadingProgress.total : '...'}
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        return <NavigationPrototype images={images} tags={tags} onExit={handleExitPrototype} />;
     }
 
     // --- RENDERING ---
