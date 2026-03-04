@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { scoreImageNode, scoreAllNodes } from '../useRelevanceScoring';
 import { ImageNode, Tag, TagType, ExperienceNode, AnchorState } from '../../types';
+import { classifyRing, computeGlyphContext, computeDepthLayer, RING_COLORS } from '../../services/dataService';
 
 // --- Test helpers ---
 
@@ -299,5 +300,176 @@ describe('scoreAllNodes — NONE mode', () => {
         const { activePalette, commonTags } = scoreAllNodes(nodes, anchor, [img1], [], getTagById([]), false, undefined);
         expect(activePalette).toEqual([]);
         expect(commonTags).toEqual([]);
+    });
+});
+
+// --- Ring Classification Tests ---
+
+describe('classifyRing', () => {
+    const baseTime = new Date('2024-06-15T12:00:00Z').getTime();
+
+    it('assigns session ring for same-day images', () => {
+        const anchorImg = makeImage({ captureTimestamp: baseTime });
+        const neighborImg = makeImage({ id: 'img-2', captureTimestamp: baseTime + 3600000 }); // +1 hour
+        const breakdown = { total: 520, temporal: 500, thematic: 0, visual: 20, technical: 0 };
+
+        const profile = classifyRing(breakdown, anchorImg, neighborImg);
+        expect(profile.ring).toBe('session');
+        expect(profile.isSameDay).toBe(true);
+        expect(profile.dominantDimension).toBe('temporal');
+    });
+
+    it('assigns thematic ring when thematic score is dominant and significant', () => {
+        const anchorImg = makeImage({ captureTimestamp: baseTime });
+        const neighborImg = makeImage({ id: 'img-2', captureTimestamp: baseTime + 7 * 86400000 }); // 7 days apart
+        const breakdown = { total: 90, temporal: 20, thematic: 60, visual: 10, technical: 0 };
+
+        const profile = classifyRing(breakdown, anchorImg, neighborImg);
+        expect(profile.ring).toBe('thematic');
+        expect(profile.dominantDimension).toBe('thematic');
+        expect(profile.isSameDay).toBe(false);
+    });
+
+    it('assigns visual ring when visual score is dominant', () => {
+        const anchorImg = makeImage({ captureTimestamp: baseTime });
+        const neighborImg = makeImage({ id: 'img-2', captureTimestamp: baseTime + 30 * 86400000 });
+        const breakdown = { total: 220, temporal: 0, thematic: 10, visual: 200, technical: 10 };
+
+        const profile = classifyRing(breakdown, anchorImg, neighborImg);
+        expect(profile.ring).toBe('visual');
+        expect(profile.dominantDimension).toBe('visual');
+    });
+
+    it('assigns technical ring when lens match is strongest', () => {
+        const anchorImg = makeImage({ captureTimestamp: baseTime });
+        const neighborImg = makeImage({ id: 'img-2', captureTimestamp: baseTime + 60 * 86400000 });
+        // Technical max is 20, so 10/20 = 0.5 (above threshold)
+        // thematic and visual are below threshold
+        const breakdown = { total: 15, temporal: 0, thematic: 5, visual: 0, technical: 10 };
+
+        const profile = classifyRing(breakdown, anchorImg, neighborImg);
+        expect(profile.ring).toBe('technical');
+        expect(profile.dominantDimension).toBe('technical');
+    });
+
+    it('assigns gateway when no dimension exceeds significance threshold', () => {
+        const anchorImg = makeImage({ captureTimestamp: baseTime });
+        const neighborImg = makeImage({ id: 'img-2', captureTimestamp: baseTime + 60 * 86400000 });
+        // All dimensions well below 20% of their max
+        const breakdown = { total: 5, temporal: 0, thematic: 2, visual: 2, technical: 1 };
+
+        const profile = classifyRing(breakdown, anchorImg, neighborImg);
+        expect(profile.ring).toBe('gateway');
+        expect(profile.dominantDimension).toBeNull();
+    });
+
+    it('same-day always wins over other dimensions', () => {
+        const anchorImg = makeImage({ captureTimestamp: baseTime });
+        const neighborImg = makeImage({ id: 'img-2', captureTimestamp: baseTime + 1000 }); // same day
+        // Even with high thematic score, same-day takes priority
+        const breakdown = { total: 620, temporal: 500, thematic: 100, visual: 10, technical: 10 };
+
+        const profile = classifyRing(breakdown, anchorImg, neighborImg);
+        expect(profile.ring).toBe('session');
+    });
+
+    it('normalizes scores to [0,1] range', () => {
+        const anchorImg = makeImage({ captureTimestamp: baseTime });
+        const neighborImg = makeImage({ id: 'img-2', captureTimestamp: baseTime + 60 * 86400000 });
+        const breakdown = { total: 370, temporal: 0, thematic: 150, visual: 200, technical: 20 };
+
+        const profile = classifyRing(breakdown, anchorImg, neighborImg);
+        expect(profile.normalizedScores.thematic).toBe(1);
+        expect(profile.normalizedScores.visual).toBe(1);
+        expect(profile.normalizedScores.technical).toBe(1);
+        expect(profile.normalizedScores.temporal).toBe(0);
+    });
+});
+
+describe('computeGlyphContext', () => {
+    const baseTime = new Date('2024-06-15T12:00:00Z').getTime();
+
+    it('produces affinity color as blend of two palettes', () => {
+        const anchorImg = makeImage({ palette: ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'] });
+        const neighborImg = makeImage({ id: 'img-2', palette: ['#0000ff', '#00ff00', '#ff0000', '#00ffff', '#ff00ff'] });
+        const breakdown = { total: 200, temporal: 0, thematic: 100, visual: 100, technical: 0 };
+        const profile = classifyRing(breakdown, anchorImg, neighborImg);
+
+        const ctx = computeGlyphContext(anchorImg, neighborImg, breakdown, profile);
+        // #ff0000 + #0000ff → average = #800080
+        expect(ctx.affinityColor).toBe('#800080');
+    });
+
+    it('uses ring-specific halo color', () => {
+        const anchorImg = makeImage({ captureTimestamp: baseTime });
+        const neighborImg = makeImage({ id: 'img-2', captureTimestamp: baseTime + 1000 });
+        const breakdown = { total: 520, temporal: 500, thematic: 0, visual: 20, technical: 0 };
+        const profile = classifyRing(breakdown, anchorImg, neighborImg);
+
+        const ctx = computeGlyphContext(anchorImg, neighborImg, breakdown, profile);
+        expect(ctx.haloColor).toBe(RING_COLORS.session);
+        expect(ctx.shapeKey).toBe('session');
+    });
+
+    it('clamps haloIntensity to [0,1]', () => {
+        const anchorImg = makeImage();
+        const neighborImg = makeImage({ id: 'img-2' });
+
+        const highBreakdown = { total: 1600, temporal: 500, thematic: 150, visual: 200, technical: 20 };
+        const profile = classifyRing(highBreakdown, anchorImg, neighborImg);
+        const ctx = computeGlyphContext(anchorImg, neighborImg, highBreakdown, profile);
+        expect(ctx.haloIntensity).toBeLessThanOrEqual(1);
+        expect(ctx.haloIntensity).toBeGreaterThanOrEqual(0);
+
+        const zeroBreakdown = { total: 0, temporal: 0, thematic: 0, visual: 0, technical: 0 };
+        const profile2 = classifyRing(zeroBreakdown, anchorImg, neighborImg);
+        const ctx2 = computeGlyphContext(anchorImg, neighborImg, zeroBreakdown, profile2);
+        expect(ctx2.haloIntensity).toBe(0);
+    });
+
+    it('relevanceScale ranges from 0.4 to 1.0', () => {
+        const anchorImg = makeImage();
+        const neighborImg = makeImage({ id: 'img-2' });
+
+        const zeroBreakdown = { total: 0, temporal: 0, thematic: 0, visual: 0, technical: 0 };
+        const profile0 = classifyRing(zeroBreakdown, anchorImg, neighborImg);
+        const ctx0 = computeGlyphContext(anchorImg, neighborImg, zeroBreakdown, profile0);
+        expect(ctx0.relevanceScale).toBe(0.4);
+
+        const highBreakdown = { total: 800, temporal: 500, thematic: 100, visual: 100, technical: 100 };
+        const profileHigh = classifyRing(highBreakdown, anchorImg, neighborImg);
+        const ctxHigh = computeGlyphContext(anchorImg, neighborImg, highBreakdown, profileHigh);
+        expect(ctxHigh.relevanceScale).toBe(1.0);
+    });
+});
+
+describe('computeDepthLayer', () => {
+    it('session ring has no blur and full opacity', () => {
+        const layer = computeDepthLayer('session');
+        expect(layer.blur).toBe(0);
+        expect(layer.opacity).toBe(1.0);
+        expect(layer.z).toBe(0);
+        expect(layer.parallaxFactor).toBe(0.2);
+    });
+
+    it('gateway ring has maximum blur and reduced opacity', () => {
+        const layer = computeDepthLayer('gateway');
+        expect(layer.blur).toBe(2.0);
+        expect(layer.opacity).toBe(0.6);
+        expect(layer.z).toBe(-200);
+        expect(layer.parallaxFactor).toBe(0.85);
+    });
+
+    it('depth increases monotonically from session to gateway', () => {
+        const rings: ('session' | 'thematic' | 'visual' | 'technical' | 'gateway')[] =
+            ['session', 'thematic', 'visual', 'technical', 'gateway'];
+        const layers = rings.map(r => computeDepthLayer(r));
+
+        for (let i = 1; i < layers.length; i++) {
+            expect(layers[i].z).toBeLessThan(layers[i - 1].z);
+            expect(layers[i].blur).toBeGreaterThanOrEqual(layers[i - 1].blur);
+            expect(layers[i].opacity).toBeLessThanOrEqual(layers[i - 1].opacity);
+            expect(layers[i].parallaxFactor).toBeGreaterThan(layers[i - 1].parallaxFactor);
+        }
     });
 });

@@ -13,6 +13,7 @@ import SatelliteLayer from './SatelliteLayer';
 import HistoryTimeline from './HistoryTimeline';
 import DetailView from './DetailView';
 import MobileHeroLayout from './MobileHeroLayout';
+import ContextualGlyph from './ContextualGlyph';
 
 // Import hooks
 import { useRelevanceScoring } from '../hooks/useRelevanceScoring';
@@ -61,8 +62,9 @@ const Experience: React.FC<ExperienceProps> = ({
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [galleryState, setGalleryState] = useState<{ isOpen: boolean, startIndex: number }>({ isOpen: false, startIndex: 0 });
     const [isGuideOpen, setIsGuideOpen] = useState(false);
-    const [isMobile, setIsMobile] = useState(false);
+    const [_isMobile, setIsMobile] = useState(false);
     const [isCompactLayout, setIsCompactLayout] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+    const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
     const [windowDimensions, setWindowDimensions] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 0, height: typeof window !== 'undefined' ? window.innerHeight : 0 });
 
     const nsfwTagId = useMemo(() => tags.find(t => t.label.trim().toLowerCase() === 'nsfw')?.id, [tags]);
@@ -249,8 +251,8 @@ const Experience: React.FC<ExperienceProps> = ({
         if (anchor.id === id && anchor.mode === 'IMAGE') setIsDetailOpen(true);
         else { onAnchorChange({ mode: 'IMAGE', id }); setIsDetailOpen(false); }
     };
-    const handleMouseEnter = (node: ExperienceNode) => { hoveredNodeIdRef.current = node.id; const el = nodeRefs.current.get(node.id); if (el) el.style.zIndex = '2000'; };
-    const handleMouseLeave = (node: ExperienceNode) => { hoveredNodeIdRef.current = null; const el = nodeRefs.current.get(node.id); if (el) { if (node.id === anchor.id) el.style.zIndex = '2000'; else el.style.zIndex = Math.floor(node.currentScale * 100).toString(); } };
+    const handleMouseEnter = (node: ExperienceNode) => { hoveredNodeIdRef.current = node.id; setHoveredNodeId(node.id); const el = nodeRefs.current.get(node.id); if (el) el.style.zIndex = '2000'; };
+    const handleMouseLeave = (node: ExperienceNode) => { hoveredNodeIdRef.current = null; setHoveredNodeId(null); const el = nodeRefs.current.get(node.id); if (el) { if (node.id === anchor.id) el.style.zIndex = '2000'; else el.style.zIndex = Math.floor(node.currentScale * 100).toString(); } };
     const activeNode = useMemo(() => simNodes.find(n => n.id === anchor.id), [simNodes, anchor]);
 
     const neighborhoodSummary = useMemo((): NeighborhoodSummary | null => {
@@ -372,27 +374,46 @@ const Experience: React.FC<ExperienceProps> = ({
                 />
             )}
 
+            {/* Neighborhood atmosphere background (IMAGE mode) */}
+            {anchor.mode === 'IMAGE' && activePalette.length > 0 && (
+                <div className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-in-out z-[1]"
+                    style={{
+                        background: `radial-gradient(circle at 50% 40%, ${activePalette[0]}08, transparent 60%), radial-gradient(circle at 80% 80%, ${activePalette[1] || activePalette[0]}06, transparent 50%), radial-gradient(circle at 20% 70%, ${activePalette[2] || activePalette[0]}05, transparent 50%)`
+                    }}
+                />
+            )}
+
             {/* Physics canvas (hidden when compact mobile IMAGE layout is active) */}
             <div ref={containerRef} className={`absolute inset-0 top-0 cursor-move active:cursor-grabbing z-10 pb-0 ${isCompactLayout && anchor.mode === 'IMAGE' ? 'hidden' : ''}`}>
-                <div ref={worldRef} className="absolute inset-0 origin-top-left will-change-transform">
+                <div ref={worldRef} className="absolute inset-0 origin-top-left will-change-transform"
+                    style={{ perspective: anchor.mode === 'IMAGE' ? '1200px' : 'none' }}>
                     {simNodes.map(node => {
                         if (!node.isVisible && node.currentOpacity <= 0.05) return null;
 
                         const isHero = anchor.mode === 'IMAGE' && node.id === anchor.id;
-                        const isEsotericSprite = anchor.mode === 'NONE' || (anchor.mode === 'IMAGE' && !isHero);
+                        const isNeighborWithGlyph = anchor.mode === 'IMAGE' && !isHero && !!node.glyphContext;
+                        const isEsotericSprite = anchor.mode === 'NONE' || (anchor.mode === 'IMAGE' && !isHero && !isNeighborWithGlyph);
+
                         let sizeClasses = 'w-48';
-                        if (isEsotericSprite) {
-                            if (anchor.mode === 'NONE') {
-                                sizeClasses = 'w-24 h-24';
-                            } else {
-                                sizeClasses = 'w-24 h-24';
-                            }
+                        if (isEsotericSprite || isNeighborWithGlyph) {
+                            sizeClasses = 'w-24 h-24';
                         }
 
                         return (
                             <div key={node.id} ref={(el) => { if (el) nodeRefs.current.set(node.id, el); else nodeRefs.current.delete(node.id); }} className="absolute top-0 left-0 w-0 h-0">
                                 <div onClick={(e) => handleNodeClick(node.id, e)} onMouseEnter={() => handleMouseEnter(node)} onMouseLeave={() => handleMouseLeave(node)} className={`absolute -translate-x-1/2 -translate-y-1/2 ${sizeClasses} transition-all duration-300 cursor-pointer ${isHero ? '' : 'hover:scale-105'}`}>
-                                    {isEsotericSprite ? (<EsotericSprite node={node} />) : (<img src={node.original.fileUrl} alt="" className={`w-full h-auto rounded-md pointer-events-none bg-white transition-all duration-500 ${isHero ? 'ring-4 ring-white/50' : 'ring-1 ring-black/5'}`} loading="lazy" />)}
+                                    {isNeighborWithGlyph ? (
+                                        <ContextualGlyph
+                                            node={node}
+                                            anchorPalette={activePalette}
+                                            isHovered={hoveredNodeId === node.id}
+                                            thumbnailSrc={node.original.fileUrl}
+                                        />
+                                    ) : isEsotericSprite ? (
+                                        <EsotericSprite node={node} />
+                                    ) : (
+                                        <img src={node.original.fileUrl} alt="" className={`w-full h-auto rounded-md pointer-events-none bg-white transition-all duration-500 ${isHero ? 'ring-4 ring-white/50' : 'ring-1 ring-black/5'}`} loading="lazy" />
+                                    )}
                                 </div>
                             </div>
                         );

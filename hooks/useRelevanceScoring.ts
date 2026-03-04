@@ -5,7 +5,10 @@ import {
     getMinPaletteDistance,
     isMonochrome,
     getDominantColorsFromNodes,
-    getRelatedTagsFromNodes
+    getRelatedTagsFromNodes,
+    classifyRing,
+    computeGlyphContext,
+    computeDepthLayer
 } from '../services/dataService';
 
 // --- Pure scoring functions (testable without React) ---
@@ -184,6 +187,17 @@ export function scoreAllNodes(
         const anchorImg = images.find(i => i.id === anchor.id);
         calculatedPalette = anchorImg ? anchorImg.palette : [];
         calculatedTags = getRelatedTagsFromNodes(visibleSubset, tags, 6, undefined, nsfwTagId, nsfwFilterActive);
+
+        // Post-scoring: classify rings for visible IMAGE-mode neighbors
+        if (anchorImg) {
+            scoredNodes.forEach(n => {
+                if (n.isVisible && n.id !== anchor.id && n.scoreBreakdown) {
+                    n.ringProfile = classifyRing(n.scoreBreakdown, anchorImg, n.original);
+                    n.glyphContext = computeGlyphContext(anchorImg, n.original, n.scoreBreakdown, n.ringProfile);
+                    n.depthLayer = computeDepthLayer(n.ringProfile.ring);
+                }
+            });
+        }
 
     } else if (['TAG', 'COLOR', 'DATE', 'CAMERA', 'LENS', 'SEASON'].includes(anchor.mode)) {
         scoredNodes.forEach(n => {

@@ -1,4 +1,4 @@
-import { ImageNode, Tag, TagType, ExperienceNode, ScoreBreakdown, ZoneName, ZoneSummary, NeighborhoodSummary } from '../types';
+import { ImageNode, Tag, TagType, ExperienceNode, ScoreBreakdown, ZoneName, ZoneSummary, NeighborhoodSummary, RingLevel, RingProfile, GlyphContext, DepthLayer } from '../types';
 
 // --- Utilities ---
 
@@ -479,6 +479,152 @@ export function buildNeighborhoodSummary(
     }
 
     return { zones, totalNeighbors: neighbors.length, narrative };
+}
+
+// --- ORBITAL RING CLASSIFICATION ---
+
+export const RING_COLORS: Record<RingLevel, string> = {
+    session: '#3b82f6',
+    thematic: '#8b5cf6',
+    visual: '#f59e0b',
+    technical: '#22c55e',
+    gateway: '#a1a1aa',
+};
+
+const DIMENSION_TO_RING: Record<ZoneName, RingLevel> = {
+    temporal: 'session',
+    thematic: 'thematic',
+    visual: 'visual',
+    technical: 'technical',
+};
+
+const SIGNIFICANCE_THRESHOLD = 0.20;
+
+export function classifyRing(
+    breakdown: ScoreBreakdown,
+    anchorImg: ImageNode,
+    neighborImg: ImageNode
+): RingProfile {
+    const normalizedScores: Record<ZoneName, number> = {
+        temporal: Math.min(1, Math.max(0, breakdown.temporal / DIMENSION_MAX.temporal)),
+        thematic: Math.min(1, Math.max(0, breakdown.thematic / DIMENSION_MAX.thematic)),
+        visual: Math.min(1, Math.max(0, breakdown.visual / DIMENSION_MAX.visual)),
+        technical: Math.min(1, Math.max(0, breakdown.technical / DIMENSION_MAX.technical)),
+    };
+
+    const timeDiff = Math.abs(neighborImg.captureTimestamp - anchorImg.captureTimestamp);
+    const isSameDay = timeDiff < 86400000;
+
+    if (isSameDay) {
+        return { ring: 'session', dominantDimension: 'temporal', normalizedScores, isSameDay };
+    }
+
+    // Find highest normalized dimension (exclude temporal for non-same-day)
+    const candidates: { dim: ZoneName; score: number }[] = [
+        { dim: 'thematic', score: normalizedScores.thematic },
+        { dim: 'visual', score: normalizedScores.visual },
+        { dim: 'technical', score: normalizedScores.technical },
+    ];
+    candidates.sort((a, b) => b.score - a.score);
+
+    if (candidates[0].score > SIGNIFICANCE_THRESHOLD) {
+        const ring = DIMENSION_TO_RING[candidates[0].dim];
+        return { ring, dominantDimension: candidates[0].dim, normalizedScores, isSameDay };
+    }
+
+    return { ring: 'gateway', dominantDimension: null, normalizedScores, isSameDay };
+}
+
+export function computeGlyphContext(
+    anchorImg: ImageNode,
+    neighborImg: ImageNode,
+    breakdown: ScoreBreakdown,
+    ringProfile: RingProfile
+): GlyphContext {
+    // Affinity color: average of anchor + neighbor dominant palette colors
+    const [ar, ag, ab] = hexToRgbVals(anchorImg.palette[0] || '#808080');
+    const [nr, ng, nb] = hexToRgbVals(neighborImg.palette[0] || '#808080');
+    const avgR = Math.round((ar + nr) / 2);
+    const avgG = Math.round((ag + ng) / 2);
+    const avgB = Math.round((ab + nb) / 2);
+    const affinityColor = `#${((1 << 24) + (avgR << 16) + (avgG << 8) + avgB).toString(16).slice(1)}`;
+
+    const haloColor = RING_COLORS[ringProfile.ring];
+    const haloIntensity = Math.min(1, Math.max(0, breakdown.total / 800));
+    const relevanceScale = 0.4 + haloIntensity * 0.6;
+
+    return {
+        affinityColor,
+        haloColor,
+        haloIntensity,
+        relevanceScale,
+        shapeKey: ringProfile.ring,
+        ringProfile,
+    };
+}
+
+const DEPTH_LAYERS: Record<RingLevel, DepthLayer> = {
+    session:   { z: 0,    blur: 0,   opacity: 1.0,  parallaxFactor: 0.2  },
+    thematic:  { z: -30,  blur: 0,   opacity: 0.95, parallaxFactor: 0.35 },
+    visual:    { z: -80,  blur: 0.5, opacity: 0.85, parallaxFactor: 0.5  },
+    technical: { z: -130, blur: 1.0, opacity: 0.75, parallaxFactor: 0.65 },
+    gateway:   { z: -200, blur: 2.0, opacity: 0.6,  parallaxFactor: 0.85 },
+};
+
+export function computeDepthLayer(ring: RingLevel): DepthLayer {
+    return { ...DEPTH_LAYERS[ring] };
+}
+
+export function getRingTarget(
+    breakdown: ScoreBreakdown,
+    ringProfile: RingProfile,
+    heroCx: number,
+    heroCy: number,
+    ringIndex: number,
+    ringPop: number,
+    mobile: boolean,
+    clusterAngles: Map<ZoneName, number>,
+    ringRadii: Record<RingLevel, number>
+): ZoneTarget {
+    const baseRadius = ringRadii[ringProfile.ring];
+    // Spread within ring: ±15% based on position
+    const spreadFactor = ringPop <= 1 ? 0 : (ringIndex / (ringPop - 1) - 0.5) * 0.3;
+    const distance = baseRadius * (1 + spreadFactor);
+
+    // Angular position from weighted cluster angles
+    const dims = (['temporal', 'thematic', 'visual', 'technical'] as const)
+        .map(key => ({ key, value: Math.max(0, breakdown[key]) }));
+    const totalPositive = dims.reduce((s, d) => s + d.value, 0);
+
+    let dx = 0;
+    let dy = 0;
+
+    if (totalPositive > 0 && clusterAngles.size > 0) {
+        for (const d of dims) {
+            const angle = clusterAngles.get(d.key);
+            if (angle === undefined) continue;
+            const weight = d.value / totalPositive;
+            dx += Math.cos(angle) * weight;
+            dy += Math.sin(angle) * weight;
+        }
+    } else {
+        // Fallback: spread evenly using ring index
+        const angle = (ringIndex / Math.max(1, ringPop)) * Math.PI * 2 - Math.PI / 2;
+        dx = Math.cos(angle);
+        dy = Math.sin(angle);
+    }
+
+    const angle = Math.atan2(dy, dx);
+    const vecLen = Math.sqrt(dx * dx + dy * dy) || 1;
+    const normDx = dx / vecLen;
+    const normDy = dy / vecLen;
+
+    return {
+        x: heroCx + normDx * distance,
+        y: heroCy + normDy * distance,
+        angle,
+        distance,
+    };
 }
 
 // --- HERO EQUILIBRIUM ---

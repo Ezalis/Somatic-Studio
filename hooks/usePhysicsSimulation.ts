@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
-import { ExperienceNode, AnchorState, PhysicsConfig, ZoneName } from '../types';
-import { getZoneTarget, computeHeroEquilibrium } from '../services/dataService';
+import { ExperienceNode, AnchorState, PhysicsConfig, RingLevel, ZoneName } from '../types';
+import { getZoneTarget, getRingTarget, computeHeroEquilibrium } from '../services/dataService';
 
 export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
     velocityDecay: 0.45,
@@ -23,6 +23,9 @@ export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
     heroVelocityDamping: 0.95,
     cameraPanSpeed: 0.03,
     comfortZoneRatio: 0.7,
+    ringRadii: { session: 150, thematic: 250, visual: 350, technical: 420, gateway: 500 },
+    ringRadiiMobile: { session: 100, thematic: 170, visual: 240, technical: 290, gateway: 340 },
+    ringGravity: 0.04,
 };
 
 function getHeroMetrics(dims: { width: number; height: number }) {
@@ -67,6 +70,9 @@ export function usePhysicsSimulation(
 
     // Phase 2: Camera tracking — user interaction guard
     const userInteractingRef = useRef(false);
+
+    // Phase 3: Parallax — current zoom transform for per-node depth offsets
+    const zoomTransformRef = useRef<{ x: number; y: number; k: number }>({ x: 0, y: 0, k: 1 });
 
     // Apply D3 force configuration based on current anchor mode and dimensions
     function applyForces(sim: d3.Simulation<ExperienceNode, undefined>) {
@@ -115,6 +121,7 @@ export function usePhysicsSimulation(
         const zoom = d3.zoom<HTMLDivElement, unknown>()
             .scaleExtent([0.1, 4])
             .on("zoom", (event) => {
+                zoomTransformRef.current = { x: event.transform.x, y: event.transform.y, k: event.transform.k };
                 if (worldRef.current) {
                     worldRef.current.style.transform = `translate3d(${event.transform.x}px, ${event.transform.y}px, 0) scale(${event.transform.k})`;
                 }
@@ -249,29 +256,66 @@ export function usePhysicsSimulation(
                             node.vy = (node.vy || 0) * 0.1;
                         }
 
-                        // Zone-targeted gravity relative to hero position
-                        if (node.scoreBreakdown) {
+                        // Ring-targeted gravity (replaces zone-targeted gravity)
+                        if (node.scoreBreakdown && node.ringProfile) {
+                            const ringRadii = mobile ? cfg.ringRadiiMobile : cfg.ringRadii;
+                            // Group active nodes by ring for per-ring indexing
+                            const ringKey = node.ringProfile.ring;
+                            const ringNodes = activeNodes.filter(n => n.ringProfile?.ring === ringKey);
+                            const ringIndex = ringNodes.indexOf(node);
+                            const ringPop = ringNodes.length;
+
+                            const ringTarget = getRingTarget(
+                                node.scoreBreakdown,
+                                node.ringProfile,
+                                heroPosX,
+                                heroPosY,
+                                Math.max(0, ringIndex),
+                                ringPop,
+                                mobile,
+                                clusterAnglesRef.current,
+                                ringRadii
+                            );
+
+                            node.vx = (node.vx || 0) + (ringTarget.x - node.x) * cfg.ringGravity;
+                            node.vy = (node.vy || 0) + (ringTarget.y - node.y) * cfg.ringGravity;
+
+                            // Local swirl modulated by ring level
+                            const swirlMultiplier: Record<RingLevel, number> = {
+                                session: 0.4,
+                                thematic: 0.7,
+                                visual: 1.0,
+                                technical: 1.0,
+                                gateway: 1.2,
+                            };
+                            const localDx = node.x - ringTarget.x;
+                            const localDy = node.y - ringTarget.y;
+                            const localDist = Math.sqrt(localDx * localDx + localDy * localDy) || 1;
+                            const swirlMod = swirlMultiplier[ringKey] || 1.0;
+                            node.vx += (-localDy / localDist) * cfg.localSwirlSpeed * swirlMod;
+                            node.vy += (localDx / localDist) * cfg.localSwirlSpeed * swirlMod;
+                        } else if (node.scoreBreakdown) {
+                            // Fallback: old zone-targeted gravity for nodes without ring profile
                             const rank = activeNodes.indexOf(node);
                             const totalVisible = activeNodes.length;
                             const zoneTarget = getZoneTarget(node.scoreBreakdown, heroPosX, heroPosY, Math.max(0, rank), totalVisible, mobile, clusterAnglesRef.current);
 
                             node.vx = (node.vx || 0) + (zoneTarget.x - node.x) * cfg.zoneGravity;
                             node.vy = (node.vy || 0) + (zoneTarget.y - node.y) * cfg.zoneGravity;
-
-                            // Local swirl around zone target
-                            const localDx = node.x - zoneTarget.x;
-                            const localDy = node.y - zoneTarget.y;
-                            const localDist = Math.sqrt(localDx * localDx + localDy * localDy) || 1;
-                            node.vx += (-localDy / localDist) * cfg.localSwirlSpeed;
-                            node.vy += (localDx / localDist) * cfg.localSwirlSpeed;
                         } else {
                             // Fallback: gentle pull toward hero
                             node.vx = (node.vx || 0) + (heroPosX - node.x) * cfg.neighborGravity;
                             node.vy = (node.vy || 0) + (heroPosY - node.y) * cfg.neighborGravity;
                         }
 
-                        node.targetScale = node.relevanceScore > 40 ? (mobile ? 0.6 : 0.8) : (mobile ? 0.45 : 0.6);
-                        node.targetOpacity = 1.0;
+                        // Scale and opacity driven by glyph context depth
+                        if (node.glyphContext && node.depthLayer) {
+                            node.targetScale = node.glyphContext.relevanceScale * (mobile ? 0.7 : 1.0);
+                            node.targetOpacity = node.depthLayer.opacity;
+                        } else {
+                            node.targetScale = node.relevanceScore > 40 ? (mobile ? 0.6 : 0.8) : (mobile ? 0.45 : 0.6);
+                            node.targetOpacity = 1.0;
+                        }
                     }
                     else {
                         node.targetScale = 0;
@@ -312,11 +356,24 @@ export function usePhysicsSimulation(
                 // DOM updates
                 const el = nodeRefs.current.get(node.id);
                 if (el) {
-                    el.style.transform = `translate3d(${node.x}px, ${node.y}px, 0) scale(${node.currentScale})`;
+                    // Depth-scaled transform for 2.5D effect
+                    const depthScale = node.depthLayer
+                        ? Math.max(0.5, 1 + node.depthLayer.z / 500)
+                        : 1;
+                    const finalScale = node.currentScale * depthScale;
+
+                    // Parallax offset: near objects counter camera movement, far objects drift with it
+                    const zt = zoomTransformRef.current;
+                    const pFactor = node.depthLayer?.parallaxFactor ?? 1;
+                    const parallaxDx = zt.x * (1 - pFactor) / (zt.k || 1);
+                    const parallaxDy = zt.y * (1 - pFactor) / (zt.k || 1);
+                    el.style.transform = `translate3d(${node.x - parallaxDx}px, ${node.y - parallaxDy}px, 0) scale(${finalScale})`;
                     el.style.opacity = node.currentOpacity.toString();
                     el.style.display = node.currentOpacity < 0.05 ? 'none' : 'block';
 
-                    if (hoveredNodeIdRef.current === node.id || (a.mode === 'IMAGE' && node.id === a.id)) {
+                    const isHoveredOrHero = hoveredNodeIdRef.current === node.id || (a.mode === 'IMAGE' && node.id === a.id);
+
+                    if (isHoveredOrHero) {
                         el.style.zIndex = node.id === a.id ? '2000' : '1000';
                         el.style.filter = 'none';
                         if (node.id === a.id) {
@@ -326,7 +383,9 @@ export function usePhysicsSimulation(
                         }
                     } else {
                         el.style.zIndex = Math.floor(node.currentScale * 100).toString();
-                        el.style.filter = 'none';
+                        // Apply depth blur for non-hovered, non-hero nodes
+                        const blurPx = node.depthLayer?.blur ?? 0;
+                        el.style.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
                         el.style.boxShadow = 'none';
                     }
                 }
