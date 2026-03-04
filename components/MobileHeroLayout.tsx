@@ -1,5 +1,7 @@
-import React from 'react';
-import { ExperienceNode, AnchorState, Tag } from '../types';
+import React, { useState } from 'react';
+import { ExperienceNode, AnchorState, RingLevel, Tag } from '../types';
+import { RING_COLORS } from '../services/dataService';
+import ContextualGlyph from './ContextualGlyph';
 import { EsotericSprite } from './VisualElements';
 import ProgressiveImage from './ProgressiveImage';
 
@@ -11,17 +13,59 @@ interface MobileHeroLayoutProps {
     onHeroClick: () => void;
 }
 
+interface RingSection {
+    label: string;
+    rings: RingLevel[];
+    nodes: ExperienceNode[];
+    accentColor: string;
+    opacity: string;
+}
+
 const MobileHeroLayout: React.FC<MobileHeroLayoutProps> = ({
     heroNode,
     neighbors,
     onAnchorChange,
     onHeroClick,
 }) => {
+    const [hoveredId, setHoveredId] = useState<string | null>(null);
+
     const palette = heroNode.original.palette.length > 0
         ? heroNode.original.palette
         : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
 
-    const sorted = [...neighbors].sort((a, b) => b.relevanceScore - a.relevanceScore);
+    // Group neighbors into sections
+    const sessionNodes = neighbors.filter(n => n.ringProfile?.ring === 'session');
+    const connectedNodes = neighbors.filter(n => {
+        const ring = n.ringProfile?.ring;
+        return ring === 'thematic' || ring === 'visual' || ring === 'technical';
+    });
+    const gatewayNodes = neighbors.filter(n => n.ringProfile?.ring === 'gateway');
+    // Nodes without ring profile fall into connected
+    const unclassified = neighbors.filter(n => !n.ringProfile);
+
+    const sections: RingSection[] = [
+        {
+            label: 'SESSION',
+            rings: ['session'],
+            nodes: sessionNodes.sort((a, b) => b.relevanceScore - a.relevanceScore),
+            accentColor: RING_COLORS.session,
+            opacity: 'opacity-100',
+        },
+        {
+            label: 'CONNECTED',
+            rings: ['thematic', 'visual', 'technical'],
+            nodes: [...connectedNodes, ...unclassified].sort((a, b) => b.relevanceScore - a.relevanceScore),
+            accentColor: RING_COLORS.thematic,
+            opacity: 'opacity-100',
+        },
+        {
+            label: 'EXPLORE',
+            rings: ['gateway'],
+            nodes: gatewayNodes.sort((a, b) => b.relevanceScore - a.relevanceScore),
+            accentColor: RING_COLORS.gateway,
+            opacity: 'opacity-70',
+        },
+    ].filter(s => s.nodes.length > 0);
 
     return (
         <div className="absolute inset-0 z-10 flex flex-col overflow-y-auto bg-[#faf9f6]">
@@ -49,25 +93,53 @@ const MobileHeroLayout: React.FC<MobileHeroLayoutProps> = ({
                 </div>
             </div>
 
-            {/* Neighbor grid */}
-            {sorted.length > 0 && (
-                <div className="flex-1 px-4 pb-8">
-                    <p className="text-xs text-zinc-400 font-mono tracking-wider mb-3 text-center">
-                        {sorted.length} NEIGHBOR{sorted.length !== 1 ? 'S' : ''}
-                    </p>
+            {/* Ring-grouped neighbor sections */}
+            {sections.map(section => (
+                <div key={section.label} className={`px-4 pb-4 ${section.opacity}`}>
+                    <div className="flex items-center gap-2 mb-3">
+                        <div
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: section.accentColor }}
+                        />
+                        <p className="text-xs text-zinc-400 font-mono tracking-wider">
+                            {section.label}
+                        </p>
+                        <span className="text-[10px] text-zinc-300 font-mono">
+                            {section.nodes.length}
+                        </span>
+                    </div>
                     <div className="grid grid-cols-3 gap-3">
-                        {sorted.map(node => (
+                        {section.nodes.map(node => (
                             <div
                                 key={node.id}
                                 className="aspect-square cursor-pointer hover:scale-105 transition-transform duration-200"
+                                style={{
+                                    boxShadow: node.glyphContext
+                                        ? `0 0 8px ${node.glyphContext.haloColor}40`
+                                        : 'none',
+                                }}
                                 onClick={() => onAnchorChange({ mode: 'IMAGE', id: node.id })}
+                                onMouseEnter={() => setHoveredId(node.id)}
+                                onMouseLeave={() => setHoveredId(null)}
                             >
-                                <EsotericSprite node={node} />
+                                {node.glyphContext ? (
+                                    <ContextualGlyph
+                                        node={node}
+                                        anchorPalette={palette}
+                                        isHovered={hoveredId === node.id}
+                                        thumbnailSrc={node.original.fileUrl}
+                                    />
+                                ) : (
+                                    <EsotericSprite node={node} />
+                                )}
                             </div>
                         ))}
                     </div>
                 </div>
-            )}
+            ))}
+
+            {/* Bottom spacer */}
+            <div className="h-8" />
         </div>
     );
 };

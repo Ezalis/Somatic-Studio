@@ -87,6 +87,11 @@ export interface ExperienceNode extends SimulationNodeDatum {
     orbitOffset?: number;
     orbitRadiusBase?: number;
     gridSortIndex?: number;
+
+    // Orbital Ring Props (2.5D Navigation)
+    ringProfile?: RingProfile;
+    glyphContext?: GlyphContext;
+    depthLayer?: DepthLayer;
 }
 
 export interface InsightSnapshot {
@@ -137,9 +142,39 @@ export interface PhysicsConfig {
     heroVelocityDamping: number;
     cameraPanSpeed: number;
     comfortZoneRatio: number;
+    ringRadii: Record<RingLevel, number>;
+    ringRadiiMobile: Record<RingLevel, number>;
+    ringGravity: number;
 }
 
 export type ZoneName = 'temporal' | 'thematic' | 'visual' | 'technical';
+
+// --- ORBITAL RINGS (2.5D Navigation) ---
+
+export type RingLevel = 'session' | 'thematic' | 'visual' | 'technical' | 'gateway';
+
+export interface RingProfile {
+    ring: RingLevel;
+    dominantDimension: ZoneName | null;
+    normalizedScores: Record<ZoneName, number>;
+    isSameDay: boolean;
+}
+
+export interface GlyphContext {
+    affinityColor: string;
+    haloColor: string;
+    haloIntensity: number;
+    relevanceScale: number;
+    shapeKey: RingLevel;
+    ringProfile: RingProfile;
+}
+
+export interface DepthLayer {
+    z: number;
+    blur: number;
+    opacity: number;
+    parallaxFactor: number;
+}
 
 export interface ZoneSummary {
     zone: ZoneName;
