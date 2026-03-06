@@ -949,117 +949,76 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
             {/* DASHBOARD — Mobile / Tablet */}
             {anchor && isMobile && (
-                <>
-                    {/* Single scrollable page */}
-                    <div className="fixed inset-0 pt-12 pb-0 z-10 overflow-y-auto"
-                        style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-                        {/* Hero — tap to expand */}
-                        <div className={heroExpanded
-                            ? 'flex items-center justify-center px-2 relative'
-                            : 'flex items-start justify-center px-3 pt-1'}
-                            style={heroExpanded ? { minHeight: 'calc(100vh - 48px)' } : undefined}
-                            onClick={() => setHeroExpanded(!heroExpanded)}>
-                            <div className="overflow-hidden rounded-lg max-w-full transition-all duration-500"
-                                style={{ boxShadow: `0 8px 32px ${anchor.palette[0] || '#000'}25` }}>
-                                <img src={getPreviewUrl(anchor.id)} alt=""
-                                    className="max-w-full object-contain transition-all duration-500"
-                                    style={{ maxHeight: heroExpanded ? '92vh' : '45vh' }}
-                                    draggable={false} />
-                            </div>
-                            {heroExpanded && (
-                                <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); setHeroExpanded(false); }}
-                                    className="absolute top-2 right-4 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer"
-                                    style={{ backgroundColor: 'rgba(0,0,0,0.06)' }}>
-                                    <span className="text-zinc-500 text-sm">&times;</span>
-                                </button>
-                            )}
+                <div className="fixed inset-0 pt-12 pb-0 z-10 overflow-y-auto"
+                    style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+                    {/* Hero — tap to expand */}
+                    <div className={heroExpanded
+                        ? 'flex items-center justify-center px-2 relative'
+                        : 'flex items-start justify-center px-3 pt-1'}
+                        style={heroExpanded ? { minHeight: 'calc(100vh - 48px)' } : undefined}
+                        onClick={() => setHeroExpanded(!heroExpanded)}>
+                        <div className="overflow-hidden rounded-lg max-w-full transition-all duration-500"
+                            style={{ boxShadow: `0 8px 32px ${anchor.palette[0] || '#000'}25` }}>
+                            <img src={getPreviewUrl(anchor.id)} alt=""
+                                className="max-w-full object-contain transition-all duration-500"
+                                style={{ maxHeight: heroExpanded ? '92vh' : '45vh' }}
+                                draggable={false} />
                         </div>
-
-                        {/* Info button — opens bottom sheet */}
-                        <div className="flex items-center justify-between px-4 py-2">
-                            <button onClick={() => setSheetOpen(true)}
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-full cursor-pointer transition-all"
-                                style={{
-                                    backgroundColor: 'rgba(0,0,0,0.06)',
-                                    fontFamily: 'JetBrains Mono, monospace',
-                                }}>
-                                <MiniSprite image={anchor} size={20} />
-                                <span className="text-[10px] text-zinc-600">Info & Filters</span>
+                        {heroExpanded && (
+                            <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); setHeroExpanded(false); }}
+                                className="absolute top-2 right-4 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer"
+                                style={{ backgroundColor: 'rgba(0,0,0,0.06)' }}>
+                                <span className="text-zinc-500 text-sm">&times;</span>
                             </button>
-                            {(activeTags.size > 0 || activeColors.size > 0 || temporalActive) && (
-                                <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                    {activeTags.size + activeColors.size + (temporalActive ? 1 : 0)} filters
-                                </span>
-                            )}
-                        </div>
-
-                        {/* Dynamic Album — full width, flows in page */}
-                        <div className="rounded-t-xl"
-                            style={{ backgroundColor: '#faf9f6aa' }}>
-                            <DynamicAlbum albumImages={albumPool}
-                                activeTags={activeTags} activeColors={activeColors} temporalActive={temporalActive}
-                                tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
-                                onToggleTemporal={handleToggleTemporal} onClearFilters={handleClearFilters}
-                                onSelect={handleSelect} />
-                        </div>
+                        )}
                     </div>
 
-                    {/* Bottom Sheet Overlay */}
-                    {sheetOpen && (
-                        <div className="fixed inset-0 z-50">
-                            {/* Backdrop */}
-                            <div className="absolute inset-0 bg-black/20" onClick={() => setSheetOpen(false)} />
-                            {/* Sheet — uses fixed positioning with explicit height for iOS/iPadOS scroll */}
-                            <div className="fixed bottom-0 left-0 right-0 rounded-t-2xl"
-                                style={{
-                                    backgroundColor: '#faf9f6',
-                                    boxShadow: '0 -4px 32px rgba(0,0,0,0.12)',
-                                    height: '85vh',
-                                    display: 'flex',
-                                    flexDirection: 'column' as const,
-                                }}>
-                                {/* Handle bar + close */}
-                                <div style={{ flexShrink: 0 }}>
-                                    <div className="flex justify-center pt-3 pb-1">
-                                        <div className="w-10 h-1 rounded-full bg-zinc-300" />
-                                    </div>
-                                    <div className="flex justify-between items-center px-4 pb-2">
-                                        <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-500"
-                                            style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                            Image Details
-                                        </span>
-                                        <button onClick={() => setSheetOpen(false)}
-                                            className="text-[10px] text-zinc-400 hover:text-zinc-600 cursor-pointer px-2 py-1 rounded"
-                                            style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                            Done
-                                        </button>
-                                    </div>
-                                </div>
-                                {/* Scrollable content — explicit overflow scroll for iOS */}
-                                <div style={{
-                                    flex: 1,
-                                    overflowY: 'scroll' as const,
-                                    WebkitOverflowScrolling: 'touch',
-                                    overscrollBehavior: 'contain',
-                                } as React.CSSProperties}>
-                                    <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
-                                        scored={scored} tagMap={tagMap} activeTags={activeTags}
-                                        activeColors={activeColors} temporalActive={temporalActive}
-                                        onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
-                                        onToggleTemporal={handleToggleTemporal} onNavigate={(img: ImageNode) => { setSheetOpen(false); handleSelect(img); }}
-                                        albumImages={albumPool}
-                                        albumPreview={
-                                            <DynamicAlbum albumImages={albumPool}
-                                                activeTags={activeTags} activeColors={activeColors} temporalActive={temporalActive}
-                                                tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
-                                                onToggleTemporal={handleToggleTemporal} onClearFilters={handleClearFilters}
-                                                onSelect={(img: ImageNode) => { setSheetOpen(false); handleSelect(img); }} />
-                                        } />
-                                </div>
+                    {/* Info & Filters — inline expand/collapse */}
+                    <div className="px-3 py-2">
+                        <button onClick={() => setSheetOpen(!sheetOpen)}
+                            className="flex items-center justify-between w-full px-3 py-2 rounded-xl cursor-pointer transition-all"
+                            style={{ backgroundColor: sheetOpen ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.03)' }}>
+                            <div className="flex items-center gap-2">
+                                <MiniSprite image={anchor} size={20} />
+                                <span className="text-[10px] text-zinc-600" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                    Info & Filters
+                                </span>
+                                {(activeTags.size > 0 || activeColors.size > 0 || temporalActive) && (
+                                    <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                        {activeTags.size + activeColors.size + (temporalActive ? 1 : 0)} active
+                                    </span>
+                                )}
                             </div>
-                        </div>
-                    )}
-                </>
+                            <span className="text-zinc-400 text-[10px] transition-transform duration-300"
+                                style={{ transform: sheetOpen ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block' }}>
+                                ▾
+                            </span>
+                        </button>
+
+                        {/* Expanded content — LeftPanel inline */}
+                        {sheetOpen && (
+                            <div className="mt-2 rounded-xl overflow-hidden"
+                                style={{ backgroundColor: '#faf9f6dd' }}>
+                                <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
+                                    scored={scored} tagMap={tagMap} activeTags={activeTags}
+                                    activeColors={activeColors} temporalActive={temporalActive}
+                                    onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
+                                    onToggleTemporal={handleToggleTemporal} onNavigate={handleSelect}
+                                    albumImages={albumPool} />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Dynamic Album — full width, flows in page */}
+                    <div className="rounded-t-xl"
+                        style={{ backgroundColor: '#faf9f6aa' }}>
+                        <DynamicAlbum albumImages={albumPool}
+                            activeTags={activeTags} activeColors={activeColors} temporalActive={temporalActive}
+                            tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
+                            onToggleTemporal={handleToggleTemporal} onClearFilters={handleClearFilters}
+                            onSelect={handleSelect} />
+                    </div>
+                </div>
             )}
         </div>
     );
