@@ -304,6 +304,153 @@ function colorDist(a: string, b: string): number {
 }
 const COLOR_THRESHOLD = 80; // max RGB distance to count as a "hit"
 
+// --- Galaxy Field ---
+
+interface GalaxyNode {
+    image: ImageNode;
+    tagHits: number;
+    // Normalized 0-1 where 1 = highest relevance in current set
+    relevance: number;
+    // Polar positioning
+    angle: number;
+    radius: number; // 0 = center, 1 = edge
+    // Visual
+    size: number;
+    photoOpacity: number; // 0 = pure sprite, 1 = full photo
+    driftDuration: number;
+    driftDelay: number;
+}
+
+const GalaxyField: React.FC<{
+    albumImages: AlbumImage[];
+    hasFilters: boolean;
+    onSelect: (img: ImageNode) => void;
+}> = ({ albumImages, hasFilters, onSelect }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [dims, setDims] = useState({ w: 0, h: 0 });
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const obs = new ResizeObserver(entries => {
+            const { width, height } = entries[0].contentRect;
+            setDims({ w: width, h: height });
+        });
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, []);
+
+    const galaxyNodes = useMemo((): GalaxyNode[] => {
+        if (albumImages.length === 0 || dims.w === 0) return [];
+
+        const maxHits = Math.max(1, ...albumImages.map(a => a.tagHits));
+        const count = albumImages.length;
+
+        // Golden angle spiral for even distribution
+        const goldenAngle = 137.508 * (Math.PI / 180);
+
+        return albumImages.map((item, i) => {
+            const relevance = hasFilters ? item.tagHits / maxHits : (1 - i / Math.max(1, count - 1));
+
+            // Radius: high relevance = center (small radius), low = edge
+            // Use square root for more even area distribution
+            const baseRadius = 1 - relevance;
+            const radius = 0.08 + Math.sqrt(baseRadius) * 0.85;
+
+            // Angle: golden angle spiral with seeded jitter
+            const jitter = (seededRandom(item.image.id + 'gj') - 0.5) * 0.4;
+            const angle = i * goldenAngle + jitter;
+
+            // Size: high relevance = larger
+            const minSize = 28;
+            const maxSize = hasFilters ? 72 : 44;
+            const size = minSize + relevance * (maxSize - minSize);
+
+            // Photo opacity: progressive disclosure
+            // relevance 1.0 = full photo, 0.0 = pure sprite, smooth gradient between
+            const photoOpacity = Math.max(0, Math.min(1, relevance * 1.3 - 0.15));
+
+            const driftDuration = 6 + seededRandom(item.image.id + 'gd') * 8;
+            const driftDelay = seededRandom(item.image.id + 'gl') * 4;
+
+            return {
+                image: item.image,
+                tagHits: item.tagHits,
+                relevance,
+                angle,
+                radius,
+                size,
+                photoOpacity,
+                driftDuration,
+                driftDelay,
+            };
+        });
+    }, [albumImages, hasFilters, dims.w]);
+
+    const cx = dims.w / 2;
+    const cy = dims.h / 2;
+    const maxR = Math.min(cx, cy) * 0.9;
+
+    return (
+        <div ref={containerRef} className="flex-1 relative overflow-hidden">
+            {!hasFilters && albumImages.length > 0 && (
+                <div className="absolute top-2 left-4 z-10">
+                    <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Similar images — select tags, colors, or dates to build an album
+                    </span>
+                </div>
+            )}
+            {hasFilters && albumImages.length > 0 && (
+                <div className="absolute top-2 left-4 z-10">
+                    <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        {albumImages.length} images
+                    </span>
+                </div>
+            )}
+            {galaxyNodes.map(node => {
+                const x = cx + Math.cos(node.angle) * node.radius * maxR;
+                const y = cy + Math.sin(node.angle) * node.radius * maxR;
+                const showPhoto = node.photoOpacity > 0.05;
+
+                return (
+                    <div key={node.image.id}
+                        className="absolute cursor-pointer transition-all duration-700"
+                        style={{
+                            left: x - node.size / 2,
+                            top: y - node.size / 2,
+                            width: node.size,
+                            height: node.size,
+                            animation: `drift ${node.driftDuration}s ease-in-out ${node.driftDelay}s infinite`,
+                            zIndex: Math.round(node.relevance * 10),
+                        }}
+                        onClick={() => onSelect(node.image)}>
+                        {/* Sprite layer — always present, fades as photo appears */}
+                        <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-700"
+                            style={{ opacity: 1 - node.photoOpacity * 0.85 }}>
+                            <MiniSprite image={node.image} size={node.size * 0.9}
+                                convergence={node.relevance} />
+                        </div>
+                        {/* Photo layer — fades in with relevance */}
+                        {showPhoto && (
+                            <div className="absolute inset-0 rounded-lg overflow-hidden transition-opacity duration-700"
+                                style={{
+                                    opacity: node.photoOpacity,
+                                    boxShadow: `0 ${2 + node.relevance * 6}px ${8 + node.relevance * 16}px rgba(0,0,0,${0.05 + node.relevance * 0.12})`,
+                                }}>
+                                <img src={getThumbnailUrl(node.image.id)} alt=""
+                                    className="w-full h-full object-cover"
+                                    loading="lazy" draggable={false} />
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+// --- Dynamic Album ---
+
 const DynamicAlbum: React.FC<{
     allImages: ImageNode[];
     anchor: ImageNode;
@@ -426,63 +573,8 @@ const DynamicAlbum: React.FC<{
                 </div>
             )}
 
-            {/* Album grid */}
-            <div className="flex-1 overflow-y-auto px-4 pb-3">
-                {!hasFilters ? (
-                    // Sprite grid — no filters selected yet
-                    <div>
-                        <div className="mb-2">
-                            <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                Similar images — select tags, colors, or dates to build an album
-                            </span>
-                        </div>
-                        <div className="flex flex-wrap gap-3 justify-start">
-                            {albumImages.map(({ image }: AlbumImage) => {
-                                const bd = 5 + seededRandom(image.id + 'ab') * 5;
-                                const delay = seededRandom(image.id + 'ad') * 3;
-                                return (
-                                    <div key={image.id}
-                                        className="cursor-pointer hover:scale-110 transition-transform duration-300"
-                                        style={{ animation: `drift ${bd}s ease-in-out ${delay}s infinite` }}
-                                        onClick={() => onSelect(image)}>
-                                        <MiniSprite image={image} size={40} convergence={0.3} />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                ) : (
-                    // Photo grid — tags are active
-                    <div>
-                        <div className="mb-2">
-                            <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                {albumImages.length} images
-                            </span>
-                        </div>
-                        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))' }}>
-                            {albumImages.map(({ image, tagHits, isTemporal }: AlbumImage) => (
-                                <div key={image.id}
-                                    className="cursor-pointer hover:scale-105 transition-transform duration-200 rounded-md overflow-hidden relative"
-                                    style={{ aspectRatio: '4/3', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-                                    onClick={() => onSelect(image)}>
-                                    <img src={getThumbnailUrl(image.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
-                                    {/* Tag hit badge */}
-                                    {tagHits > 1 && (
-                                        <div className="absolute top-1 right-1 w-4 h-4 rounded-full flex items-center justify-center"
-                                            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                                            <span className="text-[8px] text-white font-medium">{tagHits}</span>
-                                        </div>
-                                    )}
-                                    {/* Temporal indicator */}
-                                    {isTemporal && (
-                                        <div className="absolute bottom-1 left-1 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#3f3f46' }} />
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
+            {/* Galaxy view */}
+            <GalaxyField albumImages={albumImages} hasFilters={hasFilters} onSelect={onSelect} />
         </div>
     );
 };
