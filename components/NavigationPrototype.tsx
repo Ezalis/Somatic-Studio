@@ -304,144 +304,151 @@ function colorDist(a: string, b: string): number {
 }
 const COLOR_THRESHOLD = 80; // max RGB distance to count as a "hit"
 
-// --- Galaxy Field ---
+// --- Waterfall Album Field ---
 
-interface GalaxyNode {
+interface WaterfallNode {
     image: ImageNode;
     tagHits: number;
-    // Normalized 0-1 where 1 = highest relevance in current set
-    relevance: number;
-    // Polar positioning
-    angle: number;
-    radius: number; // 0 = center, 1 = edge
-    // Visual
+    relevance: number; // 0-1
     size: number;
-    photoOpacity: number; // 0 = pure sprite, 1 = full photo
+    photoOpacity: number; // 0 = sprite, 1 = photo
     driftDuration: number;
     driftDelay: number;
 }
 
-const GalaxyField: React.FC<{
+const WaterfallField: React.FC<{
     albumImages: AlbumImage[];
     hasFilters: boolean;
     onSelect: (img: ImageNode) => void;
 }> = ({ albumImages, hasFilters, onSelect }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [dims, setDims] = useState({ w: 0, h: 0 });
+    const nodes = useMemo((): WaterfallNode[] => {
+        if (albumImages.length === 0) return [];
 
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        const obs = new ResizeObserver(entries => {
-            const { width, height } = entries[0].contentRect;
-            setDims({ w: width, h: height });
-        });
-        obs.observe(el);
-        return () => obs.disconnect();
-    }, []);
+        const maxHits = Math.max(1, ...albumImages.map((a: AlbumImage) => a.tagHits));
 
-    const galaxyNodes = useMemo((): GalaxyNode[] => {
-        if (albumImages.length === 0 || dims.w === 0) return [];
+        return albumImages.map((item: AlbumImage, i: number) => {
+            // Default (no filters): all sprites, relevance based on score order
+            const relevance = hasFilters ? item.tagHits / maxHits : 0;
 
-        const maxHits = Math.max(1, ...albumImages.map(a => a.tagHits));
-        const count = albumImages.length;
+            // Size: high relevance = larger photos, low = small sprites
+            const size = hasFilters
+                ? 36 + relevance * 64  // 36px (sprite) to 100px (top photo)
+                : 36 + (1 - i / Math.max(1, albumImages.length - 1)) * 12; // 36-48px sprites
 
-        // Golden angle spiral for even distribution
-        const goldenAngle = 137.508 * (Math.PI / 180);
+            // Photo opacity: progressive — only when filters active
+            // Top items (high hits) = full photos, fades to sprites
+            const photoOpacity = hasFilters
+                ? Math.max(0, Math.min(1, relevance * 1.5 - 0.2))
+                : 0; // Default: ALL sprites
 
-        return albumImages.map((item, i) => {
-            const relevance = hasFilters ? item.tagHits / maxHits : (1 - i / Math.max(1, count - 1));
-
-            // Radius: high relevance = center (small radius), low = edge
-            // Use square root for more even area distribution
-            const baseRadius = 1 - relevance;
-            const radius = 0.08 + Math.sqrt(baseRadius) * 0.85;
-
-            // Angle: golden angle spiral with seeded jitter
-            const jitter = (seededRandom(item.image.id + 'gj') - 0.5) * 0.4;
-            const angle = i * goldenAngle + jitter;
-
-            // Size: high relevance = larger
-            const minSize = 28;
-            const maxSize = hasFilters ? 72 : 44;
-            const size = minSize + relevance * (maxSize - minSize);
-
-            // Photo opacity: progressive disclosure
-            // relevance 1.0 = full photo, 0.0 = pure sprite, smooth gradient between
-            const photoOpacity = Math.max(0, Math.min(1, relevance * 1.3 - 0.15));
-
-            const driftDuration = 6 + seededRandom(item.image.id + 'gd') * 8;
-            const driftDelay = seededRandom(item.image.id + 'gl') * 4;
+            const driftDuration = 6 + seededRandom(item.image.id + 'wd') * 8;
+            const driftDelay = seededRandom(item.image.id + 'wl') * 4;
 
             return {
                 image: item.image,
                 tagHits: item.tagHits,
                 relevance,
-                angle,
-                radius,
                 size,
                 photoOpacity,
                 driftDuration,
                 driftDelay,
             };
         });
-    }, [albumImages, hasFilters, dims.w]);
+    }, [albumImages, hasFilters]);
 
-    const cx = dims.w / 2;
-    const cy = dims.h / 2;
-    const maxR = Math.min(cx, cy) * 0.9;
+    // Group into rows by relevance bands for horizontal spreading
+    const rows = useMemo(() => {
+        if (!hasFilters) {
+            // No filters: spread sprites into loose rows
+            const perRow = 8;
+            const result: WaterfallNode[][] = [];
+            for (let i = 0; i < nodes.length; i += perRow) {
+                result.push(nodes.slice(i, i + perRow));
+            }
+            return result;
+        }
+
+        // With filters: group by hit count tiers (high → low, top → bottom)
+        const tiers = new Map<number, WaterfallNode[]>();
+        for (const node of nodes) {
+            const tier = node.tagHits;
+            if (!tiers.has(tier)) tiers.set(tier, []);
+            tiers.get(tier)!.push(node);
+        }
+        // Sort tiers descending (highest hits first = top)
+        return [...tiers.entries()]
+            .sort((a, b) => b[0] - a[0])
+            .map(([, items]) => items);
+    }, [nodes, hasFilters]);
 
     return (
-        <div ref={containerRef} className="flex-1 relative overflow-hidden">
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
             {!hasFilters && albumImages.length > 0 && (
-                <div className="absolute top-2 left-4 z-10">
+                <div className="mb-3 mt-1">
                     <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Similar images — select tags, colors, or dates to build an album
                     </span>
                 </div>
             )}
             {hasFilters && albumImages.length > 0 && (
-                <div className="absolute top-2 left-4 z-10">
+                <div className="mb-3 mt-1">
                     <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         {albumImages.length} images
                     </span>
                 </div>
             )}
-            {galaxyNodes.map(node => {
-                const x = cx + Math.cos(node.angle) * node.radius * maxR;
-                const y = cy + Math.sin(node.angle) * node.radius * maxR;
-                const showPhoto = node.photoOpacity > 0.05;
+            {rows.map((row, rowIdx) => {
+                // Determine tier info for label
+                const tierHits = hasFilters ? row[0]?.tagHits ?? 0 : 0;
+                const isTopTier = hasFilters && rowIdx === 0;
 
                 return (
-                    <div key={node.image.id}
-                        className="absolute cursor-pointer transition-all duration-700"
-                        style={{
-                            left: x - node.size / 2,
-                            top: y - node.size / 2,
-                            width: node.size,
-                            height: node.size,
-                            animation: `drift ${node.driftDuration}s ease-in-out ${node.driftDelay}s infinite`,
-                            zIndex: Math.round(node.relevance * 10),
-                        }}
-                        onClick={() => onSelect(node.image)}>
-                        {/* Sprite layer — always present, fades as photo appears */}
-                        <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-700"
-                            style={{ opacity: 1 - node.photoOpacity * 0.85 }}>
-                            <MiniSprite image={node.image} size={node.size * 0.9}
-                                convergence={node.relevance} />
-                        </div>
-                        {/* Photo layer — fades in with relevance */}
-                        {showPhoto && (
-                            <div className="absolute inset-0 rounded-lg overflow-hidden transition-opacity duration-700"
-                                style={{
-                                    opacity: node.photoOpacity,
-                                    boxShadow: `0 ${2 + node.relevance * 6}px ${8 + node.relevance * 16}px rgba(0,0,0,${0.05 + node.relevance * 0.12})`,
-                                }}>
-                                <img src={getThumbnailUrl(node.image.id)} alt=""
-                                    className="w-full h-full object-cover"
-                                    loading="lazy" draggable={false} />
+                    <div key={rowIdx} className="mb-4">
+                        {hasFilters && tierHits > 0 && (
+                            <div className="mb-1.5">
+                                <span className="text-[8px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                    {tierHits} {tierHits === 1 ? 'match' : 'matches'}
+                                </span>
                             </div>
                         )}
+                        <div className="flex flex-wrap items-center gap-3"
+                            style={{ justifyContent: isTopTier ? 'flex-start' : 'flex-start' }}>
+                            {row.map((node: WaterfallNode) => {
+                                const showPhoto = node.photoOpacity > 0.05;
+                                const xJitter = (seededRandom(node.image.id + 'xj') - 0.5) * 8;
+
+                                return (
+                                    <div key={node.image.id}
+                                        className="cursor-pointer transition-all duration-500 relative flex-shrink-0"
+                                        style={{
+                                            width: node.size,
+                                            height: showPhoto ? node.size * 0.75 : node.size,
+                                            marginLeft: xJitter,
+                                            animation: `drift ${node.driftDuration}s ease-in-out ${node.driftDelay}s infinite`,
+                                        }}
+                                        onClick={() => onSelect(node.image)}>
+                                        {/* Sprite layer */}
+                                        <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-700"
+                                            style={{ opacity: 1 - node.photoOpacity * 0.85 }}>
+                                            <MiniSprite image={node.image} size={Math.min(node.size, showPhoto ? node.size * 0.6 : node.size) * 0.9}
+                                                convergence={node.relevance} />
+                                        </div>
+                                        {/* Photo layer */}
+                                        {showPhoto && (
+                                            <div className="absolute inset-0 rounded-lg overflow-hidden transition-opacity duration-700"
+                                                style={{
+                                                    opacity: node.photoOpacity,
+                                                    boxShadow: `0 ${2 + node.relevance * 6}px ${8 + node.relevance * 16}px rgba(0,0,0,${0.05 + node.relevance * 0.12})`,
+                                                }}>
+                                                <img src={getThumbnailUrl(node.image.id)} alt=""
+                                                    className="w-full h-full object-cover"
+                                                    loading="lazy" draggable={false} />
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 );
             })}
@@ -463,8 +470,9 @@ const DynamicAlbum: React.FC<{
     onRemoveTag: (tagId: string) => void;
     onRemoveColor: (hex: string) => void;
     onToggleTemporal: () => void;
+    onClearFilters: () => void;
     onSelect: (img: ImageNode) => void;
-}> = ({ allImages, anchor, scored, temporalImages, activeTags, activeColors, temporalActive, tagMap, onRemoveTag, onRemoveColor, onToggleTemporal, onSelect }) => {
+}> = ({ allImages, anchor, scored, temporalImages, activeTags, activeColors, temporalActive, tagMap, onRemoveTag, onRemoveColor, onToggleTemporal, onClearFilters, onSelect }) => {
     const hasFilters = activeTags.size > 0 || activeColors.size > 0 || temporalActive;
 
     // Build album pool
@@ -570,11 +578,19 @@ const DynamicAlbum: React.FC<{
                             <span className="text-zinc-400 ml-0.5">&times;</span>
                         </button>
                     )}
+                    <button onClick={onClearFilters}
+                        className="px-2 py-0.5 text-[8px] cursor-pointer transition-all hover:text-zinc-600 uppercase tracking-wider"
+                        style={{
+                            fontFamily: 'JetBrains Mono, monospace',
+                            color: '#a1a1aa',
+                        }}>
+                        Clear all
+                    </button>
                 </div>
             )}
 
-            {/* Galaxy view */}
-            <GalaxyField albumImages={albumImages} hasFilters={hasFilters} onSelect={onSelect} />
+            {/* Waterfall album view */}
+            <WaterfallField albumImages={albumImages} hasFilters={hasFilters} onSelect={onSelect} />
         </div>
     );
 };
@@ -746,6 +762,12 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setTemporalActive(prev => !prev);
     }, []);
 
+    const handleClearFilters = useCallback(() => {
+        setActiveTags(new Set());
+        setActiveColors(new Set());
+        setTemporalActive(false);
+    }, []);
+
     const handleClear = useCallback(() => {
         setTrail([]);
         setAnchorId(null);
@@ -818,7 +840,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                                 temporalImages={temporalNeighbors} activeTags={activeTags}
                                 activeColors={activeColors} temporalActive={temporalActive}
                                 tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
-                                onToggleTemporal={handleToggleTemporal} onSelect={handleSelect} />
+                                onToggleTemporal={handleToggleTemporal} onClearFilters={handleClearFilters}
+                                onSelect={handleSelect} />
                         </div>
                     </div>
                 </div>
