@@ -110,29 +110,36 @@ const LeftPanel: React.FC<{
     onToggleTemporal: () => void;
     onNavigate: (img: ImageNode) => void;
     albumPreview?: React.ReactNode;
-}> = ({ image, allImages, temporalImages, scored, tagMap, activeTags, activeColors, temporalActive, onToggleTag, onToggleColor, onToggleTemporal, onNavigate, albumPreview }) => {
+    albumImages?: AlbumImage[];
+}> = ({ image, allImages, temporalImages, scored, tagMap, activeTags, activeColors, temporalActive, onToggleTag, onToggleColor, onToggleTemporal, onNavigate, albumPreview, albumImages }) => {
     const palette = image.palette.length > 0 ? image.palette : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
     const anchorTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
     const anchorTagSet = new Set(anchorTagIds);
 
-    // Discovery tags: tags from top scored images that aren't on the anchor
+    // Discovery tags: from album pool images when filters active, otherwise from top scored neighbors
+    const hasFilters = activeTags.size > 0 || activeColors.size > 0 || temporalActive;
     const discoveryTags = useMemo(() => {
         const tagCounts = new Map<string, number>();
-        // Look at top 30 scored neighbors
-        for (const s of scored.slice(0, 30)) {
-            const imgTags = [...new Set([...s.image.tagIds, ...(s.image.aiTagIds || [])])];
+        const excludeTags = new Set([...anchorTagSet, ...activeTags]);
+
+        const sourceImages = hasFilters && albumImages && albumImages.length > 0
+            ? albumImages.map((a: AlbumImage) => a.image)
+            : scored.slice(0, 30).map((s: ScoredImage) => s.image);
+
+        for (const img of sourceImages) {
+            const imgTags = [...new Set([...img.tagIds, ...(img.aiTagIds || [])])];
             for (const tagId of imgTags) {
-                if (!anchorTagSet.has(tagId)) {
+                if (!excludeTags.has(tagId)) {
                     tagCounts.set(tagId, (tagCounts.get(tagId) || 0) + 1);
                 }
             }
         }
-        // Sort by frequency, take top 12
+        // Sort by frequency, take top 15
         return [...tagCounts.entries()]
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 12)
+            .slice(0, 15)
             .map(([tagId]) => tagId);
-    }, [scored, anchorTagSet]);
+    }, [scored, anchorTagSet, activeTags, hasFilters, albumImages]);
 
     // Timeline data
     const allTimestamps = useMemo(() => allImages.map(i => i.captureTimestamp).sort((a: number, b: number) => a - b), [allImages]);
@@ -520,10 +527,7 @@ const WaterfallField: React.FC<{
 // --- Dynamic Album ---
 
 const DynamicAlbum: React.FC<{
-    allImages: ImageNode[];
-    anchor: ImageNode;
-    scored: ScoredImage[];
-    temporalImages: ScoredImage[];
+    albumImages: AlbumImage[];
     activeTags: Set<string>;
     activeColors: Set<string>;
     temporalActive: boolean;
@@ -533,66 +537,8 @@ const DynamicAlbum: React.FC<{
     onToggleTemporal: () => void;
     onClearFilters: () => void;
     onSelect: (img: ImageNode) => void;
-}> = ({ allImages, anchor, scored, temporalImages, activeTags, activeColors, temporalActive, tagMap, onRemoveTag, onRemoveColor, onToggleTemporal, onClearFilters, onSelect }) => {
+}> = ({ albumImages, activeTags, activeColors, temporalActive, tagMap, onRemoveTag, onRemoveColor, onToggleTemporal, onClearFilters, onSelect }) => {
     const hasFilters = activeTags.size > 0 || activeColors.size > 0 || temporalActive;
-
-    // Build album pool
-    const albumImages = useMemo((): AlbumImage[] => {
-        if (!hasFilters) {
-            // No filters: show scored similar images as sprites
-            return scored.slice(0, 24).map(s => ({
-                image: s.image,
-                tagHits: 0,
-                isTemporal: s.isTemporalNeighbor,
-            }));
-        }
-
-        const seen = new Map<string, AlbumImage>();
-
-        // Add temporal neighbors if temporal filter active
-        if (temporalActive) {
-            for (const s of temporalImages) {
-                seen.set(s.image.id, { image: s.image, tagHits: 0, isTemporal: true });
-            }
-        }
-
-        // Score all images by tag hits + color hits
-        for (const img of allImages) {
-            if (img.id === anchor.id) continue;
-            let hits = 0;
-
-            // Tag hits
-            if (activeTags.size > 0) {
-                const imgTags = new Set([...img.tagIds, ...(img.aiTagIds || [])]);
-                for (const tagId of activeTags) {
-                    if (imgTags.has(tagId)) hits++;
-                }
-            }
-
-            // Color hits — check if any image palette color is close to any active color
-            if (activeColors.size > 0 && img.palette.length > 0) {
-                for (const activeHex of activeColors) {
-                    const closest = Math.min(...img.palette.map((c: string) => colorDist(c, activeHex)));
-                    if (closest < COLOR_THRESHOLD) hits++;
-                }
-            }
-
-            if (hits > 0) {
-                const existing = seen.get(img.id);
-                if (existing) {
-                    existing.tagHits = Math.max(existing.tagHits, hits);
-                } else {
-                    seen.set(img.id, { image: img, tagHits: hits, isTemporal: false });
-                }
-            }
-        }
-
-        return [...seen.values()].sort((a, b) => {
-            if (b.tagHits !== a.tagHits) return b.tagHits - a.tagHits;
-            if (a.isTemporal !== b.isTemporal) return a.isTemporal ? -1 : 1;
-            return 0;
-        });
-    }, [hasFilters, scored, temporalImages, allImages, anchor.id, activeTags, activeColors, temporalActive]);
 
     return (
         <div className="flex flex-col h-full">
@@ -782,6 +728,51 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
     const temporalNeighbors = useMemo(() => scored.filter((s: ScoredImage) => s.isTemporalNeighbor).slice(0, 12), [scored]);
 
+    // Album pool — shared between DynamicAlbum and LeftPanel discovery tags
+    const albumPool = useMemo((): AlbumImage[] => {
+        const hasFilters = activeTags.size > 0 || activeColors.size > 0 || temporalActive;
+        if (!anchor || !hasFilters) {
+            return scored.slice(0, 24).map((s: ScoredImage) => ({
+                image: s.image,
+                tagHits: 0,
+                isTemporal: s.isTemporalNeighbor,
+            }));
+        }
+
+        const seen = new Map<string, AlbumImage>();
+        if (temporalActive) {
+            for (const s of temporalNeighbors) {
+                seen.set(s.image.id, { image: s.image, tagHits: 0, isTemporal: true });
+            }
+        }
+        for (const img of images) {
+            if (img.id === anchor.id) continue;
+            let hits = 0;
+            if (activeTags.size > 0) {
+                const imgTags = new Set([...img.tagIds, ...(img.aiTagIds || [])]);
+                for (const tagId of activeTags) {
+                    if (imgTags.has(tagId)) hits++;
+                }
+            }
+            if (activeColors.size > 0 && img.palette.length > 0) {
+                for (const activeHex of activeColors) {
+                    const closest = Math.min(...img.palette.map((c: string) => colorDist(c, activeHex)));
+                    if (closest < COLOR_THRESHOLD) hits++;
+                }
+            }
+            if (hits > 0) {
+                const existing = seen.get(img.id);
+                if (existing) existing.tagHits = Math.max(existing.tagHits, hits);
+                else seen.set(img.id, { image: img, tagHits: hits, isTemporal: false });
+            }
+        }
+        return [...seen.values()].sort((a, b) => {
+            if (b.tagHits !== a.tagHits) return b.tagHits - a.tagHits;
+            if (a.isTemporal !== b.isTemporal) return a.isTemporal ? -1 : 1;
+            return 0;
+        });
+    }, [anchor, scored, temporalNeighbors, images, activeTags, activeColors, temporalActive]);
+
     const surfaceStyle = useMemo((): React.CSSProperties => {
         if (!anchor?.palette?.length) return { background: '#faf9f6' };
         const p = anchor.palette;
@@ -904,7 +895,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                             scored={scored} tagMap={tagMap} activeTags={activeTags}
                             activeColors={activeColors} temporalActive={temporalActive}
                             onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
-                            onToggleTemporal={handleToggleTemporal} onNavigate={handleSelect} />
+                            onToggleTemporal={handleToggleTemporal} onNavigate={handleSelect}
+                            albumImages={albumPool} />
                     </div>
 
                     {/* CENTER: Single scrollable page — Hero then Album */}
@@ -916,9 +908,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         {/* Dynamic Album */}
                         <div className="rounded-xl"
                             style={{ backgroundColor: '#faf9f6aa' }}>
-                            <DynamicAlbum allImages={images} anchor={anchor} scored={scored}
-                                temporalImages={temporalNeighbors} activeTags={activeTags}
-                                activeColors={activeColors} temporalActive={temporalActive}
+                            <DynamicAlbum albumImages={albumPool}
+                                activeTags={activeTags} activeColors={activeColors} temporalActive={temporalActive}
                                 tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
                                 onToggleTemporal={handleToggleTemporal} onClearFilters={handleClearFilters}
                                 onSelect={handleSelect} />
@@ -963,9 +954,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         {/* Dynamic Album — full width, flows in page */}
                         <div className="rounded-t-xl"
                             style={{ backgroundColor: '#faf9f6aa' }}>
-                            <DynamicAlbum allImages={images} anchor={anchor} scored={scored}
-                                temporalImages={temporalNeighbors} activeTags={activeTags}
-                                activeColors={activeColors} temporalActive={temporalActive}
+                            <DynamicAlbum albumImages={albumPool}
+                                activeTags={activeTags} activeColors={activeColors} temporalActive={temporalActive}
                                 tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
                                 onToggleTemporal={handleToggleTemporal} onClearFilters={handleClearFilters}
                                 onSelect={handleSelect} />
@@ -1015,10 +1005,10 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                                         activeColors={activeColors} temporalActive={temporalActive}
                                         onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
                                         onToggleTemporal={handleToggleTemporal} onNavigate={(img: ImageNode) => { setSheetOpen(false); handleSelect(img); }}
+                                        albumImages={albumPool}
                                         albumPreview={
-                                            <DynamicAlbum allImages={images} anchor={anchor} scored={scored}
-                                                temporalImages={temporalNeighbors} activeTags={activeTags}
-                                                activeColors={activeColors} temporalActive={temporalActive}
+                                            <DynamicAlbum albumImages={albumPool}
+                                                activeTags={activeTags} activeColors={activeColors} temporalActive={temporalActive}
                                                 tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
                                                 onToggleTemporal={handleToggleTemporal} onClearFilters={handleClearFilters}
                                                 onSelect={(img: ImageNode) => { setSheetOpen(false); handleSelect(img); }} />
