@@ -109,9 +109,29 @@ const LeftPanel: React.FC<{
     onToggleColor: (hex: string) => void;
     onToggleTemporal: () => void;
     onNavigate: (img: ImageNode) => void;
-}> = ({ image, allImages, temporalImages, tagMap, activeTags, activeColors, temporalActive, onToggleTag, onToggleColor, onToggleTemporal, onNavigate }) => {
+}> = ({ image, allImages, temporalImages, scored, tagMap, activeTags, activeColors, temporalActive, onToggleTag, onToggleColor, onToggleTemporal, onNavigate }) => {
     const palette = image.palette.length > 0 ? image.palette : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
-    const allTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
+    const anchorTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
+    const anchorTagSet = new Set(anchorTagIds);
+
+    // Discovery tags: tags from top scored images that aren't on the anchor
+    const discoveryTags = useMemo(() => {
+        const tagCounts = new Map<string, number>();
+        // Look at top 30 scored neighbors
+        for (const s of scored.slice(0, 30)) {
+            const imgTags = [...new Set([...s.image.tagIds, ...(s.image.aiTagIds || [])])];
+            for (const tagId of imgTags) {
+                if (!anchorTagSet.has(tagId)) {
+                    tagCounts.set(tagId, (tagCounts.get(tagId) || 0) + 1);
+                }
+            }
+        }
+        // Sort by frequency, take top 12
+        return [...tagCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 12)
+            .map(([tagId]) => tagId);
+    }, [scored, anchorTagSet]);
 
     // Timeline data
     const allTimestamps = useMemo(() => allImages.map(i => i.captureTimestamp).sort((a: number, b: number) => a - b), [allImages]);
@@ -255,13 +275,13 @@ const LeftPanel: React.FC<{
                 )}
             </div>
 
-            {/* Tags — click to add to album pool */}
-            <div className="flex-1 px-3 pt-2 pb-3">
+            {/* Tags — this image */}
+            <div className="flex-shrink-0 px-3 pt-2 pb-2 border-b border-zinc-200/40">
                 <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Tags — click to build album
+                    This image — click to build album
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                    {allTagIds.map((tagId: string) => {
+                    {anchorTagIds.map((tagId: string) => {
                         const label = tagMap.get(tagId) || tagId;
                         const isActive = activeTags.has(tagId);
                         return (
@@ -280,6 +300,34 @@ const LeftPanel: React.FC<{
                     })}
                 </div>
             </div>
+
+            {/* Discovery tags — from nearby images */}
+            {discoveryTags.length > 0 && (
+                <div className="flex-1 px-3 pt-2 pb-3">
+                    <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Discover nearby
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                        {discoveryTags.map((tagId: string) => {
+                            const label = tagMap.get(tagId) || tagId;
+                            const isActive = activeTags.has(tagId);
+                            return (
+                                <button key={tagId} onClick={() => onToggleTag(tagId)}
+                                    className="px-2 py-0.5 rounded-full text-[10px] transition-all cursor-pointer"
+                                    style={{
+                                        fontFamily: 'Inter, sans-serif',
+                                        backgroundColor: isActive ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.02)',
+                                        color: isActive ? '#18181b' : '#71717a',
+                                        outline: isActive ? '1.5px solid rgba(0,0,0,0.25)' : '1px dashed rgba(0,0,0,0.12)',
+                                        fontWeight: isActive ? 600 : 400,
+                                    }}>
+                                    {isActive ? '+ ' : ''}{label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -921,32 +969,34 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                             {/* Backdrop */}
                             <div className="absolute inset-0 bg-black/20 transition-opacity" />
                             {/* Sheet */}
-                            <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] rounded-t-2xl overflow-hidden"
+                            <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] rounded-t-2xl flex flex-col"
                                 style={{ backgroundColor: '#faf9f6', boxShadow: '0 -4px 32px rgba(0,0,0,0.12)' }}
-                                onClick={(e) => e.stopPropagation()}>
-                                {/* Handle bar */}
-                                <div className="flex justify-center pt-3 pb-1">
-                                    <div className="w-10 h-1 rounded-full bg-zinc-300" />
+                                onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                                {/* Handle bar + close — fixed header */}
+                                <div className="flex-shrink-0">
+                                    <div className="flex justify-center pt-3 pb-1">
+                                        <div className="w-10 h-1 rounded-full bg-zinc-300" />
+                                    </div>
+                                    <div className="flex justify-between items-center px-4 pb-2">
+                                        <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-500"
+                                            style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                            Image Details
+                                        </span>
+                                        <button onClick={() => setSheetOpen(false)}
+                                            className="text-[10px] text-zinc-400 hover:text-zinc-600 cursor-pointer px-2 py-1 rounded"
+                                            style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                            Done
+                                        </button>
+                                    </div>
                                 </div>
-                                {/* Close button */}
-                                <div className="flex justify-between items-center px-4 pb-2">
-                                    <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-500"
-                                        style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                        Image Details
-                                    </span>
-                                    <button onClick={() => setSheetOpen(false)}
-                                        className="text-[10px] text-zinc-400 hover:text-zinc-600 cursor-pointer px-2 py-1 rounded"
-                                        style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                        Done
-                                    </button>
-                                </div>
-                                {/* LeftPanel content in scrollable area */}
-                                <div className="overflow-y-auto" style={{ maxHeight: 'calc(85vh - 60px)' }}>
+                                {/* Scrollable content */}
+                                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+                                    style={{ WebkitOverflowScrolling: 'touch' }}>
                                     <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
                                         scored={scored} tagMap={tagMap} activeTags={activeTags}
                                         activeColors={activeColors} temporalActive={temporalActive}
                                         onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
-                                        onToggleTemporal={handleToggleTemporal} onNavigate={(img) => { setSheetOpen(false); handleSelect(img); }} />
+                                        onToggleTemporal={handleToggleTemporal} onNavigate={(img: ImageNode) => { setSheetOpen(false); handleSelect(img); }} />
                                 </div>
                             </div>
                         </div>
