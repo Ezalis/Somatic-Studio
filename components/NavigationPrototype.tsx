@@ -241,10 +241,10 @@ const LeftPanel: React.FC<{
                                 {temporalActive ? '✓ In album' : '+ Add to album'}
                             </button>
                         </div>
-                        <div className="flex gap-1 overflow-x-auto pb-1">
-                            {temporalImages.slice(0, 8).map((s: ScoredImage) => (
+                        <div className="flex gap-1 flex-wrap">
+                            {temporalImages.map((s: ScoredImage) => (
                                 <div key={s.image.id}
-                                    className="flex-shrink-0 rounded overflow-hidden cursor-pointer hover:scale-105 transition-transform"
+                                    className="rounded overflow-hidden cursor-pointer hover:scale-105 transition-transform"
                                     style={{ width: 36, height: 36 }}
                                     onClick={() => onNavigate(s.image)}>
                                     <img src={getThumbnailUrl(s.image.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
@@ -411,37 +411,42 @@ const WaterfallField: React.FC<{
                                 </span>
                             </div>
                         )}
-                        <div className="flex flex-wrap items-center gap-3"
-                            style={{ justifyContent: isTopTier ? 'flex-start' : 'flex-start' }}>
+                        <div className="flex flex-wrap items-end gap-3">
                             {row.map((node: WaterfallNode) => {
                                 const showPhoto = node.photoOpacity > 0.05;
                                 const xJitter = (seededRandom(node.image.id + 'xj') - 0.5) * 8;
 
                                 return (
                                     <div key={node.image.id}
-                                        className="cursor-pointer transition-all duration-500 relative flex-shrink-0"
+                                        className="cursor-pointer transition-all duration-500 flex-shrink-0"
                                         style={{
                                             width: node.size,
-                                            height: showPhoto ? node.size * 0.75 : node.size,
                                             marginLeft: xJitter,
                                             animation: `drift ${node.driftDuration}s ease-in-out ${node.driftDelay}s infinite`,
                                         }}
                                         onClick={() => onSelect(node.image)}>
-                                        {/* Sprite layer */}
-                                        <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-700"
-                                            style={{ opacity: 1 - node.photoOpacity * 0.85 }}>
-                                            <MiniSprite image={node.image} size={Math.min(node.size, showPhoto ? node.size * 0.6 : node.size) * 0.9}
-                                                convergence={node.relevance} />
-                                        </div>
-                                        {/* Photo layer */}
+                                        {/* Sprite — shown when no/low photo opacity */}
+                                        {!showPhoto && (
+                                            <div className="flex items-center justify-center" style={{ height: node.size }}>
+                                                <MiniSprite image={node.image} size={node.size * 0.9}
+                                                    convergence={node.relevance} />
+                                            </div>
+                                        )}
+                                        {/* Photo with natural aspect ratio */}
                                         {showPhoto && (
-                                            <div className="absolute inset-0 rounded-lg overflow-hidden transition-opacity duration-700"
-                                                style={{
-                                                    opacity: node.photoOpacity,
-                                                    boxShadow: `0 ${2 + node.relevance * 6}px ${8 + node.relevance * 16}px rgba(0,0,0,${0.05 + node.relevance * 0.12})`,
-                                                }}>
-                                                <img src={getThumbnailUrl(node.image.id)} alt=""
-                                                    className="w-full h-full object-cover"
+                                            <div className="relative">
+                                                {/* Sprite behind photo for crossfade */}
+                                                <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-700"
+                                                    style={{ opacity: 1 - node.photoOpacity * 0.85 }}>
+                                                    <MiniSprite image={node.image} size={node.size * 0.6}
+                                                        convergence={node.relevance} />
+                                                </div>
+                                                <img src={getPreviewUrl(node.image.id)} alt=""
+                                                    className="w-full h-auto rounded-lg transition-opacity duration-700"
+                                                    style={{
+                                                        opacity: node.photoOpacity,
+                                                        boxShadow: `0 ${2 + node.relevance * 6}px ${8 + node.relevance * 16}px rgba(0,0,0,${0.05 + node.relevance * 0.12})`,
+                                                    }}
                                                     loading="lazy" draggable={false} />
                                             </div>
                                         )}
