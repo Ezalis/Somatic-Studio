@@ -4,20 +4,18 @@ import { getThumbnailUrl, getPreviewUrl } from '../services/immichService';
 
 // --- Types ---
 
-interface OrbitNode {
+interface ScoredImage {
     image: ImageNode;
-    ring: 'hero' | 'inner' | 'outer';
-    angle: number;      // radians, position on ring
-    distance: number;   // px from center
-    score: number;      // relevance 0-1
-    isBridge: boolean;  // tag bridge (escape route)
+    score: number;
+    sharedTags: string[];
+    isBridge: boolean;
+    isTemporalNeighbor: boolean;
 }
 
 interface TrailPoint {
     id: string;
-    x: number;
-    y: number;
     palette: string[];
+    label: string;
 }
 
 // --- Helpers ---
@@ -31,44 +29,46 @@ function seededRandom(seed: string): number {
     return ((hash & 0x7fffffff) % 1000) / 1000;
 }
 
-function scoreRelevance(image: ImageNode, anchor: ImageNode): number {
-    if (image.id === anchor.id) return 1;
+function scoreRelevance(image: ImageNode, anchor: ImageNode): { score: number; sharedTags: string[]; isTemporalNeighbor: boolean } {
+    if (image.id === anchor.id) return { score: 1, sharedTags: [], isTemporalNeighbor: false };
     let score = 0;
+
+    // Temporal
+    const daysDiff = Math.abs(image.captureTimestamp - anchor.captureTimestamp) / 86400000;
+    const isTemporalNeighbor = image.shootDayClusterId === anchor.shootDayClusterId || daysDiff < 7;
     if (image.shootDayClusterId === anchor.shootDayClusterId) score += 0.4;
+    else if (daysDiff < 30) score += 0.1 * (1 - daysDiff / 30);
+
+    // Tags
     const anchorTags = new Set([...anchor.tagIds, ...(anchor.aiTagIds || [])]);
-    const overlap = [...image.tagIds, ...(image.aiTagIds || [])].filter(t => anchorTags.has(t)).length;
-    score += Math.min(overlap * 0.12, 0.4);
+    const sharedTags = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])].filter(t => anchorTags.has(t));
+    score += Math.min(sharedTags.length * 0.12, 0.4);
+
+    // Technical
     if (image.cameraModel === anchor.cameraModel && anchor.cameraModel !== 'Unknown Camera') score += 0.05;
     if (image.lensModel === anchor.lensModel && anchor.lensModel !== 'Unknown Lens') score += 0.05;
     if (image.inferredSeason === anchor.inferredSeason) score += 0.05;
-    const daysDiff = Math.abs(image.captureTimestamp - anchor.captureTimestamp) / (86400000);
-    if (daysDiff < 30) score += 0.05 * (1 - daysDiff / 30);
-    return Math.min(score, 1);
+
+    return { score: Math.min(score, 1), sharedTags, isTemporalNeighbor };
 }
 
-/** Find tag bridge images: share exactly 1 tag but otherwise very different */
-function findTagBridges(images: ImageNode[], anchor: ImageNode, exclude: Set<string>, count: number): ImageNode[] {
+function classifyImages(images: ImageNode[], anchor: ImageNode, tagMap: Map<string, string>): ScoredImage[] {
     const anchorTags = new Set([...anchor.tagIds, ...(anchor.aiTagIds || [])]);
+
     return images
-        .filter(img => !exclude.has(img.id) && img.id !== anchor.id)
+        .filter(img => img.id !== anchor.id)
         .map(img => {
-            const shared = [...img.tagIds, ...(img.aiTagIds || [])].filter(t => anchorTags.has(t));
+            const { score, sharedTags, isTemporalNeighbor } = scoreRelevance(img, anchor);
             const totalTags = new Set([...img.tagIds, ...(img.aiTagIds || [])]).size;
-            // Want exactly 1 shared tag and otherwise different
-            const bridgeScore = shared.length === 1 && totalTags > 2
-                ? (1 - scoreRelevance(img, anchor)) // prefer MORE different
-                : 0;
-            return { img, bridgeScore };
+            const isBridge = sharedTags.length === 1 && totalTags > 2 && score < 0.35;
+            return { image: img, score, sharedTags, isBridge, isTemporalNeighbor };
         })
-        .filter(({ bridgeScore }) => bridgeScore > 0.3)
-        .sort((a, b) => b.bridgeScore - a.bridgeScore)
-        .slice(0, count)
-        .map(({ img }) => img);
+        .sort((a, b) => b.score - a.score);
 }
 
-// --- Inline Esoteric Sprite (self-contained, no ExperienceNode dependency) ---
+// --- Mini Sprite ---
 
-const MiniSprite: React.FC<{ image: ImageNode; size: number; isBridge?: boolean }> = React.memo(({ image, size, isBridge }) => {
+const MiniSprite: React.FC<{ image: ImageNode; size: number; convergence?: 'high' | 'low' | 'bridge' }> = React.memo(({ image, size, convergence }) => {
     const palette = image.palette.length > 0
         ? image.palette
         : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
@@ -78,6 +78,9 @@ const MiniSprite: React.FC<{ image: ImageNode; size: number; isBridge?: boolean 
         for (let i = 0; i < image.id.length; i++) h = ((h << 5) - h) + image.id.charCodeAt(i) | 0;
         return Math.abs(h);
     })();
+
+    const ringColor = convergence === 'high' ? palette[0] : convergence === 'bridge' ? '#f59e0b' : palette[2] || palette[0];
+    const ringOpacity = convergence === 'high' ? 0.5 : 0.3;
 
     return (
         <svg viewBox="0 0 100 100" width={size} height={size} className="overflow-visible" shapeRendering="geometricPrecision">
@@ -89,110 +92,386 @@ const MiniSprite: React.FC<{ image: ImageNode; size: number; isBridge?: boolean 
                 const tx = 50 + dist * Math.cos(angle * Math.PI / 180);
                 const ty = 50 + dist * Math.sin(angle * Math.PI / 180);
                 return (
-                    <ellipse
-                        key={i}
-                        cx={tx} cy={ty} rx={rx} ry={ry}
-                        fill={color}
-                        fillOpacity={0.55}
-                        transform={`rotate(${(seed * (i + 1)) % 360}, ${tx}, ${ty})`}
-                    />
+                    <ellipse key={i} cx={tx} cy={ty} rx={rx} ry={ry}
+                        fill={color} fillOpacity={0.55}
+                        transform={`rotate(${(seed * (i + 1)) % 360}, ${tx}, ${ty})`} />
                 );
             })}
             <circle cx="50" cy="50" r={16} fill={palette[0]} opacity={0.85} />
-            {isBridge && (
-                <circle cx="50" cy="50" r={22} fill="none" stroke={palette[0]} strokeWidth={1} strokeDasharray="3,3" opacity={0.4} />
+            {convergence && (
+                <circle cx="50" cy="50" r={22} fill="none" stroke={ringColor} strokeWidth={convergence === 'bridge' ? 1.2 : 1}
+                    strokeDasharray={convergence === 'bridge' ? '3,3' : 'none'} opacity={ringOpacity} />
             )}
         </svg>
     );
 });
 
-// --- Build orbit layout ---
+// --- Zone Components ---
 
-function buildOrbit(
-    images: ImageNode[],
-    anchor: ImageNode,
-    isMobile: boolean,
-): OrbitNode[] {
-    const innerCount = isMobile ? 4 : 6;
-    const outerSpriteCount = isMobile ? 4 : 6;
-    const bridgeCount = isMobile ? 2 : 3;
+const HeroZone: React.FC<{
+    image: ImageNode;
+    tagMap: Map<string, string>;
+}> = ({ image, tagMap }) => {
+    const dateStr = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    return (
+        <div className="flex flex-col items-center justify-center h-full p-4">
+            <div className="overflow-hidden rounded-lg max-w-full"
+                style={{ boxShadow: `0 16px 64px ${image.palette[0] || '#000'}35, 0 4px 24px ${image.palette[1] || '#000'}20` }}>
+                <img src={getPreviewUrl(image.id)} alt="" className="max-h-[55vh] max-w-full object-contain" draggable={false} />
+            </div>
+            <div className="mt-3 text-center">
+                <span className="text-sm" style={{ fontFamily: 'Caveat, cursive', color: image.palette[0] || '#71717a' }}>
+                    {dateStr}
+                </span>
+                <span className="text-[10px] text-zinc-300 ml-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    {image.cameraModel !== 'Unknown Camera' ? image.cameraModel : ''}
+                </span>
+            </div>
+        </div>
+    );
+};
 
-    // Score all images
-    const scored = images
-        .filter(img => img.id !== anchor.id)
-        .map(img => ({ img, score: scoreRelevance(img, anchor) }))
-        .sort((a, b) => b.score - a.score);
+const TemporalZone: React.FC<{
+    images: ScoredImage[];
+    anchor: ImageNode;
+    onSelect: (img: ImageNode) => void;
+}> = ({ images, anchor, onSelect }) => {
+    if (images.length === 0) return null;
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-3 py-2 flex-shrink-0">
+                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    Same Session
+                </span>
+                <span className="text-[9px] text-zinc-300 ml-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    {images.length}
+                </span>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 pb-3">
+                <div className="flex flex-wrap gap-2 justify-center">
+                    {images.map(({ image }) => {
+                        const breatheDur = 6 + seededRandom(image.id + 'tb') * 3;
+                        const breatheDel = seededRandom(image.id + 'td') * 2;
+                        return (
+                            <div key={image.id}
+                                className="cursor-pointer hover:scale-105 transition-transform duration-300 rounded-md overflow-hidden"
+                                style={{
+                                    width: 80, height: 58,
+                                    boxShadow: `0 2px 8px ${anchor.palette[0] || '#000'}15`,
+                                    animation: `breathe ${breatheDur}s ease-in-out ${breatheDel}s infinite`,
+                                }}
+                                onClick={() => onSelect(image)}>
+                                <img src={getThumbnailUrl(image.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+};
 
-    // Inner ring: top N as photos
-    const inner = scored.slice(0, innerCount);
-    const innerIds = new Set(inner.map(s => s.img.id));
+const SpriteFieldZone: React.FC<{
+    convergent: ScoredImage[];
+    divergent: ScoredImage[];
+    tagMap: Map<string, string>;
+    onSelect: (img: ImageNode) => void;
+    anchor: ImageNode;
+}> = ({ convergent, divergent, tagMap, onSelect, anchor }) => {
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-3 py-2 flex-shrink-0">
+                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    Associations
+                </span>
+            </div>
+            <div className="flex-1 flex flex-col gap-4 px-3 pb-3 overflow-y-auto">
+                {/* Convergent cluster */}
+                {convergent.length > 0 && (
+                    <div>
+                        <span className="text-[8px] tracking-[0.15em] uppercase text-zinc-300 mb-2 block" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            Close
+                        </span>
+                        <div className="flex flex-wrap gap-3 justify-center">
+                            {convergent.map(({ image, sharedTags }) => {
+                                const breatheDur = 5 + seededRandom(image.id + 'cb') * 5;
+                                const breatheDel = seededRandom(image.id + 'cd') * 3;
+                                const label = sharedTags.slice(0, 2).map(t => tagMap.get(t) || '').filter(Boolean).join(', ');
+                                return (
+                                    <div key={image.id}
+                                        className="flex flex-col items-center cursor-pointer hover:scale-110 transition-transform duration-300"
+                                        style={{ animation: `drift ${breatheDur}s ease-in-out ${breatheDel}s infinite` }}
+                                        onClick={() => onSelect(image)}>
+                                        <MiniSprite image={image} size={52} convergence="high" />
+                                        {label && (
+                                            <span className="text-[7px] mt-0.5 text-center max-w-[60px] truncate"
+                                                style={{ fontFamily: 'Caveat, cursive', color: anchor.palette[0] || '#71717a' }}>
+                                                {label}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+                {/* Divergent cluster */}
+                {divergent.length > 0 && (
+                    <div>
+                        <span className="text-[8px] tracking-[0.15em] uppercase text-zinc-300 mb-2 block" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            Distant
+                        </span>
+                        <div className="flex flex-wrap gap-3 justify-center">
+                            {divergent.map(({ image, sharedTags, isBridge }) => {
+                                const breatheDur = 7 + seededRandom(image.id + 'db') * 4;
+                                const breatheDel = seededRandom(image.id + 'dd') * 4;
+                                const label = sharedTags.slice(0, 1).map(t => tagMap.get(t) || '').filter(Boolean)[0] || '';
+                                return (
+                                    <div key={image.id}
+                                        className="flex flex-col items-center cursor-pointer hover:scale-110 transition-transform duration-300"
+                                        style={{
+                                            animation: `drift ${breatheDur}s ease-in-out ${breatheDel}s infinite`,
+                                            opacity: 0.7,
+                                        }}
+                                        onClick={() => onSelect(image)}>
+                                        <MiniSprite image={image} size={46} convergence={isBridge ? 'bridge' : 'low'} />
+                                        {label && (
+                                            <span className="text-[7px] mt-0.5 text-center max-w-[55px] truncate"
+                                                style={{ fontFamily: 'Caveat, cursive', color: '#a1a1aa' }}>
+                                                {label}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
-    // Tag bridges from remaining pool
-    const bridges = findTagBridges(images, anchor, new Set([...innerIds, anchor.id]), bridgeCount);
-    const bridgeIds = new Set(bridges.map(b => b.id));
+const TrailZone: React.FC<{
+    trail: TrailPoint[];
+    onSelect: (id: string) => void;
+}> = ({ trail, onSelect }) => {
+    if (trail.length < 1) return null;
+    const svgRef = useRef<SVGSVGElement>(null);
+    const width = 220;
+    const nodeSpacing = 40;
+    const height = Math.max(120, trail.length * nodeSpacing + 40);
 
-    // Outer ring: next N scored (excluding bridges) + bridges
-    const outerScored = scored
-        .filter(s => !innerIds.has(s.img.id) && !bridgeIds.has(s.img.id))
-        .slice(0, outerSpriteCount);
+    return (
+        <div className="flex flex-col h-full">
+            <div className="px-3 py-2 flex-shrink-0">
+                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    Trail
+                </span>
+                <span className="text-[9px] text-zinc-300 ml-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    {trail.length}
+                </span>
+            </div>
+            <div className="flex-1 overflow-y-auto px-2 pb-3">
+                <svg ref={svgRef} width={width} height={height} className="mx-auto">
+                    <defs>
+                        <filter id="tglow5">
+                            <feGaussianBlur stdDeviation="1.5" result="b" />
+                            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                        </filter>
+                    </defs>
+                    {trail.map((pt, i) => {
+                        const cx = width / 2 + (seededRandom(pt.id + 'tx') - 0.5) * 80;
+                        const cy = 20 + i * nodeSpacing;
+                        const nextPt = trail[i + 1];
+                        const nextCx = nextPt ? width / 2 + (seededRandom(nextPt.id + 'tx') - 0.5) * 80 : 0;
+                        const nextCy = nextPt ? 20 + (i + 1) * nodeSpacing : 0;
+                        const fade = Math.max(0.2, 0.7 - (trail.length - i - 1) * 0.06);
+                        const isCurrent = i === trail.length - 1;
+                        return (
+                            <g key={pt.id + i}>
+                                {nextPt && (
+                                    <line x1={cx} y1={cy} x2={nextCx} y2={nextCy}
+                                        stroke={pt.palette[0] || '#a1a1aa'} strokeWidth={1}
+                                        opacity={fade * 0.6} filter="url(#tglow5)" />
+                                )}
+                                <circle cx={cx} cy={cy} r={isCurrent ? 5 : 3}
+                                    fill={pt.palette[0] || '#a1a1aa'} opacity={fade}
+                                    filter="url(#tglow5)" className="cursor-pointer"
+                                    onClick={() => onSelect(pt.id)} />
+                                {pt.palette.slice(0, 3).map((color, ci) => (
+                                    <circle key={ci} cx={cx + 12 + ci * 6} cy={cy} r={2}
+                                        fill={color} opacity={fade * 0.5} />
+                                ))}
+                            </g>
+                        );
+                    })}
+                </svg>
+            </div>
+        </div>
+    );
+};
 
-    // Ring radii
-    const innerRadius = isMobile ? 130 : 190;
-    const outerRadius = isMobile ? 230 : 320;
+const DetailDrawer: React.FC<{
+    image: ImageNode;
+    tagMap: Map<string, string>;
+    onNavigateTag: (tagId: string) => void;
+    onNavigateCamera: (camera: string) => void;
+    onNavigateLens: (lens: string) => void;
+    onNavigateSeason: (season: string) => void;
+    isOpen: boolean;
+    onToggle: () => void;
+}> = ({ image, tagMap, onNavigateTag, onNavigateCamera, onNavigateLens, onNavigateSeason, isOpen, onToggle }) => {
+    const allTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
+    return (
+        <div className={`fixed right-0 top-0 bottom-0 z-50 transition-transform duration-500 ease-out ${isOpen ? 'translate-x-0' : 'translate-x-[calc(100%-28px)]'}`}
+            style={{ width: 280 }}>
+            {/* Tab */}
+            <button onClick={onToggle}
+                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full w-7 h-20 rounded-l-md flex items-center justify-center transition-colors"
+                style={{ backgroundColor: `${image.palette[0] || '#52525b'}20`, borderRight: 'none' }}>
+                <span className="text-zinc-400 text-[10px]" style={{ writingMode: 'vertical-rl', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {isOpen ? 'close' : 'details'}
+                </span>
+            </button>
+            {/* Drawer content */}
+            <div className="h-full overflow-y-auto py-14 px-4" style={{ backgroundColor: '#faf9f6ee', backdropFilter: 'blur(12px)' }}>
+                {/* Tags */}
+                <div className="mb-5">
+                    <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Tags
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                        {allTagIds.map(tagId => {
+                            const label = tagMap.get(tagId) || tagId;
+                            return (
+                                <button key={tagId} onClick={() => onNavigateTag(tagId)}
+                                    className="px-2 py-0.5 rounded-full text-[10px] transition-colors hover:opacity-80 cursor-pointer"
+                                    style={{
+                                        fontFamily: 'Inter, sans-serif',
+                                        backgroundColor: `${image.palette[0] || '#52525b'}15`,
+                                        color: image.palette[0] || '#52525b',
+                                    }}>
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+                {/* Camera */}
+                {image.cameraModel !== 'Unknown Camera' && (
+                    <div className="mb-4">
+                        <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            Camera
+                        </span>
+                        <button onClick={() => onNavigateCamera(image.cameraModel)}
+                            className="text-[11px] text-zinc-600 hover:text-zinc-800 transition-colors cursor-pointer"
+                            style={{ fontFamily: 'Inter, sans-serif' }}>
+                            {image.cameraModel} &rarr;
+                        </button>
+                    </div>
+                )}
+                {/* Lens */}
+                {image.lensModel !== 'Unknown Lens' && (
+                    <div className="mb-4">
+                        <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            Lens
+                        </span>
+                        <button onClick={() => onNavigateLens(image.lensModel)}
+                            className="text-[11px] text-zinc-600 hover:text-zinc-800 transition-colors cursor-pointer"
+                            style={{ fontFamily: 'Inter, sans-serif' }}>
+                            {image.lensModel} &rarr;
+                        </button>
+                    </div>
+                )}
+                {/* Season */}
+                {image.inferredSeason && (
+                    <div className="mb-4">
+                        <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            Season
+                        </span>
+                        <button onClick={() => onNavigateSeason(image.inferredSeason)}
+                            className="text-[11px] text-zinc-600 hover:text-zinc-800 transition-colors cursor-pointer"
+                            style={{ fontFamily: 'Inter, sans-serif' }}>
+                            {image.inferredSeason} &rarr;
+                        </button>
+                    </div>
+                )}
+                {/* EXIF */}
+                <div className="mb-4">
+                    <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Technical
+                    </span>
+                    <div className="space-y-0.5 text-[10px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        {image.iso && <div>ISO {image.iso}</div>}
+                        {image.focalLength && <div>{image.focalLength}mm</div>}
+                        {image.aperture && <div>f/{image.aperture}</div>}
+                        {image.shutterSpeed && <div>{image.shutterSpeed}</div>}
+                    </div>
+                </div>
+                {/* Palette */}
+                <div>
+                    <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Palette
+                    </span>
+                    <div className="flex gap-1.5">
+                        {image.palette.map((color, i) => (
+                            <div key={i} className="w-6 h-6 rounded-full" style={{ backgroundColor: color, boxShadow: `0 1px 4px ${color}40` }} />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
-    const nodes: OrbitNode[] = [];
+// --- Idle State: sprite field ---
 
-    // Hero
-    nodes.push({ image: anchor, ring: 'hero', angle: 0, distance: 0, score: 1, isBridge: false });
-
-    // Inner ring
-    inner.forEach((s, i) => {
-        const angle = (i / inner.length) * Math.PI * 2 - Math.PI / 2;
-        const jitter = (seededRandom(s.img.id + 'a') - 0.5) * 0.2;
-        nodes.push({
-            image: s.img, ring: 'inner', angle: angle + jitter,
-            distance: innerRadius + (seededRandom(s.img.id + 'd') - 0.5) * 20,
-            score: s.score, isBridge: false,
-        });
-    });
-
-    // Outer ring: scored sprites + bridges
-    const outerAll = [
-        ...outerScored.map(s => ({ img: s.img, score: s.score, isBridge: false })),
-        ...bridges.map(b => ({ img: b, score: scoreRelevance(b, anchor), isBridge: true })),
-    ];
-    outerAll.forEach((item, i) => {
-        const angle = (i / outerAll.length) * Math.PI * 2 - Math.PI / 2;
-        const jitter = (seededRandom(item.img.id + 'oa') - 0.5) * 0.3;
-        nodes.push({
-            image: item.img, ring: 'outer', angle: angle + jitter,
-            distance: outerRadius + (seededRandom(item.img.id + 'od') - 0.5) * 30,
-            score: item.score, isBridge: item.isBridge,
-        });
-    });
-
-    return nodes;
-}
-
-// --- Idle layout: all images as drifting sprites ---
-
-function buildIdleLayout(images: ImageNode[], canvasW: number, canvasH: number): Array<{ image: ImageNode; x: number; y: number }> {
-    const count = Math.min(images.length, 30); // Cap for performance
-    const cols = Math.ceil(Math.sqrt(count * (canvasW / canvasH)));
-    const rows = Math.ceil(count / cols);
-    const cellW = canvasW / (cols + 1);
-    const cellH = canvasH / (rows + 1);
-
-    return images.slice(0, count).map((img, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        return {
+const IdleField: React.FC<{
+    images: ImageNode[];
+    onSelect: (img: ImageNode) => void;
+    canvasW: number;
+    canvasH: number;
+}> = ({ images, onSelect, canvasW, canvasH }) => {
+    const nodes = useMemo(() => {
+        const count = Math.min(images.length, 36);
+        const cols = Math.ceil(Math.sqrt(count * (canvasW / canvasH)));
+        const rows = Math.ceil(count / cols);
+        const cellW = canvasW / (cols + 1);
+        const cellH = canvasH / (rows + 1);
+        return images.slice(0, count).map((img, i) => ({
             image: img,
-            x: cellW * (col + 1) + (seededRandom(img.id + 'ix') - 0.5) * cellW * 0.5,
-            y: cellH * (row + 1) + (seededRandom(img.id + 'iy') - 0.5) * cellH * 0.4,
-        };
-    });
-}
+            x: cellW * ((i % cols) + 1) + (seededRandom(img.id + 'ix') - 0.5) * cellW * 0.4,
+            y: cellH * (Math.floor(i / cols) + 1) + (seededRandom(img.id + 'iy') - 0.5) * cellH * 0.3,
+        }));
+    }, [images, canvasW, canvasH]);
+
+    return (
+        <div className="fixed inset-0">
+            {nodes.map(({ image, x, y }) => {
+                const size = 56 + seededRandom(image.id + 'sz') * 20;
+                const breatheDur = 5 + seededRandom(image.id + 'bd') * 6;
+                const breatheDel = seededRandom(image.id + 'bl') * 4;
+                return (
+                    <div key={image.id}
+                        className="absolute cursor-pointer hover:scale-110 transition-transform duration-300"
+                        style={{
+                            left: x - size / 2, top: y - size / 2,
+                            animation: `drift ${breatheDur}s ease-in-out ${breatheDel}s infinite`,
+                        }}
+                        onClick={() => onSelect(image)}>
+                        <MiniSprite image={image} size={size} />
+                    </div>
+                );
+            })}
+            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-40 text-center">
+                <p className="text-zinc-300 text-sm" style={{ fontFamily: 'Caveat, cursive' }}>
+                    Tap a sprite to begin
+                </p>
+            </div>
+        </div>
+    );
+};
 
 // --- Main Component ---
 
@@ -205,15 +484,14 @@ interface NavigationPrototypeProps {
 const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags, onExit }) => {
     const [anchorId, setAnchorId] = useState<string | null>(null);
     const [trail, setTrail] = useState<TrailPoint[]>([]);
-    const [isMobile, setIsMobile] = useState(false);
-    const canvasRef = useRef<HTMLDivElement>(null);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
+    const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const update = () => {
-            setIsMobile(window.innerWidth < 768);
-            if (canvasRef.current) {
-                setCanvasSize({ w: canvasRef.current.clientWidth, h: canvasRef.current.clientHeight });
+            if (containerRef.current) {
+                setCanvasSize({ w: containerRef.current.clientWidth, h: containerRef.current.clientHeight });
             }
         };
         update();
@@ -221,327 +499,192 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         return () => window.removeEventListener('resize', update);
     }, []);
 
-    const anchor = useMemo(
-        () => anchorId ? images.find(i => i.id === anchorId) ?? null : null,
-        [anchorId, images]
-    );
-
-    // Orbit layout
-    const orbitNodes = useMemo(
-        () => anchor ? buildOrbit(images, anchor, isMobile) : [],
-        [anchor, images, isMobile]
-    );
-
-    // Idle layout
-    const idleNodes = useMemo(
-        () => !anchor && canvasSize.w > 0 ? buildIdleLayout(images, canvasSize.w, canvasSize.h) : [],
-        [anchor, images, canvasSize]
-    );
-
-    const centerX = canvasSize.w / 2;
-    const centerY = canvasSize.h * 0.45;
-
-    // Trail palette
-    const trailPalette = useMemo(() => {
-        const colors: string[] = [];
-        for (const p of trail) {
-            for (const c of p.palette.slice(0, 2)) {
-                if (!colors.includes(c)) colors.push(c);
-            }
-        }
-        return colors.slice(-8);
-    }, [trail]);
-
-    // Surface gradient
-    const surfaceStyle = useMemo((): React.CSSProperties => {
-        const gradients: string[] = [];
-        if (anchor?.palette?.length) {
-            const p = anchor.palette;
-            gradients.push(
-                `radial-gradient(ellipse at 50% 35%, ${p[0]}28, transparent 65%)`,
-                `radial-gradient(ellipse at 80% 75%, ${p[1] || p[0]}1E, transparent 55%)`,
-                `radial-gradient(ellipse at 20% 80%, ${p[2] || p[0]}15, transparent 50%)`,
-            );
-        }
-        for (let i = 0; i < trailPalette.length; i++) {
-            const a = (i / trailPalette.length) * 360;
-            const x = 50 + Math.cos(a * Math.PI / 180) * 35;
-            const y = 50 + Math.sin(a * Math.PI / 180) * 30;
-            gradients.push(`radial-gradient(ellipse at ${x}% ${y}%, ${trailPalette[i]}0A, transparent 35%)`);
-        }
-        return {
-            background: gradients.length > 0 ? `${gradients.join(', ')}, #faf9f6` : '#faf9f6',
-            transition: 'background 1.2s ease',
-        };
-    }, [anchor, trailPalette]);
-
-    const handleNodeClick = useCallback((image: ImageNode) => {
-        const nodeX = anchor
-            ? centerX + (orbitNodes.find(n => n.image.id === image.id)?.distance ?? 0)
-                * Math.cos(orbitNodes.find(n => n.image.id === image.id)?.angle ?? 0)
-            : 0;
-        const nodeY = anchor
-            ? centerY + (orbitNodes.find(n => n.image.id === image.id)?.distance ?? 0)
-                * Math.sin(orbitNodes.find(n => n.image.id === image.id)?.angle ?? 0)
-            : 0;
-
-        setTrail(t => [...t, {
-            id: image.id,
-            x: nodeX || centerX,
-            y: nodeY || centerY,
-            palette: image.palette,
-        }]);
-        setAnchorId(image.id);
-    }, [anchor, orbitNodes, centerX, centerY]);
-
-    const handleClear = useCallback(() => {
-        setTrail([]);
-        setAnchorId(null);
-    }, []);
-
-    // Tag lookup for annotations
     const tagMap = useMemo(() => {
         const map = new Map<string, string>();
         for (const t of tags) map.set(t.id, t.label);
         return map;
     }, [tags]);
 
-    // Shared tags between node and anchor
-    const getSharedLabel = useCallback((img: ImageNode): string => {
-        if (!anchor) return '';
-        const at = new Set([...anchor.tagIds, ...(anchor.aiTagIds || [])]);
-        const shared = [...new Set([...img.tagIds, ...(img.aiTagIds || [])])]
-            .filter(t => at.has(t))
-            .map(t => tagMap.get(t) ?? '');
-        return shared[0] || '';
-    }, [anchor, tagMap]);
+    const anchor = useMemo(() => anchorId ? images.find(i => i.id === anchorId) ?? null : null, [anchorId, images]);
 
-    // Hero size
-    const heroSize = isMobile ? Math.min(canvasSize.w * 0.55, 260) : Math.min(canvasSize.w * 0.3, 360);
+    // Classify all images relative to anchor
+    const classified = useMemo(() => anchor ? classifyImages(images, anchor, tagMap) : [], [anchor, images, tagMap]);
+
+    // Zone populations
+    const temporalNeighbors = useMemo(() => classified.filter(s => s.isTemporalNeighbor).slice(0, 12), [classified]);
+    const convergent = useMemo(() => classified.filter(s => !s.isTemporalNeighbor && s.score >= 0.25 && !s.isBridge).slice(0, 8), [classified]);
+    const divergent = useMemo(() => {
+        const bridges = classified.filter(s => s.isBridge).slice(0, 4);
+        const lowScore = classified.filter(s => !s.isTemporalNeighbor && s.score > 0.05 && s.score < 0.25 && !s.isBridge).slice(0, 4);
+        return [...bridges, ...lowScore];
+    }, [classified]);
+
+    // Zone weight calculation for dynamic sizing
+    const zoneWeights = useMemo(() => {
+        const t = Math.max(temporalNeighbors.length, 0);
+        const s = convergent.length + divergent.length;
+        const total = Math.max(t + s, 1);
+        // Temporal zone gets proportional weight, min 0, max 0.5
+        const temporalWeight = t > 0 ? Math.min(0.5, Math.max(0.2, t / total)) : 0;
+        // Sprite zone gets the rest
+        const spriteWeight = s > 0 ? 1 - temporalWeight : 0;
+        return { temporal: temporalWeight, sprite: spriteWeight };
+    }, [temporalNeighbors, convergent, divergent]);
+
+    // Surface style
+    const surfaceStyle = useMemo((): React.CSSProperties => {
+        if (!anchor?.palette?.length) return { background: '#faf9f6' };
+        const p = anchor.palette;
+        return {
+            background: [
+                `radial-gradient(ellipse at 30% 40%, ${p[0]}20, transparent 60%)`,
+                `radial-gradient(ellipse at 70% 70%, ${p[1] || p[0]}15, transparent 50%)`,
+                `radial-gradient(ellipse at 50% 20%, ${p[2] || p[0]}0D, transparent 45%)`,
+                '#faf9f6',
+            ].join(', '),
+            transition: 'background 1s ease',
+        };
+    }, [anchor]);
+
+    const handleSelect = useCallback((image: ImageNode) => {
+        const label = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        setTrail(t => [...t, { id: image.id, palette: image.palette, label }]);
+        setAnchorId(image.id);
+    }, []);
+
+    const handleTrailSelect = useCallback((id: string) => {
+        const img = images.find(i => i.id === id);
+        if (img) handleSelect(img);
+    }, [images, handleSelect]);
+
+    // Navigate by metadata — find first image matching criteria and anchor it
+    const handleNavigateTag = useCallback((tagId: string) => {
+        const match = images.find(img => img.id !== anchorId && (img.tagIds.includes(tagId) || img.aiTagIds?.includes(tagId)));
+        if (match) handleSelect(match);
+    }, [images, anchorId, handleSelect]);
+
+    const handleNavigateCamera = useCallback((camera: string) => {
+        const match = images.find(img => img.id !== anchorId && img.cameraModel === camera);
+        if (match) handleSelect(match);
+    }, [images, anchorId, handleSelect]);
+
+    const handleNavigateLens = useCallback((lens: string) => {
+        const match = images.find(img => img.id !== anchorId && img.lensModel === lens);
+        if (match) handleSelect(match);
+    }, [images, anchorId, handleSelect]);
+
+    const handleNavigateSeason = useCallback((season: string) => {
+        const match = images.find(img => img.id !== anchorId && img.inferredSeason === season);
+        if (match) handleSelect(match);
+    }, [images, anchorId, handleSelect]);
+
+    const handleClear = useCallback(() => {
+        setTrail([]);
+        setAnchorId(null);
+        setDrawerOpen(false);
+    }, []);
+
+    // Compute right-side zone widths
+    const hasTemporalZone = temporalNeighbors.length > 0;
+    const hasSpriteZone = convergent.length > 0 || divergent.length > 0;
 
     return (
-        <div className="fixed inset-0 overflow-hidden" style={surfaceStyle}>
+        <div ref={containerRef} className="fixed inset-0 overflow-hidden" style={surfaceStyle}>
             {/* Paper texture */}
-            <div
-                className="fixed inset-0 opacity-[0.02] pointer-events-none mix-blend-multiply z-0"
+            <div className="fixed inset-0 opacity-[0.02] pointer-events-none mix-blend-multiply z-0"
                 style={{
                     backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-                }}
-            />
+                }} />
 
             {/* Header */}
             <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
-                    <h1
-                        className="text-[10px] tracking-[0.25em] uppercase transition-colors duration-800"
-                        style={{
-                            fontFamily: 'JetBrains Mono, monospace',
-                            color: anchor?.palette?.[0] || '#a1a1aa',
-                        }}
-                    >
-                        Tide Pool
+                    <h1 className="text-[10px] tracking-[0.25em] uppercase transition-colors duration-800"
+                        style={{ fontFamily: 'JetBrains Mono, monospace', color: anchor?.palette?.[0] || '#a1a1aa' }}>
+                        Living Dashboard
                     </h1>
                     {trail.length > 0 && (
                         <span className="text-[9px] text-zinc-300" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {trail.length}
+                            {trail.length} visited
                         </span>
                     )}
                 </div>
                 <div className="flex items-center gap-3">
                     {trail.length > 0 && (
-                        <button onClick={handleClear} className="text-[9px] text-zinc-300 hover:text-zinc-500 transition-colors tracking-widest uppercase" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            Clear
-                        </button>
+                        <button onClick={handleClear} className="text-[9px] text-zinc-300 hover:text-zinc-500 transition-colors tracking-widest uppercase cursor-pointer"
+                            style={{ fontFamily: 'JetBrains Mono, monospace' }}>Clear</button>
                     )}
-                    <button onClick={onExit} className="text-[9px] text-zinc-300 hover:text-zinc-500 transition-colors tracking-widest uppercase" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        Exit
-                    </button>
+                    <button onClick={onExit} className="text-[9px] text-zinc-300 hover:text-zinc-500 transition-colors tracking-widest uppercase cursor-pointer"
+                        style={{ fontFamily: 'JetBrains Mono, monospace' }}>Exit</button>
                 </div>
             </header>
 
-            {/* Canvas */}
-            <div ref={canvasRef} className="fixed inset-0">
+            {/* === IDLE STATE === */}
+            {!anchor && canvasSize.w > 0 && (
+                <IdleField images={images} onSelect={handleSelect} canvasW={canvasSize.w} canvasH={canvasSize.h} />
+            )}
 
-                {/* Constellation trail SVG */}
-                {trail.length > 1 && (
-                    <svg className="absolute inset-0 w-full h-full pointer-events-none z-30">
-                        <defs>
-                            <filter id="tglow">
-                                <feGaussianBlur stdDeviation="2" result="b" />
-                                <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-                            </filter>
-                        </defs>
-                        {trail.slice(0, -1).map((pt, i) => {
-                            const next = trail[i + 1];
-                            const fade = Math.max(0.15, 0.5 - (trail.length - i - 1) * 0.05);
-                            return (
-                                <line key={`l${i}`} x1={pt.x} y1={pt.y} x2={next.x} y2={next.y}
-                                    stroke={pt.palette[0] || '#a1a1aa'} strokeWidth={1.2}
-                                    opacity={fade} filter="url(#tglow)" />
-                            );
-                        })}
-                        {trail.map((pt, i) => (
-                            <circle key={`d${i}`} cx={pt.x} cy={pt.y}
-                                r={i === trail.length - 1 ? 4 : 2}
-                                fill={pt.palette[0] || '#a1a1aa'}
-                                opacity={Math.max(0.2, 0.6 - (trail.length - i - 1) * 0.05)}
-                                filter="url(#tglow)" />
-                        ))}
-                    </svg>
-                )}
-
-                {/* === IDLE STATE: drifting sprite field === */}
-                {!anchor && idleNodes.map(({ image, x, y }) => {
-                    const breatheDuration = 5 + seededRandom(image.id + 'bd') * 6;
-                    const breatheDelay = seededRandom(image.id + 'bl') * 4;
-                    const spriteSize = isMobile ? 48 : 64;
-                    return (
-                        <div
-                            key={image.id}
-                            className="absolute cursor-pointer hover:scale-110 transition-transform duration-300"
-                            style={{
-                                left: x - spriteSize / 2,
-                                top: y - spriteSize / 2,
-                                animation: `drift ${breatheDuration}s ease-in-out ${breatheDelay}s infinite`,
-                            }}
-                            onClick={() => handleNodeClick(image)}
-                        >
-                            <MiniSprite image={image} size={spriteSize} />
+            {/* === DASHBOARD STATE === */}
+            {anchor && (
+                <div className="fixed inset-0 pt-12 pb-4 px-4 flex gap-3 z-10">
+                    {/* Trail zone — left sidebar */}
+                    {trail.length > 0 && (
+                        <div className="flex-shrink-0 rounded-xl transition-all duration-500"
+                            style={{ width: 160, backgroundColor: '#faf9f6cc' }}>
+                            <TrailZone trail={trail} onSelect={handleTrailSelect} />
                         </div>
-                    );
-                })}
+                    )}
 
-                {/* === ANCHORED STATE: orbital layout === */}
-                {anchor && orbitNodes.map(node => {
-                    const x = centerX + node.distance * Math.cos(node.angle);
-                    const y = centerY + node.distance * Math.sin(node.angle);
+                    {/* Hero — center, takes majority of space */}
+                    <div className="flex-1 min-w-0 flex items-center justify-center rounded-xl transition-all duration-500"
+                        style={{ backgroundColor: '#faf9f600' }}>
+                        <HeroZone image={anchor} tagMap={tagMap} />
+                    </div>
 
-                    if (node.ring === 'hero') {
-                        return (
-                            <div
-                                key={node.image.id}
-                                className="absolute z-20 transition-all duration-700 ease-out"
-                                style={{
-                                    left: centerX - heroSize / 2,
-                                    top: centerY - heroSize * 0.55,
-                                    width: heroSize,
-                                }}
-                            >
-                                <div
-                                    className="overflow-hidden rounded-lg"
+                    {/* Right column — stacked zones */}
+                    {(hasTemporalZone || hasSpriteZone) && (
+                        <div className="flex-shrink-0 flex flex-col gap-3 transition-all duration-500"
+                            style={{ width: Math.min(320, canvasSize.w * 0.25) }}>
+                            {/* Temporal zone */}
+                            {hasTemporalZone && (
+                                <div className="rounded-xl overflow-hidden transition-all duration-500"
                                     style={{
-                                        boxShadow: `0 12px 48px ${anchor.palette[0] || '#000'}40, 0 4px 16px ${anchor.palette[1] || '#000'}20`,
-                                    }}
-                                >
-                                    <img
-                                        src={getPreviewUrl(node.image.id)}
-                                        alt=""
-                                        className="w-full object-contain"
-                                        style={{ maxHeight: isMobile ? '38vh' : '42vh' }}
-                                        draggable={false}
-                                    />
+                                        flex: hasSpriteZone ? `${zoneWeights.temporal} 1 0%` : '1 1 auto',
+                                        backgroundColor: '#faf9f6cc',
+                                    }}>
+                                    <TemporalZone images={temporalNeighbors} anchor={anchor} onSelect={handleSelect} />
                                 </div>
-                                {/* Hero metadata */}
-                                <div className="mt-2 text-center">
-                                    <span className="text-xs" style={{ fontFamily: 'Caveat, cursive', color: anchor.palette[0] || '#71717a' }}>
-                                        {new Date(node.image.captureTimestamp).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                                    </span>
-                                    <span className="text-[9px] text-zinc-300 ml-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                        {node.image.cameraModel}
-                                    </span>
-                                </div>
-                            </div>
-                        );
-                    }
-
-                    if (node.ring === 'inner') {
-                        // Photo thumbnail
-                        const thumbSize = isMobile ? 64 : 88;
-                        const sharedLabel = getSharedLabel(node.image);
-                        const breatheDur = 6 + seededRandom(node.image.id + 'ib') * 4;
-                        const breatheDel = seededRandom(node.image.id + 'id') * 3;
-                        return (
-                            <div
-                                key={node.image.id}
-                                className="absolute cursor-pointer z-20 transition-all duration-700 ease-out hover:scale-110"
-                                style={{
-                                    left: x - thumbSize / 2,
-                                    top: y - thumbSize / 2,
-                                    animation: `drift ${breatheDur}s ease-in-out ${breatheDel}s infinite`,
-                                }}
-                                onClick={() => handleNodeClick(node.image)}
-                            >
-                                <div
-                                    className="overflow-hidden rounded-md"
+                            )}
+                            {/* Sprite field zone */}
+                            {hasSpriteZone && (
+                                <div className="rounded-xl overflow-hidden transition-all duration-500"
                                     style={{
-                                        width: thumbSize,
-                                        height: thumbSize * 0.72,
-                                        boxShadow: `0 3px 12px ${anchor.palette[0] || '#000'}20`,
-                                    }}
-                                >
-                                    <img
-                                        src={getThumbnailUrl(node.image.id)}
-                                        alt=""
-                                        className="w-full h-full object-cover"
-                                        loading="lazy"
-                                        draggable={false}
-                                    />
-                                </div>
-                                {sharedLabel && (
-                                    <div className="text-center mt-1">
-                                        <span className="text-[8px]" style={{ fontFamily: 'Caveat, cursive', color: anchor.palette[0] || '#71717a' }}>
-                                            {sharedLabel}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    }
-
-                    // Outer ring: esoteric sprite
-                    const spriteSize = isMobile ? 44 : 58;
-                    const breatheDur = 7 + seededRandom(node.image.id + 'ob') * 5;
-                    const breatheDel = seededRandom(node.image.id + 'od') * 4;
-                    return (
-                        <div
-                            key={node.image.id}
-                            className="absolute cursor-pointer z-10 transition-all duration-700 ease-out hover:scale-115"
-                            style={{
-                                left: x - spriteSize / 2,
-                                top: y - spriteSize / 2,
-                                opacity: node.isBridge ? 0.8 : 0.6,
-                                animation: `drift ${breatheDur}s ease-in-out ${breatheDel}s infinite`,
-                            }}
-                            onClick={() => handleNodeClick(node.image)}
-                        >
-                            <MiniSprite image={node.image} size={spriteSize} isBridge={node.isBridge} />
-                            {node.isBridge && (
-                                <div className="text-center mt-0.5">
-                                    <span className="text-[7px] text-zinc-400" style={{ fontFamily: 'Caveat, cursive' }}>
-                                        {getSharedLabel(node.image) || 'bridge'}
-                                    </span>
+                                        flex: hasTemporalZone ? `${zoneWeights.sprite} 1 0%` : '1 1 auto',
+                                        backgroundColor: '#faf9f6cc',
+                                    }}>
+                                    <SpriteFieldZone convergent={convergent} divergent={divergent}
+                                        tagMap={tagMap} onSelect={handleSelect} anchor={anchor} />
                                 </div>
                             )}
                         </div>
-                    );
-                })}
+                    )}
+                </div>
+            )}
 
-                {/* Idle prompt */}
-                {!anchor && images.length > 0 && (
-                    <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-40 text-center">
-                        <p className="text-zinc-300 text-sm" style={{ fontFamily: 'Caveat, cursive' }}>
-                            Tap a sprite to begin
-                        </p>
-                    </div>
-                )}
-            </div>
+            {/* Detail drawer */}
+            {anchor && (
+                <DetailDrawer image={anchor} tagMap={tagMap}
+                    onNavigateTag={handleNavigateTag} onNavigateCamera={handleNavigateCamera}
+                    onNavigateLens={handleNavigateLens} onNavigateSeason={handleNavigateSeason}
+                    isOpen={drawerOpen} onToggle={() => setDrawerOpen(o => !o)} />
+            )}
 
             {/* Trail palette dots */}
-            {trailPalette.length > 0 && (
-                <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 flex gap-1.5">
-                    {trailPalette.map((color, i) => (
-                        <div key={`${color}-${i}`} className="w-2 h-2 rounded-full transition-all duration-700"
-                            style={{ backgroundColor: color, opacity: 0.4 + (i / trailPalette.length) * 0.6, boxShadow: `0 0 6px ${color}30` }} />
+            {trail.length > 0 && (
+                <div className="fixed bottom-2 left-1/2 -translate-x-1/2 z-40 flex gap-1">
+                    {trail.slice(-10).map((pt, i) => (
+                        <div key={pt.id + i} className="w-1.5 h-1.5 rounded-full transition-all duration-700"
+                            style={{ backgroundColor: pt.palette[0] || '#a1a1aa', opacity: 0.3 + (i / 10) * 0.7 }} />
                     ))}
                 </div>
             )}
@@ -549,16 +692,20 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     );
 };
 
-// --- Inject drift keyframes ---
-if (typeof document !== 'undefined' && !document.getElementById('proto-drift-kf')) {
+// --- Inject keyframes ---
+if (typeof document !== 'undefined' && !document.getElementById('proto-dash-kf')) {
     const s = document.createElement('style');
-    s.id = 'proto-drift-kf';
+    s.id = 'proto-dash-kf';
     s.textContent = `
 @keyframes drift {
     0%, 100% { transform: translate(0, 0); }
     25% { transform: translate(3px, -4px); }
     50% { transform: translate(-2px, 3px); }
     75% { transform: translate(4px, 2px); }
+}
+@keyframes breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.03); }
 }`;
     document.head.appendChild(s);
 }
