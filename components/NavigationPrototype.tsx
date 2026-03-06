@@ -430,7 +430,7 @@ const WaterfallField: React.FC<{
     }, [nodes, hasFilters]);
 
     return (
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
+        <div className="px-4 pb-4">
             {!hasFilters && albumImages.length > 0 && (
                 <div className="mb-3 mt-1">
                     <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
@@ -888,9 +888,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
             {/* DASHBOARD — Desktop */}
             {anchor && !isMobile && (
-                <div className="fixed inset-0 pt-12 pb-4 px-4 flex gap-3 z-10">
+                <div className="fixed inset-0 pt-12 z-10 flex gap-3 overflow-hidden">
                     {/* LEFT: Sprite identity, DNA, technical, timeline, tags */}
-                    <div className="flex-shrink-0 rounded-xl overflow-hidden transition-all duration-500"
+                    <div className="flex-shrink-0 rounded-xl overflow-y-auto transition-all duration-500 ml-4 my-4"
                         style={{ width: leftW, backgroundColor: '#faf9f6dd' }}>
                         <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
                             scored={scored} tagMap={tagMap} activeTags={activeTags}
@@ -899,14 +899,14 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                             onToggleTemporal={handleToggleTemporal} onNavigate={handleSelect} />
                     </div>
 
-                    {/* CENTER: Hero (top) + Dynamic Album (bottom) */}
-                    <div className="flex-1 min-w-0 flex flex-col transition-all duration-500">
+                    {/* CENTER: Single scrollable page — Hero then Album */}
+                    <div className="flex-1 min-w-0 overflow-y-auto pr-4 pb-4">
                         {/* Hero */}
-                        <div className="flex-shrink-0 flex items-start justify-center">
+                        <div className="flex items-start justify-center">
                             <HeroZone image={anchor} />
                         </div>
                         {/* Dynamic Album */}
-                        <div className="flex-1 min-h-0 rounded-xl overflow-hidden"
+                        <div className="rounded-xl"
                             style={{ backgroundColor: '#faf9f6aa' }}>
                             <DynamicAlbum allImages={images} anchor={anchor} scored={scored}
                                 temporalImages={temporalNeighbors} activeTags={activeTags}
@@ -922,10 +922,11 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {/* DASHBOARD — Mobile / Tablet */}
             {anchor && isMobile && (
                 <>
-                    {/* Full-width scrollable content */}
-                    <div className="fixed inset-0 pt-12 pb-0 z-10 flex flex-col overflow-y-auto">
+                    {/* Single scrollable page */}
+                    <div className="fixed inset-0 pt-12 pb-0 z-10 overflow-y-auto"
+                        style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
                         {/* Hero */}
-                        <div className="flex-shrink-0 flex items-start justify-center px-3 pt-1">
+                        <div className="flex items-start justify-center px-3 pt-1">
                             <div className="overflow-hidden rounded-lg max-w-full"
                                 style={{ boxShadow: `0 8px 32px ${anchor.palette[0] || '#000'}25` }}>
                                 <img src={getPreviewUrl(anchor.id)} alt=""
@@ -934,7 +935,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         </div>
 
                         {/* Info button — opens bottom sheet */}
-                        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2">
+                        <div className="flex items-center justify-between px-4 py-2">
                             <button onClick={() => setSheetOpen(true)}
                                 className="flex items-center gap-2 px-3 py-1.5 rounded-full cursor-pointer transition-all"
                                 style={{
@@ -951,8 +952,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                             )}
                         </div>
 
-                        {/* Dynamic Album — full width */}
-                        <div className="flex-1 min-h-0 rounded-t-xl overflow-hidden"
+                        {/* Dynamic Album — full width, flows in page */}
+                        <div className="rounded-t-xl"
                             style={{ backgroundColor: '#faf9f6aa' }}>
                             <DynamicAlbum allImages={images} anchor={anchor} scored={scored}
                                 temporalImages={temporalNeighbors} activeTags={activeTags}
@@ -965,15 +966,20 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
                     {/* Bottom Sheet Overlay */}
                     {sheetOpen && (
-                        <div className="fixed inset-0 z-50" onClick={() => setSheetOpen(false)}>
+                        <div className="fixed inset-0 z-50">
                             {/* Backdrop */}
-                            <div className="absolute inset-0 bg-black/20 transition-opacity" />
-                            {/* Sheet */}
-                            <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] rounded-t-2xl flex flex-col"
-                                style={{ backgroundColor: '#faf9f6', boxShadow: '0 -4px 32px rgba(0,0,0,0.12)' }}
-                                onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                                {/* Handle bar + close — fixed header */}
-                                <div className="flex-shrink-0">
+                            <div className="absolute inset-0 bg-black/20" onClick={() => setSheetOpen(false)} />
+                            {/* Sheet — uses fixed positioning with explicit height for iOS/iPadOS scroll */}
+                            <div className="fixed bottom-0 left-0 right-0 rounded-t-2xl"
+                                style={{
+                                    backgroundColor: '#faf9f6',
+                                    boxShadow: '0 -4px 32px rgba(0,0,0,0.12)',
+                                    height: '85vh',
+                                    display: 'flex',
+                                    flexDirection: 'column' as const,
+                                }}>
+                                {/* Handle bar + close */}
+                                <div style={{ flexShrink: 0 }}>
                                     <div className="flex justify-center pt-3 pb-1">
                                         <div className="w-10 h-1 rounded-full bg-zinc-300" />
                                     </div>
@@ -989,9 +995,13 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                                         </button>
                                     </div>
                                 </div>
-                                {/* Scrollable content */}
-                                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
-                                    style={{ WebkitOverflowScrolling: 'touch' }}>
+                                {/* Scrollable content — explicit overflow scroll for iOS */}
+                                <div style={{
+                                    flex: 1,
+                                    overflowY: 'scroll' as const,
+                                    WebkitOverflowScrolling: 'touch',
+                                    overscrollBehavior: 'contain',
+                                } as React.CSSProperties}>
                                     <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
                                         scored={scored} tagMap={tagMap} activeTags={activeTags}
                                         activeColors={activeColors} temporalActive={temporalActive}
