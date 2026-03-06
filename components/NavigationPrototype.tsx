@@ -103,9 +103,13 @@ const LeftPanel: React.FC<{
     scored: ScoredImage[];
     tagMap: Map<string, string>;
     activeTags: Set<string>;
+    activeColors: Set<string>;
+    temporalActive: boolean;
     onToggleTag: (tagId: string) => void;
+    onToggleColor: (hex: string) => void;
+    onToggleTemporal: () => void;
     onNavigate: (img: ImageNode) => void;
-}> = ({ image, allImages, temporalImages, tagMap, activeTags, onToggleTag, onNavigate }) => {
+}> = ({ image, allImages, temporalImages, tagMap, activeTags, activeColors, temporalActive, onToggleTag, onToggleColor, onToggleTemporal, onNavigate }) => {
     const palette = image.palette.length > 0 ? image.palette : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
     const allTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
 
@@ -137,32 +141,31 @@ const LeftPanel: React.FC<{
                 </span>
             </div>
 
-            {/* Sprite DNA — Palette */}
+            {/* Sprite DNA — Palette (clickable for album) */}
             <div className="flex-shrink-0 px-3 pt-3 pb-2 border-b border-zinc-200/40">
                 <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Sprite DNA
+                    Palette — click to build album
                 </span>
-                <div className="mb-2">
-                    <span className="text-[8px] text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        Core
-                    </span>
-                    <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: palette[0] }} />
-                        <span className="text-[9px] text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{palette[0]}</span>
-                    </div>
-                </div>
-                <div className="mb-2">
-                    <span className="text-[8px] text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        Orbital layers
-                    </span>
-                    <div className="flex gap-2">
-                        {palette.slice(1, 4).map((color: string, i: number) => (
-                            <div key={i} className="flex items-center gap-1">
-                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color, opacity: 0.7 }} />
-                                <span className="text-[8px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{color}</span>
-                            </div>
-                        ))}
-                    </div>
+                <div className="flex gap-2 flex-wrap">
+                    {palette.slice(0, 5).map((color: string, i: number) => {
+                        const isActive = activeColors.has(color);
+                        return (
+                            <button key={i} onClick={() => onToggleColor(color)}
+                                className="flex items-center gap-1.5 cursor-pointer transition-all"
+                                style={{ opacity: isActive ? 1 : 0.7 }}>
+                                <div className="rounded-full transition-all" style={{
+                                    backgroundColor: color,
+                                    width: isActive ? 18 : 14,
+                                    height: isActive ? 18 : 14,
+                                    outline: isActive ? '2px solid rgba(0,0,0,0.3)' : 'none',
+                                    outlineOffset: 1,
+                                }} />
+                                <span className="text-[8px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                    {i === 0 ? 'core' : ''}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -220,6 +223,36 @@ const LeftPanel: React.FC<{
                     <span className="text-[7px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{rangeStart}</span>
                     <span className="text-[7px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{rangeEnd}</span>
                 </div>
+                {/* Temporal neighbor thumbnails */}
+                {hasNeighbors && (
+                    <div className="mt-2">
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="text-[8px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                Same period
+                            </span>
+                            <button onClick={onToggleTemporal}
+                                className="text-[8px] cursor-pointer transition-all px-1.5 py-0.5 rounded"
+                                style={{
+                                    fontFamily: 'JetBrains Mono, monospace',
+                                    backgroundColor: temporalActive ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
+                                    color: temporalActive ? '#18181b' : '#71717a',
+                                    fontWeight: temporalActive ? 600 : 400,
+                                }}>
+                                {temporalActive ? '✓ In album' : '+ Add to album'}
+                            </button>
+                        </div>
+                        <div className="flex gap-1 overflow-x-auto pb-1">
+                            {temporalImages.slice(0, 8).map((s: ScoredImage) => (
+                                <div key={s.image.id}
+                                    className="flex-shrink-0 rounded overflow-hidden cursor-pointer hover:scale-105 transition-transform"
+                                    style={{ width: 36, height: 36 }}
+                                    onClick={() => onNavigate(s.image)}>
+                                    <img src={getThumbnailUrl(s.image.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Tags — click to add to album pool */}
@@ -259,22 +292,38 @@ interface AlbumImage {
     isTemporal: boolean;
 }
 
+// Color distance (simple Euclidean in RGB)
+function hexToRgb(hex: string): [number, number, number] {
+    const h = hex.replace('#', '');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+function colorDist(a: string, b: string): number {
+    const [r1, g1, b1] = hexToRgb(a);
+    const [r2, g2, b2] = hexToRgb(b);
+    return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+}
+const COLOR_THRESHOLD = 80; // max RGB distance to count as a "hit"
+
 const DynamicAlbum: React.FC<{
     allImages: ImageNode[];
     anchor: ImageNode;
     scored: ScoredImage[];
     temporalImages: ScoredImage[];
     activeTags: Set<string>;
+    activeColors: Set<string>;
+    temporalActive: boolean;
     tagMap: Map<string, string>;
     onRemoveTag: (tagId: string) => void;
+    onRemoveColor: (hex: string) => void;
+    onToggleTemporal: () => void;
     onSelect: (img: ImageNode) => void;
-}> = ({ allImages, anchor, scored, temporalImages, activeTags, tagMap, onRemoveTag, onSelect }) => {
-    const hasActiveTags = activeTags.size > 0;
+}> = ({ allImages, anchor, scored, temporalImages, activeTags, activeColors, temporalActive, tagMap, onRemoveTag, onRemoveColor, onToggleTemporal, onSelect }) => {
+    const hasFilters = activeTags.size > 0 || activeColors.size > 0 || temporalActive;
 
     // Build album pool
     const albumImages = useMemo((): AlbumImage[] => {
-        if (!hasActiveTags) {
-            // No tags selected: show scored similar images as sprites
+        if (!hasFilters) {
+            // No filters: show scored similar images as sprites
             return scored.slice(0, 24).map(s => ({
                 image: s.image,
                 tagHits: 0,
@@ -282,44 +331,57 @@ const DynamicAlbum: React.FC<{
             }));
         }
 
-        // Tags selected: find all images matching ANY active tag, count hits
         const seen = new Map<string, AlbumImage>();
 
-        // Always include temporal neighbors
-        for (const s of temporalImages) {
-            seen.set(s.image.id, { image: s.image, tagHits: 0, isTemporal: true });
+        // Add temporal neighbors if temporal filter active
+        if (temporalActive) {
+            for (const s of temporalImages) {
+                seen.set(s.image.id, { image: s.image, tagHits: 0, isTemporal: true });
+            }
         }
 
-        // Add tag-matched images
+        // Score all images by tag hits + color hits
         for (const img of allImages) {
             if (img.id === anchor.id) continue;
-            const imgTags = new Set([...img.tagIds, ...(img.aiTagIds || [])]);
             let hits = 0;
-            for (const tagId of activeTags) {
-                if (imgTags.has(tagId)) hits++;
+
+            // Tag hits
+            if (activeTags.size > 0) {
+                const imgTags = new Set([...img.tagIds, ...(img.aiTagIds || [])]);
+                for (const tagId of activeTags) {
+                    if (imgTags.has(tagId)) hits++;
+                }
             }
+
+            // Color hits — check if any image palette color is close to any active color
+            if (activeColors.size > 0 && img.palette.length > 0) {
+                for (const activeHex of activeColors) {
+                    const closest = Math.min(...img.palette.map((c: string) => colorDist(c, activeHex)));
+                    if (closest < COLOR_THRESHOLD) hits++;
+                }
+            }
+
             if (hits > 0) {
                 const existing = seen.get(img.id);
                 if (existing) {
-                    existing.tagHits = hits;
+                    existing.tagHits = Math.max(existing.tagHits, hits);
                 } else {
                     seen.set(img.id, { image: img, tagHits: hits, isTemporal: false });
                 }
             }
         }
 
-        // Sort: more tag hits first, then temporal, then score
         return [...seen.values()].sort((a, b) => {
             if (b.tagHits !== a.tagHits) return b.tagHits - a.tagHits;
             if (a.isTemporal !== b.isTemporal) return a.isTemporal ? -1 : 1;
             return 0;
         });
-    }, [hasActiveTags, scored, temporalImages, allImages, anchor.id, activeTags]);
+    }, [hasFilters, scored, temporalImages, allImages, anchor.id, activeTags, activeColors, temporalActive]);
 
     return (
         <div className="flex flex-col h-full">
-            {/* Active tag pills (removable) */}
-            {hasActiveTags && (
+            {/* Active filter pills (removable) */}
+            {hasFilters && (
                 <div className="flex-shrink-0 px-4 py-2 flex items-center gap-2 flex-wrap">
                     <span className="text-[8px] text-zinc-400 uppercase tracking-wider" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Album filters:
@@ -336,17 +398,42 @@ const DynamicAlbum: React.FC<{
                             <span className="text-zinc-400 ml-0.5">&times;</span>
                         </button>
                     ))}
+                    {[...activeColors].map((hex: string) => (
+                        <button key={hex} onClick={() => onRemoveColor(hex)}
+                            className="px-2 py-0.5 rounded-full text-[9px] cursor-pointer transition-all hover:opacity-70 flex items-center gap-1"
+                            style={{
+                                fontFamily: 'Inter, sans-serif',
+                                backgroundColor: 'rgba(0,0,0,0.1)',
+                                color: '#18181b',
+                            }}>
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: hex }} />
+                            {hex}
+                            <span className="text-zinc-400 ml-0.5">&times;</span>
+                        </button>
+                    ))}
+                    {temporalActive && (
+                        <button onClick={onToggleTemporal}
+                            className="px-2 py-0.5 rounded-full text-[9px] cursor-pointer transition-all hover:opacity-70 flex items-center gap-1"
+                            style={{
+                                fontFamily: 'Inter, sans-serif',
+                                backgroundColor: 'rgba(0,0,0,0.1)',
+                                color: '#18181b',
+                            }}>
+                            Same period
+                            <span className="text-zinc-400 ml-0.5">&times;</span>
+                        </button>
+                    )}
                 </div>
             )}
 
             {/* Album grid */}
             <div className="flex-1 overflow-y-auto px-4 pb-3">
-                {!hasActiveTags ? (
-                    // Sprite grid — no tags selected yet
+                {!hasFilters ? (
+                    // Sprite grid — no filters selected yet
                     <div>
                         <div className="mb-2">
                             <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                Similar images — select tags on the left to build an album
+                                Similar images — select tags, colors, or dates to build an album
                             </span>
                         </div>
                         <div className="flex flex-wrap gap-3 justify-start">
@@ -473,6 +560,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     const [anchorId, setAnchorId] = useState<string | null>(null);
     const [trail, setTrail] = useState<TrailPoint[]>([]);
     const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
+    const [activeColors, setActiveColors] = useState<Set<string>>(new Set());
+    const [temporalActive, setTemporalActive] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -522,7 +611,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         const label = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         setTrail((t: TrailPoint[]) => [...t, { id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp }]);
         setAnchorId(image.id);
-        setActiveTags(new Set()); // Reset album tags on new anchor
+        setActiveTags(new Set());
+        setActiveColors(new Set());
+        setTemporalActive(false);
     }, []);
 
     const handleToggleTag = useCallback((tagId: string) => {
@@ -542,10 +633,33 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         });
     }, []);
 
+    const handleToggleColor = useCallback((hex: string) => {
+        setActiveColors(prev => {
+            const next = new Set(prev);
+            if (next.has(hex)) next.delete(hex);
+            else next.add(hex);
+            return next;
+        });
+    }, []);
+
+    const handleRemoveColor = useCallback((hex: string) => {
+        setActiveColors(prev => {
+            const next = new Set(prev);
+            next.delete(hex);
+            return next;
+        });
+    }, []);
+
+    const handleToggleTemporal = useCallback(() => {
+        setTemporalActive(prev => !prev);
+    }, []);
+
     const handleClear = useCallback(() => {
         setTrail([]);
         setAnchorId(null);
         setActiveTags(new Set());
+        setActiveColors(new Set());
+        setTemporalActive(false);
     }, []);
 
     const leftW = 240;
@@ -594,7 +708,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         style={{ width: leftW, backgroundColor: '#faf9f6dd' }}>
                         <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
                             scored={scored} tagMap={tagMap} activeTags={activeTags}
-                            onToggleTag={handleToggleTag} onNavigate={handleSelect} />
+                            activeColors={activeColors} temporalActive={temporalActive}
+                            onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
+                            onToggleTemporal={handleToggleTemporal} onNavigate={handleSelect} />
                     </div>
 
                     {/* CENTER: Hero (top) + Dynamic Album (bottom) */}
@@ -608,7 +724,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                             style={{ backgroundColor: '#faf9f6aa' }}>
                             <DynamicAlbum allImages={images} anchor={anchor} scored={scored}
                                 temporalImages={temporalNeighbors} activeTags={activeTags}
-                                tagMap={tagMap} onRemoveTag={handleRemoveTag} onSelect={handleSelect} />
+                                activeColors={activeColors} temporalActive={temporalActive}
+                                tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
+                                onToggleTemporal={handleToggleTemporal} onSelect={handleSelect} />
                         </div>
                     </div>
                 </div>
