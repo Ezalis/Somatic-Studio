@@ -109,7 +109,8 @@ const LeftPanel: React.FC<{
     onToggleColor: (hex: string) => void;
     onToggleTemporal: () => void;
     onNavigate: (img: ImageNode) => void;
-}> = ({ image, allImages, temporalImages, scored, tagMap, activeTags, activeColors, temporalActive, onToggleTag, onToggleColor, onToggleTemporal, onNavigate }) => {
+    albumPreview?: React.ReactNode;
+}> = ({ image, allImages, temporalImages, scored, tagMap, activeTags, activeColors, temporalActive, onToggleTag, onToggleColor, onToggleTemporal, onNavigate, albumPreview }) => {
     const palette = image.palette.length > 0 ? image.palette : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
     const anchorTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
     const anchorTagSet = new Set(anchorTagIds);
@@ -326,6 +327,13 @@ const LeftPanel: React.FC<{
                             );
                         })}
                     </div>
+                </div>
+            )}
+
+            {/* Album preview slot (used in tablet/mobile bottom sheet) */}
+            {albumPreview && (
+                <div className="border-t border-zinc-200/40 mt-2">
+                    {albumPreview}
                 </div>
             )}
         </div>
@@ -1006,7 +1014,15 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                                         scored={scored} tagMap={tagMap} activeTags={activeTags}
                                         activeColors={activeColors} temporalActive={temporalActive}
                                         onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
-                                        onToggleTemporal={handleToggleTemporal} onNavigate={(img: ImageNode) => { setSheetOpen(false); handleSelect(img); }} />
+                                        onToggleTemporal={handleToggleTemporal} onNavigate={(img: ImageNode) => { setSheetOpen(false); handleSelect(img); }}
+                                        albumPreview={
+                                            <DynamicAlbum allImages={images} anchor={anchor} scored={scored}
+                                                temporalImages={temporalNeighbors} activeTags={activeTags}
+                                                activeColors={activeColors} temporalActive={temporalActive}
+                                                tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
+                                                onToggleTemporal={handleToggleTemporal} onClearFilters={handleClearFilters}
+                                                onSelect={(img: ImageNode) => { setSheetOpen(false); handleSelect(img); }} />
+                                        } />
                                 </div>
                             </div>
                         </div>
