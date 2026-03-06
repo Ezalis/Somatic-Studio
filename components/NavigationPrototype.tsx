@@ -602,19 +602,6 @@ const DynamicAlbum: React.FC<{
     );
 };
 
-// --- Hero Zone ---
-
-const HeroZone: React.FC<{ image: ImageNode }> = ({ image }) => {
-    return (
-        <div className="flex flex-col items-center p-3">
-            <div className="overflow-hidden rounded-lg max-w-full"
-                style={{ boxShadow: `0 12px 48px ${image.palette[0] || '#000'}25, 0 4px 16px ${image.palette[1] || '#000'}12` }}>
-                <img src={getPreviewUrl(image.id)} alt="" className="max-h-[38vh] max-w-full object-contain" draggable={false} />
-            </div>
-        </div>
-    );
-};
-
 // --- Idle Field ---
 
 const IdleField: React.FC<{
@@ -696,6 +683,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     const [activeColors, setActiveColors] = useState<Set<string>>(new Set());
     const [temporalActive, setTemporalActive] = useState(false);
     const [sheetOpen, setSheetOpen] = useState(false);
+    const [heroExpanded, setHeroExpanded] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -793,6 +781,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setActiveTags(new Set());
         setActiveColors(new Set());
         setTemporalActive(false);
+        setHeroExpanded(false);
     }, []);
 
     const handleToggleTag = useCallback((tagId: string) => {
@@ -888,22 +877,44 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {/* DASHBOARD — Desktop */}
             {anchor && !isMobile && (
                 <div className="fixed inset-0 pt-12 z-10 flex gap-3 overflow-hidden">
-                    {/* LEFT: Sprite identity, DNA, technical, timeline, tags */}
-                    <div className="flex-shrink-0 rounded-xl overflow-y-auto transition-all duration-500 ml-4 my-4"
-                        style={{ width: leftW, backgroundColor: '#faf9f6dd' }}>
-                        <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
-                            scored={scored} tagMap={tagMap} activeTags={activeTags}
-                            activeColors={activeColors} temporalActive={temporalActive}
-                            onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
-                            onToggleTemporal={handleToggleTemporal} onNavigate={handleSelect}
-                            albumImages={albumPool} />
-                    </div>
+                    {/* LEFT: Sprite identity, DNA, technical, timeline, tags — hidden when hero expanded */}
+                    {!heroExpanded && (
+                        <div className="flex-shrink-0 rounded-xl overflow-y-auto transition-all duration-500 ml-4 my-4"
+                            style={{ width: leftW, backgroundColor: '#faf9f6dd' }}>
+                            <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
+                                scored={scored} tagMap={tagMap} activeTags={activeTags}
+                                activeColors={activeColors} temporalActive={temporalActive}
+                                onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
+                                onToggleTemporal={handleToggleTemporal} onNavigate={handleSelect}
+                                albumImages={albumPool} />
+                        </div>
+                    )}
 
                     {/* CENTER: Single scrollable page — Hero then Album */}
                     <div className="flex-1 min-w-0 overflow-y-auto pr-4 pb-4">
-                        {/* Hero */}
-                        <div className="flex items-start justify-center">
-                            <HeroZone image={anchor} />
+                        {/* Hero — click to expand, expanded = full viewport */}
+                        <div className={heroExpanded
+                            ? 'flex items-center justify-center cursor-pointer relative'
+                            : 'flex items-start justify-center cursor-pointer'}
+                            style={heroExpanded ? { minHeight: 'calc(100vh - 48px)' } : undefined}
+                            onClick={() => setHeroExpanded(!heroExpanded)}>
+                            <div className="overflow-hidden rounded-lg max-w-full transition-all duration-500"
+                                style={{
+                                    boxShadow: `0 12px 48px ${anchor.palette[0] || '#000'}25, 0 4px 16px ${anchor.palette[1] || '#000'}12`,
+                                }}>
+                                <img src={getPreviewUrl(anchor.id)} alt=""
+                                    className="max-w-full object-contain transition-all duration-500"
+                                    style={{ maxHeight: heroExpanded ? '90vh' : '38vh' }}
+                                    draggable={false} />
+                            </div>
+                            {/* Close button when expanded */}
+                            {heroExpanded && (
+                                <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); setHeroExpanded(false); }}
+                                    className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all hover:bg-black/10"
+                                    style={{ backgroundColor: 'rgba(0,0,0,0.05)' }}>
+                                    <span className="text-zinc-500 text-sm">&times;</span>
+                                </button>
+                            )}
                         </div>
                         {/* Dynamic Album */}
                         <div className="rounded-xl"
@@ -924,13 +935,26 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     {/* Single scrollable page */}
                     <div className="fixed inset-0 pt-12 pb-0 z-10 overflow-y-auto"
                         style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-                        {/* Hero */}
-                        <div className="flex items-start justify-center px-3 pt-1">
-                            <div className="overflow-hidden rounded-lg max-w-full"
+                        {/* Hero — tap to expand */}
+                        <div className={heroExpanded
+                            ? 'flex items-center justify-center px-2 relative'
+                            : 'flex items-start justify-center px-3 pt-1'}
+                            style={heroExpanded ? { minHeight: 'calc(100vh - 48px)' } : undefined}
+                            onClick={() => setHeroExpanded(!heroExpanded)}>
+                            <div className="overflow-hidden rounded-lg max-w-full transition-all duration-500"
                                 style={{ boxShadow: `0 8px 32px ${anchor.palette[0] || '#000'}25` }}>
                                 <img src={getPreviewUrl(anchor.id)} alt=""
-                                    className="max-h-[45vh] max-w-full object-contain" draggable={false} />
+                                    className="max-w-full object-contain transition-all duration-500"
+                                    style={{ maxHeight: heroExpanded ? '92vh' : '45vh' }}
+                                    draggable={false} />
                             </div>
+                            {heroExpanded && (
+                                <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); setHeroExpanded(false); }}
+                                    className="absolute top-2 right-4 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer"
+                                    style={{ backgroundColor: 'rgba(0,0,0,0.06)' }}>
+                                    <span className="text-zinc-500 text-sm">&times;</span>
+                                </button>
+                            )}
                         </div>
 
                         {/* Info button — opens bottom sheet */}
