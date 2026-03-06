@@ -15,13 +15,6 @@ interface ScoredImage {
     isTemporalNeighbor: boolean;
 }
 
-interface AssociationCluster {
-    label: string;
-    type: 'tag' | 'camera' | 'lens' | 'season' | 'palette';
-    images: ScoredImage[];
-    convergence: number;
-}
-
 interface TrailPoint {
     id: string;
     palette: string[];
@@ -66,38 +59,6 @@ function scoreRelevance(image: ImageNode, anchor: ImageNode): ScoredImage {
     return { image, score: Math.min(score, 1), sharedTags, sharedCamera, sharedLens, sharedSeason, isBridge, isTemporalNeighbor };
 }
 
-function buildAssociationClusters(scored: ScoredImage[], anchor: ImageNode, tagMap: Map<string, string>): AssociationCluster[] {
-    const nonTemporal = scored.filter(s => !s.isTemporalNeighbor && s.score > 0.05);
-    const clusters: AssociationCluster[] = [];
-
-    const tagGroups = new Map<string, ScoredImage[]>();
-    for (const s of nonTemporal) {
-        for (const tagId of s.sharedTags) {
-            if (!tagGroups.has(tagId)) tagGroups.set(tagId, []);
-            const group = tagGroups.get(tagId)!;
-            if (!group.find(x => x.image.id === s.image.id)) group.push(s);
-        }
-    }
-    for (const [tagId, imgs] of tagGroups) {
-        if (imgs.length >= 1) {
-            const avgScore = imgs.reduce((sum, s) => sum + s.score, 0) / imgs.length;
-            clusters.push({ label: tagMap.get(tagId) || tagId, type: 'tag', images: imgs.sort((a, b) => b.score - a.score).slice(0, 6), convergence: avgScore });
-        }
-    }
-
-    const cameraImgs = nonTemporal.filter(s => s.sharedCamera);
-    if (cameraImgs.length >= 1) clusters.push({ label: anchor.cameraModel, type: 'camera', images: cameraImgs.slice(0, 6), convergence: 0.4 });
-
-    const lensImgs = nonTemporal.filter(s => s.sharedLens);
-    if (lensImgs.length >= 1) clusters.push({ label: anchor.lensModel, type: 'lens', images: lensImgs.slice(0, 6), convergence: 0.35 });
-
-    const seasonImgs = nonTemporal.filter(s => s.sharedSeason);
-    if (seasonImgs.length >= 1 && anchor.inferredSeason) clusters.push({ label: anchor.inferredSeason, type: 'season', images: seasonImgs.slice(0, 6), convergence: 0.3 });
-
-    clusters.sort((a, b) => b.convergence - a.convergence);
-    return clusters.slice(0, 8);
-}
-
 // --- Mini Sprite ---
 
 const MiniSprite: React.FC<{ image: ImageNode; size: number; convergence?: number }> = React.memo(({ image, size, convergence }) => {
@@ -133,517 +94,307 @@ const MiniSprite: React.FC<{ image: ImageNode; size: number; convergence?: numbe
     );
 });
 
-// --- Sprite Decomposition: explains what the sprite represents ---
-
-const SpriteDecomposition: React.FC<{
-    image: ImageNode;
-    tagMap: Map<string, string>;
-}> = ({ image, tagMap }) => {
-    const palette = image.palette.length > 0 ? image.palette : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
-    const allTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
-    const tagLabels = allTagIds.map((t: string) => tagMap.get(t) || t).filter(Boolean).slice(0, 6);
-
-    return (
-        <div className="px-3 pb-3">
-            <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                Sprite DNA
-            </span>
-
-            {/* Palette decomposition */}
-            <div className="mb-3">
-                <span className="text-[8px] text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Core (dominant color)
-                </span>
-                <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: palette[0] }} />
-                    <span className="text-[9px] text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{palette[0]}</span>
-                </div>
-            </div>
-
-            <div className="mb-3">
-                <span className="text-[8px] text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Orbital layers
-                </span>
-                <div className="flex gap-2">
-                    {palette.slice(1, 4).map((color: string, i: number) => (
-                        <div key={i} className="flex items-center gap-1">
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color, opacity: 0.7 }} />
-                            <span className="text-[8px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{color}</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Semantic content */}
-            {tagLabels.length > 0 && (
-                <div className="mb-3">
-                    <span className="text-[8px] text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        Encoded meaning
-                    </span>
-                    <div className="flex flex-wrap gap-1">
-                        {tagLabels.map((label: string, i: number) => (
-                            <span key={i} className="text-[9px] text-zinc-600 px-1.5 py-0.5 rounded"
-                                style={{ fontFamily: 'Inter, sans-serif', backgroundColor: 'rgba(0,0,0,0.03)' }}>
-                                {label}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Technical signature */}
-            <div>
-                <span className="text-[8px] text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Technical signature
-                </span>
-                <div className="text-[9px] text-zinc-500 space-y-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    {image.cameraModel !== 'Unknown Camera' && <div>{image.cameraModel}</div>}
-                    {image.lensModel !== 'Unknown Lens' && <div>{image.lensModel}</div>}
-                    {image.inferredSeason && <div>{image.inferredSeason}</div>}
-                    {image.iso && <div>ISO {image.iso}</div>}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- Organic Trail Blob ---
-
-const TrailBlob: React.FC<{
-    trail: TrailPoint[];
-    width: number;
-    height: number;
-    onSelect: (id: string) => void;
-}> = ({ trail, width, height, onSelect }) => {
-    if (trail.length < 1) return null;
-
-    const cx = width / 2;
-    const cy = height / 2;
-
-    const blobLayers = useMemo(() => {
-        return trail.map((pt: TrailPoint, i: number) => {
-            const t = i / Math.max(trail.length - 1, 1);
-            const angle = t * Math.PI * 2.5 + seededRandom(pt.id + 'ba') * 1.2;
-            const radius = 20 + t * Math.min(width, height) * 0.25 + seededRandom(pt.id + 'br') * 30;
-            const x = cx + Math.cos(angle) * radius * 0.6;
-            const y = cy + Math.sin(angle) * radius * 0.4;
-            const blobR = 25 + seededRandom(pt.id + 'bs') * 20 + (trail.length - i) * 1.5;
-            const isCurrent = i === trail.length - 1;
-            return { ...pt, x, y, blobR, isCurrent, fade: Math.max(0.1, 0.5 - (trail.length - 1 - i) * 0.04) };
-        });
-    }, [trail, cx, cy, width, height]);
-
-    return (
-        <div className="relative w-full h-full">
-            <svg width={width} height={height} className="absolute inset-0">
-                <defs>
-                    <filter id="blobmerge" x="-50%" y="-50%" width="200%" height="200%">
-                        <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur" />
-                        <feColorMatrix in="blur" type="matrix"
-                            values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" result="goo" />
-                        <feComposite in="SourceGraphic" in2="goo" operator="atop" />
-                    </filter>
-                    <filter id="blobglow">
-                        <feGaussianBlur stdDeviation="3" result="b" />
-                        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-                    </filter>
-                </defs>
-                <g filter="url(#blobmerge)">
-                    {blobLayers.map((node, i: number) => (
-                        <g key={`blob-${i}`}>
-                            {node.palette.slice(0, 3).map((color: string, ci: number) => {
-                                const offsetAngle = seededRandom(node.id + `bo${ci}`) * Math.PI * 2;
-                                const offsetDist = seededRandom(node.id + `bd${ci}`) * 8;
-                                return (
-                                    <ellipse key={ci}
-                                        cx={node.x + Math.cos(offsetAngle) * offsetDist}
-                                        cy={node.y + Math.sin(offsetAngle) * offsetDist}
-                                        rx={node.blobR * (1 - ci * 0.2)}
-                                        ry={node.blobR * (0.75 - ci * 0.15)}
-                                        fill={color}
-                                        opacity={node.fade * (0.15 - ci * 0.03)}
-                                        transform={`rotate(${seededRandom(node.id + `br${ci}`) * 360}, ${node.x}, ${node.y})`} />
-                                );
-                            })}
-                        </g>
-                    ))}
-                </g>
-                {blobLayers.slice(0, -1).map((node, i: number) => {
-                    const next = blobLayers[i + 1];
-                    return (
-                        <line key={`thread-${i}`} x1={node.x} y1={node.y} x2={next.x} y2={next.y}
-                            stroke={node.palette[0] || '#a1a1aa'} strokeWidth={0.8}
-                            opacity={node.fade * 0.3} />
-                    );
-                })}
-                {blobLayers.map((node, i: number) => (
-                    <g key={`tnode-${i}`} className="cursor-pointer" onClick={() => onSelect(node.id)}>
-                        <circle cx={node.x} cy={node.y} r={node.isCurrent ? 5 : 3}
-                            fill={node.palette[0] || '#a1a1aa'} opacity={node.fade * 1.5}
-                            filter="url(#blobglow)" />
-                        {node.isCurrent && (
-                            <circle cx={node.x} cy={node.y} r={8}
-                                fill="none" stroke={node.palette[0] || '#a1a1aa'}
-                                strokeWidth={0.8} opacity={0.4} />
-                        )}
-                    </g>
-                ))}
-            </svg>
-            {trail.length > 1 && (
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2">
-                    <span className="text-[8px] text-zinc-300" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        {trail.length} explored
-                    </span>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// --- Compact Timeline (for left panel, no internal scroll) ---
-
-const CompactTimeline: React.FC<{
-    allImages: ImageNode[];
-    temporalImages: ScoredImage[];
-    anchor: ImageNode;
-    onSelect: (img: ImageNode) => void;
-}> = ({ allImages, temporalImages, anchor, onSelect }) => {
-    const allTimestamps = useMemo(() => allImages.map(i => i.captureTimestamp).sort((a, b) => a - b), [allImages]);
-    const minTs = allTimestamps[0];
-    const maxTs = allTimestamps[allTimestamps.length - 1];
-    const range = maxTs - minTs || 1;
-
-    const anchorPos = (anchor.captureTimestamp - minTs) / range;
-
-    // Temporal neighbor range
-    const temporalTs = temporalImages.map(s => s.image.captureTimestamp);
-    const hasNeighbors = temporalImages.length > 0;
-    const tMin = hasNeighbors ? Math.min(anchor.captureTimestamp, ...temporalTs) : anchor.captureTimestamp;
-    const tMax = hasNeighbors ? Math.max(anchor.captureTimestamp, ...temporalTs) : anchor.captureTimestamp;
-    const tMinPos = (tMin - minTs) / range;
-    const tMaxPos = (tMax - minTs) / range;
-
-    const anchorDate = new Date(anchor.captureTimestamp);
-    const anchorDateStr = anchorDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const rangeStart = new Date(minTs).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-    const rangeEnd = new Date(maxTs).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-
-    return (
-        <div className="px-3 py-2">
-            <div className="flex items-baseline justify-between mb-2">
-                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Timeline
-                </span>
-                {hasNeighbors && (
-                    <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        {temporalImages.length} nearby
-                    </span>
-                )}
-            </div>
-
-            {/* Date label — always stable and readable */}
-            <div className="mb-2">
-                <span className="text-[12px] text-zinc-700 font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
-                    {anchorDateStr}
-                </span>
-            </div>
-
-            {/* Timeline bar */}
-            <div className="relative h-5 mb-1">
-                {/* Full range */}
-                <div className="absolute top-2 left-0 right-0 h-[2px] bg-zinc-200 rounded-full" />
-                {/* Active period */}
-                {hasNeighbors && (
-                    <div className="absolute top-0.5 h-3 rounded-full transition-all duration-700"
-                        style={{
-                            left: `${tMinPos * 100}%`,
-                            width: `${Math.max((tMaxPos - tMinPos) * 100, 3)}%`,
-                            backgroundColor: 'rgba(0,0,0,0.06)',
-                            border: '1px solid rgba(0,0,0,0.08)',
-                        }} />
-                )}
-                {/* Sparse dots for all images */}
-                {allImages.filter((_: ImageNode, i: number) => i % Math.max(1, Math.floor(allImages.length / 30)) === 0).map((img: ImageNode) => (
-                    <div key={img.id} className="absolute top-[9px] w-[2px] h-[2px] rounded-full bg-zinc-300 -translate-x-1/2"
-                        style={{ left: `${((img.captureTimestamp - minTs) / range) * 100}%` }} />
-                ))}
-                {/* Anchor marker */}
-                <div className="absolute top-0.5 w-2.5 h-2.5 rounded-full -translate-x-1/2 transition-all duration-500"
-                    style={{
-                        left: `${anchorPos * 100}%`,
-                        backgroundColor: '#3f3f46',
-                    }} />
-            </div>
-
-            {/* Range labels */}
-            <div className="flex justify-between">
-                <span className="text-[7px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{rangeStart}</span>
-                <span className="text-[7px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{rangeEnd}</span>
-            </div>
-
-            {/* Temporal neighbor thumbnails — no scroll, flow naturally */}
-            {hasNeighbors && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                    {temporalImages.slice(0, 8).map(({ image }: ScoredImage) => (
-                        <div key={image.id}
-                            className="cursor-pointer hover:scale-105 transition-transform duration-300 rounded overflow-hidden"
-                            style={{ width: 48, height: 36, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}
-                            onClick={() => onSelect(image)}>
-                            <img src={getThumbnailUrl(image.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-};
-
-// --- Association Clusters Zone (right panel) ---
-
-const AssociationZone: React.FC<{
-    clusters: AssociationCluster[];
-    onSelect: (img: ImageNode) => void;
-}> = ({ clusters, onSelect }) => {
-    if (clusters.length === 0) return null;
-
-    const typeIcon = (type: string) => {
-        switch (type) { case 'camera': return 'cam'; case 'lens': return 'lens'; case 'season': return 'season'; default: return 'tag'; }
-    };
-
-    return (
-        <div className="flex flex-col h-full">
-            <div className="px-3 py-2 flex-shrink-0">
-                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Associations
-                </span>
-            </div>
-            <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-4">
-                {clusters.map((cluster: AssociationCluster, ci: number) => {
-                    const breatheDur = 5 + ci * 0.7;
-                    const convergenceLabel = cluster.convergence > 0.5 ? 'strong' : cluster.convergence > 0.25 ? 'moderate' : 'distant';
-                    return (
-                        <div key={cluster.label + ci}>
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                                <span className="text-[8px] px-1 py-0.5 rounded uppercase tracking-wider text-zinc-500"
-                                    style={{ fontFamily: 'JetBrains Mono, monospace', backgroundColor: 'rgba(0,0,0,0.04)' }}>
-                                    {typeIcon(cluster.type)}
-                                </span>
-                                <span className="text-[10px] text-zinc-700 truncate" style={{ fontFamily: 'Caveat, cursive' }}>
-                                    {cluster.label}
-                                </span>
-                                <span className="text-[7px] text-zinc-400 ml-auto flex-shrink-0" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                                    {convergenceLabel}
-                                </span>
-                            </div>
-                            <div className="flex flex-wrap gap-2 justify-start">
-                                {cluster.images.map(({ image, score }: ScoredImage) => {
-                                    const bd = breatheDur + seededRandom(image.id + 'ab') * 4;
-                                    const delay = seededRandom(image.id + 'ad') * 3;
-                                    return (
-                                        <div key={image.id}
-                                            className="cursor-pointer hover:scale-110 transition-transform duration-300"
-                                            style={{ animation: `drift ${bd}s ease-in-out ${delay}s infinite` }}
-                                            onClick={() => onSelect(image)}>
-                                            <MiniSprite image={image} size={44} convergence={score} />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-};
-
-// --- Left Panel: Timeline + Detail Navigation ---
+// --- Left Panel ---
 
 const LeftPanel: React.FC<{
     image: ImageNode;
     allImages: ImageNode[];
     temporalImages: ScoredImage[];
+    scored: ScoredImage[];
     tagMap: Map<string, string>;
+    activeTags: Set<string>;
+    onToggleTag: (tagId: string) => void;
     onNavigate: (img: ImageNode) => void;
-}> = ({ image, allImages, temporalImages, tagMap, onNavigate }) => {
-    const [selectedFilter, setSelectedFilter] = useState<{ label: string; type: string } | null>(null);
+}> = ({ image, allImages, temporalImages, tagMap, activeTags, onToggleTag, onNavigate }) => {
+    const palette = image.palette.length > 0 ? image.palette : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
     const allTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
 
-    const previewImages = useMemo(() => {
-        if (!selectedFilter) return [];
-        switch (selectedFilter.type) {
-            case 'tag':
-                return allImages.filter((img: ImageNode) =>
-                    img.id !== image.id && (img.tagIds.includes(selectedFilter.label) || img.aiTagIds?.includes(selectedFilter.label))
-                ).slice(0, 12);
-            case 'camera':
-                return allImages.filter((img: ImageNode) => img.id !== image.id && img.cameraModel === selectedFilter.label).slice(0, 12);
-            case 'lens':
-                return allImages.filter((img: ImageNode) => img.id !== image.id && img.lensModel === selectedFilter.label).slice(0, 12);
-            case 'season':
-                return allImages.filter((img: ImageNode) => img.id !== image.id && img.inferredSeason === selectedFilter.label).slice(0, 12);
-            default: return [];
-        }
-    }, [selectedFilter, allImages, image.id]);
+    // Timeline data
+    const allTimestamps = useMemo(() => allImages.map(i => i.captureTimestamp).sort((a: number, b: number) => a - b), [allImages]);
+    const minTs = allTimestamps[0];
+    const maxTs = allTimestamps[allTimestamps.length - 1];
+    const range = maxTs - minTs || 1;
+    const anchorPos = (image.captureTimestamp - minTs) / range;
 
-    const toggleFilter = useCallback((label: string, type: string) => {
-        setSelectedFilter(prev => (prev?.label === label && prev?.type === type) ? null : { label, type });
-    }, []);
+    const temporalTs = temporalImages.map(s => s.image.captureTimestamp);
+    const hasNeighbors = temporalImages.length > 0;
+    const tMin = hasNeighbors ? Math.min(image.captureTimestamp, ...temporalTs) : image.captureTimestamp;
+    const tMax = hasNeighbors ? Math.max(image.captureTimestamp, ...temporalTs) : image.captureTimestamp;
+    const tMinPos = (tMin - minTs) / range;
+    const tMaxPos = (tMax - minTs) / range;
 
-    useEffect(() => { setSelectedFilter(null); }, [image.id]);
+    const anchorDateStr = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const rangeStart = new Date(minTs).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    const rangeEnd = new Date(maxTs).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 
     return (
         <div className="flex flex-col h-full overflow-y-auto">
-            {/* Timeline at top */}
-            <div className="flex-shrink-0 border-b border-zinc-200/40">
-                <CompactTimeline allImages={allImages} temporalImages={temporalImages}
-                    anchor={image} onSelect={onNavigate} />
-            </div>
-
-            {/* Tags */}
-            <div className="px-3 pt-3 pb-2">
-                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Tags
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                    {allTagIds.map((tagId: string) => {
-                        const label = tagMap.get(tagId) || tagId;
-                        const isActive = selectedFilter?.label === tagId && selectedFilter?.type === 'tag';
-                        return (
-                            <button key={tagId} onClick={() => toggleFilter(tagId, 'tag')}
-                                className="px-2 py-0.5 rounded-full text-[10px] transition-all cursor-pointer"
-                                style={{
-                                    fontFamily: 'Inter, sans-serif',
-                                    backgroundColor: isActive ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.04)',
-                                    color: '#3f3f46',
-                                    outline: isActive ? '1px solid rgba(0,0,0,0.2)' : 'none',
-                                }}>
-                                {label}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Camera */}
-            {image.cameraModel !== 'Unknown Camera' && (
-                <div className="px-3 pb-2">
-                    <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        Camera
-                    </span>
-                    <button onClick={() => toggleFilter(image.cameraModel, 'camera')}
-                        className="text-[11px] text-zinc-700 hover:text-zinc-900 transition-colors cursor-pointer"
-                        style={{ fontFamily: 'Inter, sans-serif', textDecoration: selectedFilter?.label === image.cameraModel ? 'underline' : 'none' }}>
-                        {image.cameraModel}
-                    </button>
-                </div>
-            )}
-
-            {/* Lens */}
-            {image.lensModel !== 'Unknown Lens' && (
-                <div className="px-3 pb-2">
-                    <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        Lens
-                    </span>
-                    <button onClick={() => toggleFilter(image.lensModel, 'lens')}
-                        className="text-[11px] text-zinc-700 hover:text-zinc-900 transition-colors cursor-pointer"
-                        style={{ fontFamily: 'Inter, sans-serif', textDecoration: selectedFilter?.label === image.lensModel ? 'underline' : 'none' }}>
-                        {image.lensModel}
-                    </button>
-                </div>
-            )}
-
-            {/* Season */}
-            {image.inferredSeason && (
-                <div className="px-3 pb-2">
-                    <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        Season
-                    </span>
-                    <button onClick={() => toggleFilter(image.inferredSeason, 'season')}
-                        className="text-[11px] text-zinc-700 hover:text-zinc-900 transition-colors cursor-pointer"
-                        style={{ fontFamily: 'Inter, sans-serif', textDecoration: selectedFilter?.label === image.inferredSeason ? 'underline' : 'none' }}>
-                        {image.inferredSeason}
-                    </button>
-                </div>
-            )}
-
-            {/* EXIF */}
-            <div className="px-3 pb-2">
-                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Technical
-                </span>
-                <div className="space-y-0.5 text-[10px] text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    {image.iso && <div>ISO {image.iso}</div>}
-                    {image.focalLength && <div>{image.focalLength}mm</div>}
-                    {image.aperture && <div>f/{image.aperture}</div>}
-                    {image.shutterSpeed && <div>{image.shutterSpeed}</div>}
-                </div>
-            </div>
-
-            {/* Palette */}
-            <div className="px-3 pb-3">
-                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Palette
-                </span>
-                <div className="flex gap-1.5">
-                    {image.palette.map((color: string, i: number) => (
-                        <div key={i} className="w-5 h-5 rounded-full" style={{ backgroundColor: color, boxShadow: `0 1px 4px ${color}30` }} />
-                    ))}
-                </div>
-            </div>
-
-            {/* Selection space */}
-            {selectedFilter && previewImages.length > 0 && (
-                <div className="flex-shrink-0 border-t border-zinc-200/40 px-3 py-3">
-                    <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[9px] text-zinc-500 tracking-wider uppercase" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {selectedFilter.type === 'tag' ? (tagMap.get(selectedFilter.label) || selectedFilter.label) : selectedFilter.label}
-                        </span>
-                        <span className="text-[8px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {previewImages.length}
-                        </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                        {previewImages.map((img: ImageNode) => (
-                            <div key={img.id}
-                                className="cursor-pointer hover:scale-105 transition-transform duration-200 rounded overflow-hidden aspect-[4/3]"
-                                onClick={() => onNavigate(img)}>
-                                <img src={getThumbnailUrl(img.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// --- Right Panel: Sprite Identity + Decomposition + Associations ---
-
-const RightPanel: React.FC<{
-    image: ImageNode;
-    tagMap: Map<string, string>;
-    clusters: AssociationCluster[];
-    onSelect: (img: ImageNode) => void;
-}> = ({ image, tagMap, clusters, onSelect }) => {
-    return (
-        <div className="flex flex-col h-full overflow-y-auto">
-            {/* Sprite identity at top */}
+            {/* Sprite identity */}
             <div className="flex-shrink-0 flex flex-col items-center pt-3 pb-2 border-b border-zinc-200/40">
-                <MiniSprite image={image} size={80} />
+                <MiniSprite image={image} size={72} />
                 <span className="text-[9px] text-zinc-500 mt-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     Spectral Identity
                 </span>
             </div>
 
-            {/* Sprite decomposition */}
-            <div className="flex-shrink-0 border-b border-zinc-200/40 pt-2">
-                <SpriteDecomposition image={image} tagMap={tagMap} />
+            {/* Sprite DNA — Palette */}
+            <div className="flex-shrink-0 px-3 pt-3 pb-2 border-b border-zinc-200/40">
+                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    Sprite DNA
+                </span>
+                <div className="mb-2">
+                    <span className="text-[8px] text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Core
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: palette[0] }} />
+                        <span className="text-[9px] text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{palette[0]}</span>
+                    </div>
+                </div>
+                <div className="mb-2">
+                    <span className="text-[8px] text-zinc-400 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Orbital layers
+                    </span>
+                    <div className="flex gap-2">
+                        {palette.slice(1, 4).map((color: string, i: number) => (
+                            <div key={i} className="flex items-center gap-1">
+                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color, opacity: 0.7 }} />
+                                <span className="text-[8px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{color}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
 
-            {/* Associations below */}
-            <div className="flex-1 min-h-0">
-                <AssociationZone clusters={clusters} onSelect={onSelect} />
+            {/* Technical */}
+            <div className="flex-shrink-0 px-3 pt-2 pb-2 border-b border-zinc-200/40">
+                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    Technical
+                </span>
+                <div className="space-y-0.5 text-[10px] text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    {image.cameraModel !== 'Unknown Camera' && <div>{image.cameraModel}</div>}
+                    {image.lensModel !== 'Unknown Lens' && <div>{image.lensModel}</div>}
+                    {image.inferredSeason && <div>{image.inferredSeason}</div>}
+                    {image.iso && <div>ISO {image.iso}</div>}
+                    {image.focalLength && <div>{image.focalLength}mm</div>}
+                    {image.aperture && <div>f/{image.aperture}</div>}
+                </div>
+            </div>
+
+            {/* Timeline (bar only, no images) */}
+            <div className="flex-shrink-0 px-3 pt-2 pb-2 border-b border-zinc-200/40">
+                <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Timeline
+                    </span>
+                    {hasNeighbors && (
+                        <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                            {temporalImages.length} nearby
+                        </span>
+                    )}
+                </div>
+                <div className="mb-1">
+                    <span className="text-[12px] text-zinc-700 font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+                        {anchorDateStr}
+                    </span>
+                </div>
+                <div className="relative h-5 mb-1">
+                    <div className="absolute top-2 left-0 right-0 h-[2px] bg-zinc-200 rounded-full" />
+                    {hasNeighbors && (
+                        <div className="absolute top-0.5 h-3 rounded-full transition-all duration-700"
+                            style={{
+                                left: `${tMinPos * 100}%`,
+                                width: `${Math.max((tMaxPos - tMinPos) * 100, 3)}%`,
+                                backgroundColor: 'rgba(0,0,0,0.06)',
+                                border: '1px solid rgba(0,0,0,0.08)',
+                            }} />
+                    )}
+                    {allImages.filter((_: ImageNode, i: number) => i % Math.max(1, Math.floor(allImages.length / 30)) === 0).map((img: ImageNode) => (
+                        <div key={img.id} className="absolute top-[9px] w-[2px] h-[2px] rounded-full bg-zinc-300 -translate-x-1/2"
+                            style={{ left: `${((img.captureTimestamp - minTs) / range) * 100}%` }} />
+                    ))}
+                    <div className="absolute top-0.5 w-2.5 h-2.5 rounded-full -translate-x-1/2 transition-all duration-500"
+                        style={{ left: `${anchorPos * 100}%`, backgroundColor: '#3f3f46' }} />
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-[7px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{rangeStart}</span>
+                    <span className="text-[7px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{rangeEnd}</span>
+                </div>
+            </div>
+
+            {/* Tags — click to add to album pool */}
+            <div className="flex-1 px-3 pt-2 pb-3">
+                <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    Tags — click to build album
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                    {allTagIds.map((tagId: string) => {
+                        const label = tagMap.get(tagId) || tagId;
+                        const isActive = activeTags.has(tagId);
+                        return (
+                            <button key={tagId} onClick={() => onToggleTag(tagId)}
+                                className="px-2 py-0.5 rounded-full text-[10px] transition-all cursor-pointer"
+                                style={{
+                                    fontFamily: 'Inter, sans-serif',
+                                    backgroundColor: isActive ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
+                                    color: isActive ? '#18181b' : '#3f3f46',
+                                    outline: isActive ? '1.5px solid rgba(0,0,0,0.25)' : 'none',
+                                    fontWeight: isActive ? 600 : 400,
+                                }}>
+                                {isActive ? '+ ' : ''}{label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Dynamic Album ---
+
+interface AlbumImage {
+    image: ImageNode;
+    tagHits: number;
+    isTemporal: boolean;
+}
+
+const DynamicAlbum: React.FC<{
+    allImages: ImageNode[];
+    anchor: ImageNode;
+    scored: ScoredImage[];
+    temporalImages: ScoredImage[];
+    activeTags: Set<string>;
+    tagMap: Map<string, string>;
+    onRemoveTag: (tagId: string) => void;
+    onSelect: (img: ImageNode) => void;
+}> = ({ allImages, anchor, scored, temporalImages, activeTags, tagMap, onRemoveTag, onSelect }) => {
+    const hasActiveTags = activeTags.size > 0;
+
+    // Build album pool
+    const albumImages = useMemo((): AlbumImage[] => {
+        if (!hasActiveTags) {
+            // No tags selected: show scored similar images as sprites
+            return scored.slice(0, 24).map(s => ({
+                image: s.image,
+                tagHits: 0,
+                isTemporal: s.isTemporalNeighbor,
+            }));
+        }
+
+        // Tags selected: find all images matching ANY active tag, count hits
+        const seen = new Map<string, AlbumImage>();
+
+        // Always include temporal neighbors
+        for (const s of temporalImages) {
+            seen.set(s.image.id, { image: s.image, tagHits: 0, isTemporal: true });
+        }
+
+        // Add tag-matched images
+        for (const img of allImages) {
+            if (img.id === anchor.id) continue;
+            const imgTags = new Set([...img.tagIds, ...(img.aiTagIds || [])]);
+            let hits = 0;
+            for (const tagId of activeTags) {
+                if (imgTags.has(tagId)) hits++;
+            }
+            if (hits > 0) {
+                const existing = seen.get(img.id);
+                if (existing) {
+                    existing.tagHits = hits;
+                } else {
+                    seen.set(img.id, { image: img, tagHits: hits, isTemporal: false });
+                }
+            }
+        }
+
+        // Sort: more tag hits first, then temporal, then score
+        return [...seen.values()].sort((a, b) => {
+            if (b.tagHits !== a.tagHits) return b.tagHits - a.tagHits;
+            if (a.isTemporal !== b.isTemporal) return a.isTemporal ? -1 : 1;
+            return 0;
+        });
+    }, [hasActiveTags, scored, temporalImages, allImages, anchor.id, activeTags]);
+
+    return (
+        <div className="flex flex-col h-full">
+            {/* Active tag pills (removable) */}
+            {hasActiveTags && (
+                <div className="flex-shrink-0 px-4 py-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-[8px] text-zinc-400 uppercase tracking-wider" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Album filters:
+                    </span>
+                    {[...activeTags].map((tagId: string) => (
+                        <button key={tagId} onClick={() => onRemoveTag(tagId)}
+                            className="px-2 py-0.5 rounded-full text-[9px] cursor-pointer transition-all hover:opacity-70 flex items-center gap-1"
+                            style={{
+                                fontFamily: 'Inter, sans-serif',
+                                backgroundColor: 'rgba(0,0,0,0.1)',
+                                color: '#18181b',
+                            }}>
+                            {tagMap.get(tagId) || tagId}
+                            <span className="text-zinc-400 ml-0.5">&times;</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Album grid */}
+            <div className="flex-1 overflow-y-auto px-4 pb-3">
+                {!hasActiveTags ? (
+                    // Sprite grid — no tags selected yet
+                    <div>
+                        <div className="mb-2">
+                            <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                Similar images — select tags on the left to build an album
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap gap-3 justify-start">
+                            {albumImages.map(({ image }: AlbumImage) => {
+                                const bd = 5 + seededRandom(image.id + 'ab') * 5;
+                                const delay = seededRandom(image.id + 'ad') * 3;
+                                return (
+                                    <div key={image.id}
+                                        className="cursor-pointer hover:scale-110 transition-transform duration-300"
+                                        style={{ animation: `drift ${bd}s ease-in-out ${delay}s infinite` }}
+                                        onClick={() => onSelect(image)}>
+                                        <MiniSprite image={image} size={40} convergence={0.3} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : (
+                    // Photo grid — tags are active
+                    <div>
+                        <div className="mb-2">
+                            <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                {albumImages.length} images
+                            </span>
+                        </div>
+                        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))' }}>
+                            {albumImages.map(({ image, tagHits, isTemporal }: AlbumImage) => (
+                                <div key={image.id}
+                                    className="cursor-pointer hover:scale-105 transition-transform duration-200 rounded-md overflow-hidden relative"
+                                    style={{ aspectRatio: '4/3', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                                    onClick={() => onSelect(image)}>
+                                    <img src={getThumbnailUrl(image.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                                    {/* Tag hit badge */}
+                                    {tagHits > 1 && (
+                                        <div className="absolute top-1 right-1 w-4 h-4 rounded-full flex items-center justify-center"
+                                            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                                            <span className="text-[8px] text-white font-medium">{tagHits}</span>
+                                        </div>
+                                    )}
+                                    {/* Temporal indicator */}
+                                    {isTemporal && (
+                                        <div className="absolute bottom-1 left-1 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#3f3f46' }} />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -653,10 +404,10 @@ const RightPanel: React.FC<{
 
 const HeroZone: React.FC<{ image: ImageNode }> = ({ image }) => {
     return (
-        <div className="flex flex-col items-center p-4">
+        <div className="flex flex-col items-center p-3">
             <div className="overflow-hidden rounded-lg max-w-full"
-                style={{ boxShadow: `0 16px 64px ${image.palette[0] || '#000'}30, 0 4px 24px ${image.palette[1] || '#000'}15` }}>
-                <img src={getPreviewUrl(image.id)} alt="" className="max-h-[42vh] max-w-full object-contain" draggable={false} />
+                style={{ boxShadow: `0 12px 48px ${image.palette[0] || '#000'}25, 0 4px 16px ${image.palette[1] || '#000'}12` }}>
+                <img src={getPreviewUrl(image.id)} alt="" className="max-h-[38vh] max-w-full object-contain" draggable={false} />
             </div>
         </div>
     );
@@ -721,6 +472,7 @@ interface NavigationPrototypeProps {
 const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags, onExit }) => {
     const [anchorId, setAnchorId] = useState<string | null>(null);
     const [trail, setTrail] = useState<TrailPoint[]>([]);
+    const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -752,7 +504,6 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     }, [anchor, images]);
 
     const temporalNeighbors = useMemo(() => scored.filter((s: ScoredImage) => s.isTemporalNeighbor).slice(0, 12), [scored]);
-    const associationClusters = useMemo(() => anchor ? buildAssociationClusters(scored, anchor, tagMap) : [], [scored, anchor, tagMap]);
 
     const surfaceStyle = useMemo((): React.CSSProperties => {
         if (!anchor?.palette?.length) return { background: '#faf9f6' };
@@ -771,22 +522,33 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         const label = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         setTrail((t: TrailPoint[]) => [...t, { id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp }]);
         setAnchorId(image.id);
+        setActiveTags(new Set()); // Reset album tags on new anchor
     }, []);
 
-    const handleTrailSelect = useCallback((id: string) => {
-        const img = images.find((i: ImageNode) => i.id === id);
-        if (img) handleSelect(img);
-    }, [images, handleSelect]);
+    const handleToggleTag = useCallback((tagId: string) => {
+        setActiveTags(prev => {
+            const next = new Set(prev);
+            if (next.has(tagId)) next.delete(tagId);
+            else next.add(tagId);
+            return next;
+        });
+    }, []);
+
+    const handleRemoveTag = useCallback((tagId: string) => {
+        setActiveTags(prev => {
+            const next = new Set(prev);
+            next.delete(tagId);
+            return next;
+        });
+    }, []);
 
     const handleClear = useCallback(() => {
         setTrail([]);
         setAnchorId(null);
+        setActiveTags(new Set());
     }, []);
 
     const leftW = 240;
-    const rightW = 280;
-    const centerW = Math.max(canvasSize.w - leftW - rightW - 40, 200);
-    const blobH = Math.max((canvasSize.h - 48) * 0.4, 150);
 
     return (
         <div ref={containerRef} className="fixed inset-0 overflow-hidden" style={surfaceStyle}>
@@ -827,27 +589,27 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {/* DASHBOARD */}
             {anchor && (
                 <div className="fixed inset-0 pt-12 pb-4 px-4 flex gap-3 z-10">
-                    {/* LEFT: Timeline + structured navigation */}
+                    {/* LEFT: Sprite identity, DNA, technical, timeline, tags */}
                     <div className="flex-shrink-0 rounded-xl overflow-hidden transition-all duration-500"
                         style={{ width: leftW, backgroundColor: '#faf9f6dd' }}>
                         <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
-                            tagMap={tagMap} onNavigate={handleSelect} />
+                            scored={scored} tagMap={tagMap} activeTags={activeTags}
+                            onToggleTag={handleToggleTag} onNavigate={handleSelect} />
                     </div>
 
-                    {/* CENTER: Hero (top) + Trail Blob (bottom) */}
+                    {/* CENTER: Hero (top) + Dynamic Album (bottom) */}
                     <div className="flex-1 min-w-0 flex flex-col transition-all duration-500">
+                        {/* Hero */}
                         <div className="flex-shrink-0 flex items-start justify-center">
                             <HeroZone image={anchor} />
                         </div>
-                        <div className="flex-1 min-h-0 relative">
-                            <TrailBlob trail={trail} width={centerW} height={blobH} onSelect={handleTrailSelect} />
+                        {/* Dynamic Album */}
+                        <div className="flex-1 min-h-0 rounded-xl overflow-hidden"
+                            style={{ backgroundColor: '#faf9f6aa' }}>
+                            <DynamicAlbum allImages={images} anchor={anchor} scored={scored}
+                                temporalImages={temporalNeighbors} activeTags={activeTags}
+                                tagMap={tagMap} onRemoveTag={handleRemoveTag} onSelect={handleSelect} />
                         </div>
-                    </div>
-
-                    {/* RIGHT: Sprite identity + decomposition + associations */}
-                    <div className="flex-shrink-0 rounded-xl overflow-hidden transition-all duration-500"
-                        style={{ width: rightW, backgroundColor: '#faf9f6dd' }}>
-                        <RightPanel image={anchor} tagMap={tagMap} clusters={associationClusters} onSelect={handleSelect} />
                     </div>
                 </div>
             )}
