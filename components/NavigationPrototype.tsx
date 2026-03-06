@@ -118,7 +118,7 @@ const LeftPanel: React.FC<{
 
     // Discovery tags: from album pool images when filters active, otherwise from top scored neighbors
     const hasFilters = activeTags.size > 0 || activeColors.size > 0 || temporalActive;
-    const discoveryTags = useMemo(() => {
+    const discoveryTags = useMemo((): { tagId: string; count: number; relevance: number }[] => {
         const tagCounts = new Map<string, number>();
         const excludeTags = new Set([...anchorTagSet, ...activeTags]);
 
@@ -134,11 +134,19 @@ const LeftPanel: React.FC<{
                 }
             }
         }
-        // Sort by frequency, take top 15
-        return [...tagCounts.entries()]
+
+        // More filters active = show more discovery tags
+        const limit = hasFilters ? 20 + activeTags.size * 3 : 15;
+        const sorted = [...tagCounts.entries()]
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 15)
-            .map(([tagId]) => tagId);
+            .slice(0, limit);
+        const maxCount = sorted.length > 0 ? sorted[0][1] : 1;
+
+        return sorted.map(([tagId, count]) => ({
+            tagId,
+            count,
+            relevance: count / maxCount,
+        }));
     }, [scored, anchorTagSet, activeTags, hasFilters, albumImages]);
 
     // Timeline data
@@ -309,25 +317,35 @@ const LeftPanel: React.FC<{
                 </div>
             </div>
 
-            {/* Discovery tags — from nearby images */}
+            {/* Discovery tags — from nearby images, sized by relevance */}
             {discoveryTags.length > 0 && (
                 <div className="flex-1 px-3 pt-2 pb-3">
                     <span className="text-[9px] tracking-[0.2em] uppercase text-zinc-500 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Discover nearby
                     </span>
-                    <div className="flex flex-wrap gap-1.5">
-                        {discoveryTags.map((tagId: string) => {
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                        {discoveryTags.map(({ tagId, relevance }) => {
                             const label = tagMap.get(tagId) || tagId;
                             const isActive = activeTags.has(tagId);
+                            // Scale font size: 9px (low relevance) to 13px (high relevance)
+                            const fontSize = 9 + relevance * 4;
+                            // Scale padding
+                            const px = 6 + relevance * 4;
+                            const py = 2 + relevance * 2;
                             return (
                                 <button key={tagId} onClick={() => onToggleTag(tagId)}
-                                    className="px-2 py-0.5 rounded-full text-[10px] transition-all cursor-pointer"
+                                    className="rounded-full transition-all cursor-pointer"
                                     style={{
                                         fontFamily: 'Inter, sans-serif',
-                                        backgroundColor: isActive ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.02)',
-                                        color: isActive ? '#18181b' : '#71717a',
-                                        outline: isActive ? '1.5px solid rgba(0,0,0,0.25)' : '1px dashed rgba(0,0,0,0.12)',
-                                        fontWeight: isActive ? 600 : 400,
+                                        fontSize,
+                                        paddingLeft: px,
+                                        paddingRight: px,
+                                        paddingTop: py,
+                                        paddingBottom: py,
+                                        backgroundColor: isActive ? 'rgba(0,0,0,0.12)' : `rgba(0,0,0,${0.01 + relevance * 0.04})`,
+                                        color: isActive ? '#18181b' : `rgba(63,63,70,${0.5 + relevance * 0.5})`,
+                                        outline: isActive ? '1.5px solid rgba(0,0,0,0.25)' : `1px dashed rgba(0,0,0,${0.08 + relevance * 0.12})`,
+                                        fontWeight: isActive ? 600 : relevance > 0.7 ? 500 : 400,
                                     }}>
                                     {isActive ? '+ ' : ''}{label}
                                 </button>
