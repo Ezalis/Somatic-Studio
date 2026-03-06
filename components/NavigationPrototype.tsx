@@ -661,6 +661,22 @@ const IdleField: React.FC<{
     );
 };
 
+// --- Device Detection ---
+
+type DeviceType = 'mobile' | 'tablet' | 'desktop';
+
+function useDeviceType(): DeviceType {
+    return useMemo(() => {
+        if (typeof navigator === 'undefined') return 'desktop';
+        const ua = navigator.userAgent;
+        // iPad reports as Mac in newer iOS, check for touch + Mac
+        const isIPad = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+        if (/iPhone|iPod/i.test(ua) || (/Android/i.test(ua) && /Mobile/i.test(ua))) return 'mobile';
+        if (isIPad || /iPad/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua))) return 'tablet';
+        return 'desktop';
+    }, []);
+}
+
 // --- Main Component ---
 
 interface NavigationPrototypeProps {
@@ -670,11 +686,14 @@ interface NavigationPrototypeProps {
 }
 
 const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags, onExit }) => {
+    const deviceType = useDeviceType();
+    const isMobile = deviceType === 'mobile' || deviceType === 'tablet';
     const [anchorId, setAnchorId] = useState<string | null>(null);
     const [trail, setTrail] = useState<TrailPoint[]>([]);
     const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
     const [activeColors, setActiveColors] = useState<Set<string>>(new Set());
     const [temporalActive, setTemporalActive] = useState(false);
+    const [sheetOpen, setSheetOpen] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -819,8 +838,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 <IdleField images={images} onSelect={handleSelect} canvasW={canvasSize.w} canvasH={canvasSize.h} />
             )}
 
-            {/* DASHBOARD */}
-            {anchor && (
+            {/* DASHBOARD — Desktop */}
+            {anchor && !isMobile && (
                 <div className="fixed inset-0 pt-12 pb-4 px-4 flex gap-3 z-10">
                     {/* LEFT: Sprite identity, DNA, technical, timeline, tags */}
                     <div className="flex-shrink-0 rounded-xl overflow-hidden transition-all duration-500"
@@ -850,6 +869,89 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* DASHBOARD — Mobile / Tablet */}
+            {anchor && isMobile && (
+                <>
+                    {/* Full-width scrollable content */}
+                    <div className="fixed inset-0 pt-12 pb-0 z-10 flex flex-col overflow-y-auto">
+                        {/* Hero */}
+                        <div className="flex-shrink-0 flex items-start justify-center px-3 pt-1">
+                            <div className="overflow-hidden rounded-lg max-w-full"
+                                style={{ boxShadow: `0 8px 32px ${anchor.palette[0] || '#000'}25` }}>
+                                <img src={getPreviewUrl(anchor.id)} alt=""
+                                    className="max-h-[45vh] max-w-full object-contain" draggable={false} />
+                            </div>
+                        </div>
+
+                        {/* Info button — opens bottom sheet */}
+                        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2">
+                            <button onClick={() => setSheetOpen(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-full cursor-pointer transition-all"
+                                style={{
+                                    backgroundColor: 'rgba(0,0,0,0.06)',
+                                    fontFamily: 'JetBrains Mono, monospace',
+                                }}>
+                                <MiniSprite image={anchor} size={20} />
+                                <span className="text-[10px] text-zinc-600">Info & Filters</span>
+                            </button>
+                            {(activeTags.size > 0 || activeColors.size > 0 || temporalActive) && (
+                                <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                    {activeTags.size + activeColors.size + (temporalActive ? 1 : 0)} filters
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Dynamic Album — full width */}
+                        <div className="flex-1 min-h-0 rounded-t-xl overflow-hidden"
+                            style={{ backgroundColor: '#faf9f6aa' }}>
+                            <DynamicAlbum allImages={images} anchor={anchor} scored={scored}
+                                temporalImages={temporalNeighbors} activeTags={activeTags}
+                                activeColors={activeColors} temporalActive={temporalActive}
+                                tagMap={tagMap} onRemoveTag={handleRemoveTag} onRemoveColor={handleRemoveColor}
+                                onToggleTemporal={handleToggleTemporal} onClearFilters={handleClearFilters}
+                                onSelect={handleSelect} />
+                        </div>
+                    </div>
+
+                    {/* Bottom Sheet Overlay */}
+                    {sheetOpen && (
+                        <div className="fixed inset-0 z-50" onClick={() => setSheetOpen(false)}>
+                            {/* Backdrop */}
+                            <div className="absolute inset-0 bg-black/20 transition-opacity" />
+                            {/* Sheet */}
+                            <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] rounded-t-2xl overflow-hidden"
+                                style={{ backgroundColor: '#faf9f6', boxShadow: '0 -4px 32px rgba(0,0,0,0.12)' }}
+                                onClick={(e) => e.stopPropagation()}>
+                                {/* Handle bar */}
+                                <div className="flex justify-center pt-3 pb-1">
+                                    <div className="w-10 h-1 rounded-full bg-zinc-300" />
+                                </div>
+                                {/* Close button */}
+                                <div className="flex justify-between items-center px-4 pb-2">
+                                    <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-500"
+                                        style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                        Image Details
+                                    </span>
+                                    <button onClick={() => setSheetOpen(false)}
+                                        className="text-[10px] text-zinc-400 hover:text-zinc-600 cursor-pointer px-2 py-1 rounded"
+                                        style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                        Done
+                                    </button>
+                                </div>
+                                {/* LeftPanel content in scrollable area */}
+                                <div className="overflow-y-auto" style={{ maxHeight: 'calc(85vh - 60px)' }}>
+                                    <LeftPanel image={anchor} allImages={images} temporalImages={temporalNeighbors}
+                                        scored={scored} tagMap={tagMap} activeTags={activeTags}
+                                        activeColors={activeColors} temporalActive={temporalActive}
+                                        onToggleTag={handleToggleTag} onToggleColor={handleToggleColor}
+                                        onToggleTemporal={handleToggleTemporal} onNavigate={(img) => { setSheetOpen(false); handleSelect(img); }} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );
