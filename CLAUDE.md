@@ -32,6 +32,7 @@ App.tsx                       → Root component, global state, view routing
 │   ├── FieldGuideOverlay.tsx → Onboarding overlay explaining the navigation metaphor
 │   ├── Gallery.tsx           → Fullscreen vertical snap-scroll gallery
 │   ├── HistoryTimeline.tsx   → Fullscreen chronological exploration history
+│   ├── NavigationPrototype.tsx → Flow-state navigation prototype (vertical scroll journey)
 │   ├── ProgressiveImage.tsx  → Preview→full-res crossfade image loader
 │   └── SatelliteLayer.tsx    → Spectral ID + Semantic Web side panels
 ├── hooks/
@@ -192,6 +193,25 @@ Fixed slow hero image load on production (Nginx) vs dev (Vite):
 ### 2026-03-01: Docker Self-Hosting
 Migrated from Google AI Studio (CDN-hosted) to self-hosted Docker:
 - Dockerfiles use `npm ci` with committed `package-lock.json` for deterministic builds
+
+## Navigation Prototype
+
+The `/prototype` route hosts the navigation exploration prototype — a self-contained single-file component (`NavigationPrototype.tsx`) that's completely independent from the main Experience view.
+
+**Active branch:** `flow-state` (off `navigation-ideation`)
+
+**Architecture (Phase 3 — "Flow State"):**
+- Single vertical scroll journey (no dashboard panels)
+- State machine: `idle → blooming → hero → exploring`
+- Bloom transition: sprite SVG elements scatter apart with staggered CSS transitions, hero preloads behind
+- Hero section: fullscreen image with card flip to handwritten details (Caveat font, SVG timeline)
+- Trait selector: pick up to 6 traits (palette colors + tags + discovery tags) to build album
+- Waterfall album: tiered by tag hit count — photos for high relevance, sprites for low
+- Navigation loop: tap album item → bloom → new hero → new traits → new album
+
+**Previous phases** (documented in memory/prototyping.md):
+- Phase 1 (iterations 1-4): Single-canvas exploration experiments
+- Phase 2 (iterations 5.0-5.5): "Living Dashboard" with left panel + center hero + dynamic album
 
 ## Known Data Issues
 
