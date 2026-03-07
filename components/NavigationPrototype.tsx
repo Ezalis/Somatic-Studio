@@ -147,51 +147,53 @@ const MiniSprite: React.FC<{
 });
 
 // --- Bloom Overlay ---
-// Two modes:
-// 'bloom' — idle → first hero: sprite centers, scatters apart, hero fades in
-// 'grow'  — album → new hero: photo + sprite grow together from clicked position to hero center
+// Always the same bloom scatter from viewport center.
+// Sprite moves from clicked position to center, blooms apart, hero fades in once loaded.
 
 const BloomOverlay: React.FC<{
     image: ImageNode;
     sourceRect: DOMRect;
-    mode?: 'bloom' | 'grow';
     onComplete: () => void;
-}> = ({ image, sourceRect, mode = 'bloom', onComplete }) => {
-    const [phase, setPhase] = useState<'start' | 'growing' | 'settling'>('start');
+}> = ({ image, sourceRect, onComplete }) => {
+    const [phase, setPhase] = useState<'start' | 'centering' | 'blooming' | 'hero'>('start');
     const [heroLoaded, setHeroLoaded] = useState(false);
 
-    // Preload hero image immediately
+    // Preload hero image immediately on mount
     useEffect(() => {
         const img = new Image();
         img.onload = () => setHeroLoaded(true);
         img.src = getPreviewUrl(image.id);
     }, [image.id]);
 
-    // Kick off animation on next frame so initial position renders first
+    // start → centering (next frame, so CSS sees initial position first)
     useEffect(() => {
         const raf = requestAnimationFrame(() => {
-            requestAnimationFrame(() => setPhase('growing'));
+            requestAnimationFrame(() => setPhase('centering'));
         });
         return () => cancelAnimationFrame(raf);
     }, []);
 
-    // growing → settling
+    // centering → blooming (after sprite arrives at center)
     useEffect(() => {
-        if (phase === 'growing') {
-            const dur = mode === 'grow' ? 800 : 700;
-            const timer = setTimeout(() => setPhase('settling'), dur);
+        if (phase === 'centering') {
+            const timer = setTimeout(() => setPhase('blooming'), 450);
             return () => clearTimeout(timer);
         }
-    }, [phase, mode]);
+    }, [phase]);
 
-    // settling → complete (wait for hero image)
+    // blooming → hero (after bloom scatter completes)
     useEffect(() => {
-        if (phase === 'settling') {
-            if (heroLoaded) {
-                const timer = setTimeout(onComplete, 500);
-                return () => clearTimeout(timer);
-            }
-            // If hero hasn't loaded yet, complete as soon as it does
+        if (phase === 'blooming') {
+            const timer = setTimeout(() => setPhase('hero'), 900);
+            return () => clearTimeout(timer);
+        }
+    }, [phase]);
+
+    // hero → complete (once hero image is loaded and visible)
+    useEffect(() => {
+        if (phase === 'hero' && heroLoaded) {
+            const timer = setTimeout(onComplete, 500);
+            return () => clearTimeout(timer);
         }
     }, [phase, heroLoaded, onComplete]);
 
@@ -199,132 +201,33 @@ const BloomOverlay: React.FC<{
     const vh = window.innerHeight;
     const palette = image.palette.length > 0 ? image.palette : ['#52525b'];
 
-    // --- GROW MODE: photo + sprite emerge together from clicked position ---
-    if (mode === 'grow') {
-        const isStart = phase === 'start';
-
-        // Source center
-        const srcCx = sourceRect.left + sourceRect.width / 2;
-        const srcCy = sourceRect.top + sourceRect.height / 2;
-        const srcW = sourceRect.width;
-        const srcH = sourceRect.height;
-
-        // Target: centered in viewport, hero-sized
-        const heroMaxW = vw * 0.92;
-        const heroMaxH = vh * 0.85;
-
-        // Use CSS transform for smooth animation: scale from source size to hero size
-        // We position the container at the source, then translate + scale to destination
-        const scaleX = heroMaxW / Math.max(srcW, 1);
-        const scaleY = heroMaxH / Math.max(srcH, 1);
-        const scale = Math.min(scaleX, scaleY);
-
-        const destCx = vw / 2;
-        const destCy = vh / 2;
-        const dx = destCx - srcCx;
-        const dy = destCy - srcCy;
-
-        // Sprite starts small at source center, grows to ~200px at destination
-        const spriteSizeStart = Math.min(srcW, srcH) * 0.6;
-        const spriteSizeEnd = 200;
-
-        return (
-            <div className="fixed inset-0 z-[100]" style={{
-                backgroundColor: isStart ? 'transparent' : '#faf9f6',
-                transition: 'background-color 600ms ease',
-            }}>
-                {/* Photo growing from source to hero */}
-                <div style={{
-                    position: 'absolute',
-                    left: sourceRect.left,
-                    top: sourceRect.top,
-                    width: srcW,
-                    height: srcH,
-                    transform: isStart
-                        ? 'translate(0, 0) scale(1)'
-                        : `translate(${dx}px, ${dy}px) scale(${scale})`,
-                    transformOrigin: 'center center',
-                    transition: 'transform 800ms cubic-bezier(0.22, 1, 0.36, 1)',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                }}>
-                    {/* Thumbnail immediately, crossfade to preview when loaded */}
-                    <img src={getThumbnailUrl(image.id)} alt=""
-                        className="w-full h-full object-cover"
-                        style={{
-                            opacity: phase === 'settling' && heroLoaded ? 0 : 1,
-                            transition: 'opacity 400ms ease',
-                        }}
-                        draggable={false} />
-                    {heroLoaded && (
-                        <img src={getPreviewUrl(image.id)} alt=""
-                            className="absolute inset-0 w-full h-full object-contain"
-                            style={{
-                                opacity: phase === 'settling' ? 1 : 0,
-                                transition: 'opacity 400ms ease',
-                            }}
-                            draggable={false} />
-                    )}
-                </div>
-
-                {/* Sprite emerging from center of photo, growing alongside */}
-                <div style={{
-                    position: 'absolute',
-                    left: srcCx,
-                    top: srcCy,
-                    transform: isStart
-                        ? 'translate(-50%, -50%) scale(1)'
-                        : `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(${spriteSizeEnd / Math.max(spriteSizeStart, 1)})`,
-                    transformOrigin: 'center center',
-                    transition: 'all 800ms cubic-bezier(0.22, 1, 0.36, 1)',
-                    opacity: phase === 'settling' ? 0 : (isStart ? 0.3 : 0.9),
-                    pointerEvents: 'none',
-                    zIndex: 2,
-                }}>
-                    <MiniSprite image={image} size={spriteSizeStart} />
-                </div>
-
-                {/* Final hero image positioned correctly once settled */}
-                {phase === 'settling' && heroLoaded && (
-                    <div className="absolute inset-0 flex items-center justify-center" style={{
-                        opacity: 1,
-                        animation: 'album-reveal 500ms ease-out forwards',
-                    }}>
-                        <img src={getPreviewUrl(image.id)} alt=""
-                            className="max-w-[92vw] max-h-[85vh] object-contain rounded-lg"
-                            style={{ boxShadow: `0 16px 64px ${palette[0]}30` }}
-                            draggable={false} />
-                    </div>
-                )}
-            </div>
-        );
-    }
-
-    // --- BLOOM MODE: idle → first hero, sprite scatters ---
-    const isStart = phase === 'start';
-    const spriteSize = isStart ? sourceRect.width : 200;
-    const cx = isStart ? sourceRect.left + sourceRect.width / 2 : vw / 2;
-    const cy = isStart ? sourceRect.top + sourceRect.height / 2 : vh / 2;
+    // Sprite position: starts at clicked element center, moves to viewport center
+    const isAtSource = phase === 'start';
+    const spriteSize = isAtSource ? sourceRect.width : 200;
+    const cx = isAtSource ? sourceRect.left + sourceRect.width / 2 : vw / 2;
+    const cy = isAtSource ? sourceRect.top + sourceRect.height / 2 : vh / 2;
 
     return (
         <div className="fixed inset-0 z-[100]" style={{
-            backgroundColor: phase === 'settling' ? '#faf9f6' : 'transparent',
-            transition: 'background-color 400ms ease',
+            backgroundColor: phase === 'hero' ? '#faf9f6' : (phase === 'blooming' ? '#faf9f6cc' : 'transparent'),
+            transition: 'background-color 500ms ease',
         }}>
-            {/* Sprite centering + bloom scatter */}
+            {/* Sprite: moves to center, then blooms apart */}
             <div style={{
                 position: 'absolute',
                 left: cx - spriteSize / 2,
                 top: cy - spriteSize / 2,
                 width: spriteSize,
                 height: spriteSize,
-                transition: 'all 400ms ease-out',
+                transition: 'all 450ms cubic-bezier(0.22, 1, 0.36, 1)',
+                opacity: phase === 'hero' ? 0 : 1,
             }}>
                 <MiniSprite image={image} size={spriteSize}
-                    blooming={phase === 'growing' || phase === 'settling'} />
+                    blooming={phase === 'blooming' || phase === 'hero'} />
             </div>
-            {/* Hero fade-in */}
-            {phase === 'settling' && heroLoaded && (
+
+            {/* Hero image fades in after bloom */}
+            {phase === 'hero' && heroLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center"
                     style={{ animation: 'album-reveal 500ms ease-out forwards' }}>
                     <img src={getPreviewUrl(image.id)} alt=""
@@ -1010,7 +913,6 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
     // Pending image for bloom transition
     const [pendingImage, setPendingImage] = useState<ImageNode | null>(null);
-    const [bloomMode, setBloomMode] = useState<'bloom' | 'grow'>('bloom');
 
     useEffect(() => {
         const update = () => {
@@ -1101,7 +1003,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setTrail((t: TrailPoint[]) => [...t, { id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp }]);
         setPendingImage(image);
         setBloomSourceRect(rect);
-        setBloomMode('bloom');
+
         setFlowPhase('blooming');
     }, []);
 
@@ -1123,7 +1025,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setTrail((t: TrailPoint[]) => [...t, { id: img.id, palette: img.palette, label, timestamp: img.captureTimestamp }]);
         setPendingImage(img);
         setBloomSourceRect(rect);
-        setBloomMode('grow');
+
         setFlowPhase('blooming');
     }, []);
 
@@ -1198,7 +1100,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
             {/* BLOOM OVERLAY */}
             {flowPhase === 'blooming' && pendingImage && bloomSourceRect && (
-                <BloomOverlay image={pendingImage} sourceRect={bloomSourceRect} mode={bloomMode} onComplete={handleBloomComplete} />
+                <BloomOverlay image={pendingImage} sourceRect={bloomSourceRect} onComplete={handleBloomComplete} />
             )}
 
             {/* HERO + TRAITS + ALBUM — single scroll */}
