@@ -611,19 +611,20 @@ const WaterfallAlbum: React.FC<{
         });
     }, [albumImages, isPartial]);
 
-    const rows = useMemo(() => {
-        const tiers = new Map<number, WaterfallNode[]>();
+    const tiers = useMemo(() => {
+        const tierMap = new Map<number, WaterfallNode[]>();
         for (const node of nodes) {
             const tier = node.tagHits;
-            if (!tiers.has(tier)) tiers.set(tier, []);
-            tiers.get(tier)!.push(node);
+            if (!tierMap.has(tier)) tierMap.set(tier, []);
+            tierMap.get(tier)!.push(node);
         }
-        return [...tiers.entries()]
-            .sort((a, b) => b[0] - a[0])
-            .map(([, items]) => items);
+        return [...tierMap.entries()]
+            .sort((a, b) => b[0] - a[0]);
     }, [nodes]);
 
     if (!visible) return null;
+
+    const topTierHits = tiers.length > 0 ? tiers[0][0] : 0;
 
     const handleClick = (img: ImageNode, e: React.MouseEvent) => {
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -642,55 +643,76 @@ const WaterfallAlbum: React.FC<{
                 </span>
             </div>
 
-            {rows.map((row, rowIdx) => {
-                const tierHits = row[0]?.tagHits ?? 0;
+            {tiers.map(([tierHits, row], rowIdx) => {
+                const isTopTier = tierHits === topTierHits && tierHits > 1;
+
                 return (
-                    <div key={rowIdx} className="mb-4">
+                    <div key={rowIdx} className="mb-6">
                         {tierHits > 0 && (
-                            <div className="mb-1.5">
+                            <div className="mb-2">
                                 <span className="text-[8px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                                     {tierHits} {tierHits === 1 ? 'match' : 'matches'}
                                 </span>
                             </div>
                         )}
-                        <div className="flex flex-wrap items-end gap-3">
-                            {row.map((node: WaterfallNode) => {
-                                const showPhoto = node.photoOpacity > 0.05;
-                                const xJitter = (seededRandom(node.image.id + 'xj') - 0.5) * 8;
-
-                                return (
+                        {/* Top tier: two-column grid of large images */}
+                        {isTopTier ? (
+                            <div className="grid grid-cols-2 gap-4">
+                                {row.map((node: WaterfallNode) => (
                                     <div key={node.image.id}
-                                        className="cursor-pointer transition-all duration-500 flex-shrink-0"
-                                        style={{
-                                            width: node.size,
-                                            marginLeft: xJitter,
-                                            animation: `drift ${node.driftDuration}s ease-in-out ${node.driftDelay}s infinite`,
-                                        }}
+                                        className="cursor-pointer transition-all duration-500"
                                         onClick={(e) => handleClick(node.image, e)}>
-                                        {!showPhoto && (
-                                            <div className="flex items-center justify-center" style={{ height: node.size }}>
-                                                <MiniSprite image={node.image} size={node.size * 0.9} convergence={node.relevance} />
-                                            </div>
-                                        )}
-                                        {showPhoto && (
-                                            <div className="relative">
-                                                <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-700"
-                                                    style={{ opacity: 1 - node.photoOpacity * 0.85 }}>
-                                                    <MiniSprite image={node.image} size={node.size * 0.6} convergence={node.relevance} />
-                                                </div>
-                                                <img src={getPreviewUrl(node.image.id)} alt=""
-                                                    className="w-full h-auto rounded-lg transition-opacity duration-700"
-                                                    style={{
-                                                        opacity: node.photoOpacity,
-                                                        boxShadow: `0 ${2 + node.relevance * 6}px ${8 + node.relevance * 16}px rgba(0,0,0,${0.05 + node.relevance * 0.12})`,
-                                                    }}
-                                                    loading="lazy" draggable={false} />
-                                            </div>
-                                        )}
+                                        <img src={getPreviewUrl(node.image.id)} alt=""
+                                            className="w-full h-auto rounded-lg"
+                                            style={{
+                                                boxShadow: `0 8px 24px rgba(0,0,0,${0.08 + node.relevance * 0.12})`,
+                                            }}
+                                            loading="lazy" draggable={false} />
                                     </div>
-                                );
-                            })}
-                        </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap items-end gap-3">
+                                {row.map((node: WaterfallNode) => {
+                                    const showPhoto = node.photoOpacity > 0.05;
+                                    const xJitter = (seededRandom(node.image.id + 'xj') - 0.5) * 8;
+                                    // 2-hit items: sprite fully visible behind photo
+                                    const spriteOpacity = node.tagHits === 2 ? 1 : (1 - node.photoOpacity * 0.85);
+
+                                    return (
+                                        <div key={node.image.id}
+                                            className="cursor-pointer transition-all duration-500 flex-shrink-0"
+                                            style={{
+                                                width: node.size,
+                                                marginLeft: xJitter,
+                                                animation: `drift ${node.driftDuration}s ease-in-out ${node.driftDelay}s infinite`,
+                                            }}
+                                            onClick={(e) => handleClick(node.image, e)}>
+                                            {!showPhoto && (
+                                                <div className="flex items-center justify-center" style={{ height: node.size }}>
+                                                    <MiniSprite image={node.image} size={node.size * 0.9} convergence={node.relevance} />
+                                                </div>
+                                            )}
+                                            {showPhoto && (
+                                                <div className="relative">
+                                                    <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-700"
+                                                        style={{ opacity: spriteOpacity }}>
+                                                        <MiniSprite image={node.image} size={node.size * 0.6} convergence={node.relevance} />
+                                                    </div>
+                                                    <img src={getPreviewUrl(node.image.id)} alt=""
+                                                        className="w-full h-auto rounded-lg transition-opacity duration-700"
+                                                        style={{
+                                                            opacity: node.photoOpacity,
+                                                            boxShadow: `0 ${2 + node.relevance * 6}px ${8 + node.relevance * 16}px rgba(0,0,0,${0.05 + node.relevance * 0.12})`,
+                                                        }}
+                                                        loading="lazy" draggable={false} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 );
             })}
