@@ -189,10 +189,10 @@ const BloomOverlay: React.FC<{
         }
     }, [phase]);
 
-    // hero → complete (once hero image is loaded and visible)
+    // hero → complete (once hero rise animation finishes)
     useEffect(() => {
         if (phase === 'hero' && heroLoaded) {
-            const timer = setTimeout(onComplete, 500);
+            const timer = setTimeout(onComplete, 700);
             return () => clearTimeout(timer);
         }
     }, [phase, heroLoaded, onComplete]);
@@ -201,11 +201,15 @@ const BloomOverlay: React.FC<{
     const vh = window.innerHeight;
     const palette = image.palette.length > 0 ? image.palette : ['#52525b'];
 
+    // Account for header (pt-12 = 48px) so bloom hero matches HeroSection position exactly
+    const headerOffset = 48;
+    const centerY = (vh + headerOffset) / 2;
+
     // Sprite position: starts at clicked element center, moves to viewport center
     const isAtSource = phase === 'start';
     const spriteSize = isAtSource ? sourceRect.width : 200;
     const cx = isAtSource ? sourceRect.left + sourceRect.width / 2 : vw / 2;
-    const cy = isAtSource ? sourceRect.top + sourceRect.height / 2 : vh / 2;
+    const cy = isAtSource ? sourceRect.top + sourceRect.height / 2 : centerY;
 
     return (
         <div className="fixed inset-0 z-[100]" style={{
@@ -226,10 +230,13 @@ const BloomOverlay: React.FC<{
                     blooming={phase === 'blooming' || phase === 'hero'} />
             </div>
 
-            {/* Hero image fades in after bloom */}
+            {/* Hero image rises in after bloom — positioned to match HeroSection exactly */}
             {phase === 'hero' && heroLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center"
-                    style={{ animation: 'album-reveal 500ms ease-out forwards' }}>
+                    style={{
+                        paddingTop: headerOffset,
+                        animation: 'bloom-hero-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
+                    }}>
                     <img src={getPreviewUrl(image.id)} alt=""
                         className="max-w-[92vw] max-h-[85vh] object-contain rounded-lg"
                         style={{ boxShadow: `0 16px 64px ${palette[0]}30` }}
@@ -549,7 +556,7 @@ const TraitSelector: React.FC<{
                             <button key={tagId} onClick={() => onToggleTrait(`tag:${tagId}`)}
                                 className="px-3 py-1 rounded-full text-[11px] cursor-pointer"
                                 style={{
-                                    fontFamily: 'Inter, sans-serif',
+                                    fontFamily: 'JetBrains Mono, monospace',
                                     backgroundColor: 'rgba(0,0,0,0.12)',
                                     color: '#18181b',
                                     outline: '1.5px solid rgba(0,0,0,0.25)',
@@ -630,7 +637,7 @@ const TraitSelector: React.FC<{
                             <button key={tagId} onClick={() => canSelect && onToggleTrait(key)}
                                 className="px-3 py-1 rounded-full text-[11px] transition-all duration-200"
                                 style={{
-                                    fontFamily: 'Inter, sans-serif',
+                                    fontFamily: 'JetBrains Mono, monospace',
                                     backgroundColor: isActive ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
                                     color: isActive ? '#18181b' : '#3f3f46',
                                     outline: isActive ? '1.5px solid rgba(0,0,0,0.25)' : 'none',
@@ -664,7 +671,7 @@ const TraitSelector: React.FC<{
                                 <button key={tagId} onClick={() => canSelect && onToggleTrait(key)}
                                     className="rounded-full transition-all duration-200"
                                     style={{
-                                        fontFamily: 'Inter, sans-serif',
+                                        fontFamily: 'JetBrains Mono, monospace',
                                         fontSize,
                                         paddingLeft: px,
                                         paddingRight: px,
@@ -1154,6 +1161,10 @@ if (typeof document !== 'undefined' && !document.getElementById('proto-flow-kf')
 }
 @keyframes album-reveal {
     from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes bloom-hero-rise {
+    from { opacity: 0; transform: translateY(48px); }
     to { opacity: 1; transform: translateY(0); }
 }`;
     document.head.appendChild(s);
