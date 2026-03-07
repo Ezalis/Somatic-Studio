@@ -596,8 +596,14 @@ const WaterfallAlbum: React.FC<{
 
         return albumImages.slice(0, limit).map((item: AlbumImage) => {
             const relevance = item.tagHits / maxHits;
-            const size = 36 + relevance * 64;
-            const photoOpacity = Math.max(0, Math.min(1, relevance * 1.5 - 0.2));
+            // 1 match = small sprite (40px), top matches = large photo (180px)
+            const size = item.tagHits <= 1
+                ? 40 + seededRandom(item.image.id + 'sz') * 8
+                : 60 + relevance * 120;
+            // 1 match = always sprite (0), 2+ matches = photo fades in with relevance
+            const photoOpacity = item.tagHits <= 1
+                ? 0
+                : Math.max(0, Math.min(1, (relevance - 0.3) * 1.8));
             const driftDuration = 6 + seededRandom(item.image.id + 'wd') * 8;
             const driftDelay = seededRandom(item.image.id + 'wl') * 4;
 
