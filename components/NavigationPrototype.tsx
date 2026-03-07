@@ -282,24 +282,39 @@ const HeroSection: React.FC<{
     const anchorPos = (image.captureTimestamp - minTs) / range;
 
     return (
-        <div className="relative min-h-screen flex flex-col items-center justify-center px-4">
-            {/* Hero image — visible when not flipped */}
-            {!flipped && (
-                <div className="w-full max-w-3xl cursor-pointer" onClick={onFlip}>
-                    <div className="flex items-center justify-center">
-                        <img src={getPreviewUrl(image.id)} alt=""
-                            className="max-w-full max-h-[85vh] object-contain rounded-lg"
-                            style={{ boxShadow: `0 16px 64px ${palette[0]}30, 0 4px 16px ${palette[1] || palette[0]}15` }}
-                            draggable={false} />
+        <div className="relative min-h-screen flex flex-col items-center justify-center px-4"
+            style={{ perspective: '1200px' }}>
+            {/* 3D Card Flip Container */}
+            <div
+                className="w-full cursor-pointer"
+                style={{
+                    transformStyle: 'preserve-3d',
+                    transition: 'transform 600ms ease-in-out',
+                    transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                }}
+                onClick={onFlip}
+            >
+                {/* Front face — Hero image */}
+                <div className="flex items-center justify-center w-full"
+                    style={{ backfaceVisibility: 'hidden' }}>
+                    <div className="w-full max-w-3xl mx-auto">
+                        <div className="flex items-center justify-center">
+                            <img src={getPreviewUrl(image.id)} alt=""
+                                className="max-w-full max-h-[85vh] object-contain rounded-lg"
+                                style={{ boxShadow: `0 16px 64px ${palette[0]}30, 0 4px 16px ${palette[1] || palette[0]}15` }}
+                                draggable={false} />
+                        </div>
                     </div>
                 </div>
-            )}
 
-            {/* Back face — Handwritten details, full page layout near top */}
-            {flipped && (
-                <div className="w-full max-w-lg cursor-pointer pt-8" onClick={onFlip}
-                    style={{ fontFamily: 'Caveat, cursive', alignSelf: 'center', marginTop: '-10vh' }}>
-                    <div className="flex flex-col items-center">
+                {/* Back face — Handwritten details */}
+                <div className="absolute inset-0 flex items-start justify-center pt-8"
+                    style={{
+                        backfaceVisibility: 'hidden',
+                        transform: 'rotateY(180deg)',
+                        fontFamily: 'Caveat, cursive',
+                    }}>
+                    <div className="w-full max-w-lg flex flex-col items-center">
                         {/* Sprite identity */}
                         <MiniSprite image={image} size={80} />
                         <span className="text-zinc-400 mt-2 mb-6" style={{ fontSize: 14 }}>
@@ -431,7 +446,7 @@ const HeroSection: React.FC<{
                         </span>
                     </div>
                 </div>
-            )}
+            </div>
 
             {/* Scroll indicator */}
             <div ref={scrollIndicatorRef} className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 transition-opacity duration-500">
