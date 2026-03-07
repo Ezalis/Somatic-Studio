@@ -330,7 +330,7 @@ const HeroSection: React.FC<{
                                 transform: 'translateX(-50%)',
                             }}>
                                 <span className="text-zinc-500 block text-center whitespace-nowrap" style={{ fontSize: 13 }}>
-                                    {new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                    {new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                 </span>
                                 {/* Hand-drawn line from label to marker */}
                                 <svg width="24" height="18" viewBox="0 0 24 18" className="mx-auto" style={{ overflow: 'visible' }}>
@@ -400,39 +400,16 @@ const HeroSection: React.FC<{
                             )}
                         </div>
 
-                        {/* Palette — hand-drawn swatches */}
-                        <div className="flex gap-4 mb-6">
-                            {palette.slice(0, 5).map((color: string, i: number) => {
-                                const wobble = seededRandom(image.id + 'pw' + i) * 6 - 3;
-                                return (
-                                    <svg key={i} width="28" height="28" viewBox="0 0 28 28">
-                                        <circle cx="14" cy="14" r="11" fill={color}
-                                            stroke={color} strokeWidth="1.5"
-                                            transform={`rotate(${wobble}, 14, 14)`}
-                                            style={{ filter: 'url(#hand-drawn-filter)' }} />
-                                        {/* Rough edge overlay */}
-                                        <circle cx="14" cy="14"
-                                            r={10 + seededRandom(image.id + 'pr' + i) * 2}
-                                            fill="none" stroke={color} strokeWidth="0.8"
-                                            strokeDasharray={`${3 + seededRandom(image.id + 'pd' + i) * 4} ${2 + seededRandom(image.id + 'pg' + i) * 3}`}
-                                            opacity="0.5"
-                                            transform={`rotate(${wobble * 3}, 14, 14)`} />
-                                    </svg>
-                                );
-                            })}
-                        </div>
-
-                        {/* Temporal neighbor thumbnails */}
+                        {/* Temporal neighbor thumbnails — 3 per row, max 3 rows */}
                         {temporalNeighbors.length > 0 && (
-                            <div className="mt-4">
-                                <span className="text-zinc-400 block text-center mb-2" style={{ fontSize: 15 }}>
+                            <div className="mt-4 w-full max-w-sm">
+                                <span className="text-zinc-400 block text-center mb-3" style={{ fontSize: 15 }}>
                                     Same period ({temporalNeighbors.length})
                                 </span>
-                                <div className="flex gap-1.5 flex-wrap justify-center">
-                                    {temporalNeighbors.slice(0, 8).map((s: ScoredImage) => (
+                                <div className="grid grid-cols-3 gap-2 justify-items-center">
+                                    {temporalNeighbors.slice(0, 9).map((s: ScoredImage) => (
                                         <div key={s.image.id}
-                                            className="rounded overflow-hidden cursor-pointer hover:scale-105 transition-transform"
-                                            style={{ width: 40, height: 40 }}
+                                            className="rounded-lg overflow-hidden cursor-pointer hover:scale-105 transition-transform w-full aspect-square"
                                             onClick={(e: React.MouseEvent) => { e.stopPropagation(); onNavigate(s.image); }}>
                                             <img src={getThumbnailUrl(s.image.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
                                         </div>
