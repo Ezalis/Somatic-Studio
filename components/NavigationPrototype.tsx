@@ -381,18 +381,24 @@ const HeroSection: React.FC<{
                             </svg>
                         </div>
 
-                        {/* Technical details — handwritten */}
-                        <div className="space-y-0.5 text-center mb-6">
+                        {/* Technical details — handwritten notes style */}
+                        <div className="space-y-1 text-center mb-6">
                             {image.cameraModel !== 'Unknown Camera' && (
-                                <p className="text-zinc-500" style={{ fontSize: 16 }}>{image.cameraModel}</p>
+                                <p className="text-zinc-600" style={{ fontSize: 18 }}>
+                                    {image.cameraModel}
+                                </p>
                             )}
                             {image.lensModel !== 'Unknown Lens' && (
-                                <p className="text-zinc-500" style={{ fontSize: 16 }}>{image.lensModel}</p>
+                                <p className="text-zinc-500" style={{ fontSize: 16 }}>
+                                    {image.lensModel}
+                                    {image.focalLength ? ` · ${image.focalLength}mm` : ''}
+                                </p>
                             )}
                             <p className="text-zinc-400" style={{ fontSize: 15 }}>
                                 {[
+                                    image.shutterSpeed && image.shutterSpeed !== '--' ? image.shutterSpeed : null,
+                                    image.aperture && image.aperture !== '--' ? image.aperture : null,
                                     image.iso ? `ISO ${image.iso}` : null,
-                                    image.aperture ? `f/${image.aperture}` : null,
                                 ].filter(Boolean).join(' · ')}
                             </p>
                             {image.inferredSeason && (

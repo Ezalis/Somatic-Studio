@@ -70,6 +70,7 @@ interface ImmichAsset {
         fNumber?: number;
         exposureTime?: string;
         iso?: number;
+        focalLength?: number;
         dateTimeOriginal?: string;
     };
     tags?: ImmichTag[];
@@ -192,6 +193,7 @@ export function assetToImageNode(
         aperture: exif.fNumber ? `f/${exif.fNumber}` : '--',
         shutterSpeed,
         iso: exif.iso || 0,
+        focalLength: exif.focalLength || null,
         tagIds,
         aiTagIds: nativeTagIds,
         palette: [], // Populated later via palette extraction

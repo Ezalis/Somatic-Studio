@@ -48,6 +48,7 @@ export interface ImageNode extends SimulationNode {
     aperture: string;
     shutterSpeed: string;
     iso: number;
+    focalLength: number | null; // mm (from EXIF)
 
     // Relational
     tagIds: string[];
