@@ -258,170 +258,158 @@ const HeroSection: React.FC<{
     const maxTs = allTimestamps[allTimestamps.length - 1];
     const range = maxTs - minTs || 1;
     const anchorPos = (image.captureTimestamp - minTs) / range;
-    const anchorDateStr = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
     return (
         <div className="relative min-h-screen flex flex-col items-center justify-center px-4">
-            {/* Card flip container */}
-            <div className="w-full max-w-3xl cursor-pointer" style={{ perspective: '1200px' }}
-                onClick={onFlip}>
-                <div className="relative transition-transform duration-[600ms] ease-in-out"
-                    style={{
-                        transformStyle: 'preserve-3d',
-                        transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-                    }}>
-                    {/* Front face — Hero image */}
-                    <div style={{ backfaceVisibility: 'hidden' }}>
-                        <div className="flex items-center justify-center">
-                            <img src={getPreviewUrl(image.id)} alt=""
-                                className="max-w-full max-h-[85vh] object-contain rounded-lg"
-                                style={{ boxShadow: `0 16px 64px ${palette[0]}30, 0 4px 16px ${palette[1] || palette[0]}15` }}
-                                draggable={false} />
-                        </div>
-                    </div>
-
-                    {/* Back face — Handwritten details */}
-                    <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
-                        <div className="flex flex-col items-center justify-center min-h-[60vh] py-8"
-                            style={{ fontFamily: 'Caveat, cursive' }}>
-                            {/* Sprite identity */}
-                            <MiniSprite image={image} size={80} />
-                            <span className="text-zinc-400 mt-2 mb-6" style={{ fontSize: 14 }}>
-                                Spectral Identity
-                            </span>
-
-                            {/* Date — large handwritten */}
-                            <p className="text-zinc-700 mb-2" style={{ fontSize: 28 }}>
-                                {anchorDateStr}
-                            </p>
-
-                            {/* Timeline with hand-drawn annotation */}
-                            <div className="w-full max-w-md px-4 mb-8 relative" style={{ height: 64 }}>
-                                {/* Hand-drawn date label with line pointing to marker */}
-                                <div className="absolute" style={{
-                                    left: `${anchorPos * 100}%`,
-                                    top: 0,
-                                    transform: 'translateX(-50%)',
-                                }}>
-                                    <span className="text-zinc-500 block text-center whitespace-nowrap" style={{ fontSize: 13 }}>
-                                        {new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                    </span>
-                                    {/* Hand-drawn line from label to marker */}
-                                    <svg width="24" height="18" viewBox="0 0 24 18" className="mx-auto" style={{ overflow: 'visible' }}>
-                                        <path d="M12 0 C11 6, 13 10, 12 18" stroke="#a1a1aa" strokeWidth="1.2" fill="none"
-                                            strokeLinecap="round" strokeDasharray="none" />
-                                    </svg>
-                                </div>
-                                {/* Timeline bar — hand-drawn style */}
-                                <svg className="absolute w-full" style={{ top: 36, left: 0, height: 28 }} viewBox="0 0 400 28" preserveAspectRatio="none">
-                                    {/* Hand-drawn baseline */}
-                                    <path d="M0 14 C20 13.5, 60 14.5, 100 14 C150 13.5, 200 14.5, 250 14 C300 13.5, 350 14.5, 400 14"
-                                        stroke="#d4d4d8" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-                                    {/* Tick marks at year boundaries */}
-                                    {(() => {
-                                        const startYear = new Date(minTs).getFullYear();
-                                        const endYear = new Date(maxTs).getFullYear();
-                                        const ticks: React.ReactNode[] = [];
-                                        for (let y = startYear; y <= endYear; y++) {
-                                            const yearTs = new Date(y, 0, 1).getTime();
-                                            if (yearTs < minTs || yearTs > maxTs) continue;
-                                            const pos = ((yearTs - minTs) / range) * 400;
-                                            ticks.push(
-                                                <g key={y}>
-                                                    <line x1={pos} y1={10} x2={pos + (seededRandom(String(y)) - 0.5) * 2} y2={18}
-                                                        stroke="#a1a1aa" strokeWidth="1" strokeLinecap="round" />
-                                                </g>
-                                            );
-                                        }
-                                        return ticks;
-                                    })()}
-                                </svg>
-                                {/* Year labels */}
-                                <div className="absolute w-full flex justify-between px-1" style={{ top: 50 }}>
-                                    <span className="text-zinc-400" style={{ fontSize: 12 }}>
-                                        {new Date(minTs).getFullYear()}
-                                    </span>
-                                    <span className="text-zinc-400" style={{ fontSize: 12 }}>
-                                        {new Date(maxTs).getFullYear()}
-                                    </span>
-                                </div>
-                                {/* Anchor marker — hand-drawn filled dot */}
-                                <svg className="absolute" style={{
-                                    left: `calc(${anchorPos * 100}% - 6px)`,
-                                    top: 36 + 8,
-                                    width: 12, height: 12,
-                                }}>
-                                    <circle cx="6" cy="6" r="5" fill="#3f3f46" stroke="#3f3f46" strokeWidth="0.5" />
-                                </svg>
-                            </div>
-
-                            {/* Technical details — handwritten */}
-                            <div className="space-y-0.5 text-center mb-6">
-                                {image.cameraModel !== 'Unknown Camera' && (
-                                    <p className="text-zinc-500" style={{ fontSize: 16 }}>{image.cameraModel}</p>
-                                )}
-                                {image.lensModel !== 'Unknown Lens' && (
-                                    <p className="text-zinc-500" style={{ fontSize: 16 }}>{image.lensModel}</p>
-                                )}
-                                <p className="text-zinc-400" style={{ fontSize: 15 }}>
-                                    {[
-                                        image.iso ? `ISO ${image.iso}` : null,
-                                        image.aperture ? `f/${image.aperture}` : null,
-                                    ].filter(Boolean).join(' · ')}
-                                </p>
-                                {image.inferredSeason && (
-                                    <p className="text-zinc-400 italic" style={{ fontSize: 16 }}>{image.inferredSeason}</p>
-                                )}
-                            </div>
-
-                            {/* Palette — hand-drawn swatches */}
-                            <div className="flex gap-4 mb-6">
-                                {palette.slice(0, 5).map((color: string, i: number) => {
-                                    const wobble = seededRandom(image.id + 'pw' + i) * 6 - 3;
-                                    return (
-                                        <svg key={i} width="28" height="28" viewBox="0 0 28 28">
-                                            <circle cx="14" cy="14" r="11" fill={color}
-                                                stroke={color} strokeWidth="1.5"
-                                                transform={`rotate(${wobble}, 14, 14)`}
-                                                style={{ filter: 'url(#hand-drawn-filter)' }} />
-                                            {/* Rough edge overlay */}
-                                            <circle cx="14" cy="14"
-                                                r={10 + seededRandom(image.id + 'pr' + i) * 2}
-                                                fill="none" stroke={color} strokeWidth="0.8"
-                                                strokeDasharray={`${3 + seededRandom(image.id + 'pd' + i) * 4} ${2 + seededRandom(image.id + 'pg' + i) * 3}`}
-                                                opacity="0.5"
-                                                transform={`rotate(${wobble * 3}, 14, 14)`} />
-                                        </svg>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Temporal neighbor thumbnails */}
-                            {temporalNeighbors.length > 0 && (
-                                <div className="mt-4">
-                                    <span className="text-zinc-400 block text-center mb-2" style={{ fontSize: 15 }}>
-                                        Same period ({temporalNeighbors.length})
-                                    </span>
-                                    <div className="flex gap-1.5 flex-wrap justify-center">
-                                        {temporalNeighbors.slice(0, 8).map((s: ScoredImage) => (
-                                            <div key={s.image.id}
-                                                className="rounded overflow-hidden cursor-pointer hover:scale-105 transition-transform"
-                                                style={{ width: 40, height: 40 }}
-                                                onClick={(e: React.MouseEvent) => { e.stopPropagation(); onNavigate(s.image); }}>
-                                                <img src={getThumbnailUrl(s.image.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            <span className="text-zinc-400 mt-8" style={{ fontSize: 14 }}>
-                                tap to flip back
-                            </span>
-                        </div>
+            {/* Hero image — visible when not flipped */}
+            {!flipped && (
+                <div className="w-full max-w-3xl cursor-pointer" onClick={onFlip}>
+                    <div className="flex items-center justify-center">
+                        <img src={getPreviewUrl(image.id)} alt=""
+                            className="max-w-full max-h-[85vh] object-contain rounded-lg"
+                            style={{ boxShadow: `0 16px 64px ${palette[0]}30, 0 4px 16px ${palette[1] || palette[0]}15` }}
+                            draggable={false} />
                     </div>
                 </div>
-            </div>
+            )}
+
+            {/* Back face — Handwritten details, full page layout near top */}
+            {flipped && (
+                <div className="w-full max-w-lg cursor-pointer pt-8" onClick={onFlip}
+                    style={{ fontFamily: 'Caveat, cursive', alignSelf: 'center', marginTop: '-10vh' }}>
+                    <div className="flex flex-col items-center">
+                        {/* Sprite identity */}
+                        <MiniSprite image={image} size={80} />
+                        <span className="text-zinc-400 mt-2 mb-6" style={{ fontSize: 14 }}>
+                            Spectral Identity
+                        </span>
+
+                        {/* Timeline with hand-drawn annotation */}
+                        <div className="w-full max-w-md px-4 mb-8 relative" style={{ height: 64 }}>
+                            {/* Hand-drawn date label with line pointing to marker */}
+                            <div className="absolute" style={{
+                                left: `${anchorPos * 100}%`,
+                                top: 0,
+                                transform: 'translateX(-50%)',
+                            }}>
+                                <span className="text-zinc-500 block text-center whitespace-nowrap" style={{ fontSize: 13 }}>
+                                    {new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                                {/* Hand-drawn line from label to marker */}
+                                <svg width="24" height="18" viewBox="0 0 24 18" className="mx-auto" style={{ overflow: 'visible' }}>
+                                    <path d="M12 0 C11 6, 13 10, 12 18" stroke="#a1a1aa" strokeWidth="1.2" fill="none"
+                                        strokeLinecap="round" strokeDasharray="none" />
+                                </svg>
+                            </div>
+                            {/* Timeline bar — hand-drawn style */}
+                            <svg className="absolute w-full" style={{ top: 36, left: 0, height: 28 }} viewBox="0 0 400 28" preserveAspectRatio="none">
+                                {/* Hand-drawn baseline */}
+                                <path d="M0 14 C20 13.5, 60 14.5, 100 14 C150 13.5, 200 14.5, 250 14 C300 13.5, 350 14.5, 400 14"
+                                    stroke="#d4d4d8" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                                {/* Tick marks at year boundaries */}
+                                {(() => {
+                                    const startYear = new Date(minTs).getFullYear();
+                                    const endYear = new Date(maxTs).getFullYear();
+                                    const ticks: React.ReactNode[] = [];
+                                    for (let y = startYear; y <= endYear; y++) {
+                                        const yearTs = new Date(y, 0, 1).getTime();
+                                        if (yearTs < minTs || yearTs > maxTs) continue;
+                                        const pos = ((yearTs - minTs) / range) * 400;
+                                        ticks.push(
+                                            <g key={y}>
+                                                <line x1={pos} y1={10} x2={pos + (seededRandom(String(y)) - 0.5) * 2} y2={18}
+                                                    stroke="#a1a1aa" strokeWidth="1" strokeLinecap="round" />
+                                            </g>
+                                        );
+                                    }
+                                    return ticks;
+                                })()}
+                            </svg>
+                            {/* Year labels */}
+                            <div className="absolute w-full flex justify-between px-1" style={{ top: 50 }}>
+                                <span className="text-zinc-400" style={{ fontSize: 12 }}>
+                                    {new Date(minTs).getFullYear()}
+                                </span>
+                                <span className="text-zinc-400" style={{ fontSize: 12 }}>
+                                    {new Date(maxTs).getFullYear()}
+                                </span>
+                            </div>
+                            {/* Anchor marker — hand-drawn filled dot */}
+                            <svg className="absolute" style={{
+                                left: `calc(${anchorPos * 100}% - 6px)`,
+                                top: 36 + 8,
+                                width: 12, height: 12,
+                            }}>
+                                <circle cx="6" cy="6" r="5" fill="#3f3f46" stroke="#3f3f46" strokeWidth="0.5" />
+                            </svg>
+                        </div>
+
+                        {/* Technical details — handwritten */}
+                        <div className="space-y-0.5 text-center mb-6">
+                            {image.cameraModel !== 'Unknown Camera' && (
+                                <p className="text-zinc-500" style={{ fontSize: 16 }}>{image.cameraModel}</p>
+                            )}
+                            {image.lensModel !== 'Unknown Lens' && (
+                                <p className="text-zinc-500" style={{ fontSize: 16 }}>{image.lensModel}</p>
+                            )}
+                            <p className="text-zinc-400" style={{ fontSize: 15 }}>
+                                {[
+                                    image.iso ? `ISO ${image.iso}` : null,
+                                    image.aperture ? `f/${image.aperture}` : null,
+                                ].filter(Boolean).join(' · ')}
+                            </p>
+                            {image.inferredSeason && (
+                                <p className="text-zinc-400 italic" style={{ fontSize: 16 }}>{image.inferredSeason}</p>
+                            )}
+                        </div>
+
+                        {/* Palette — hand-drawn swatches */}
+                        <div className="flex gap-4 mb-6">
+                            {palette.slice(0, 5).map((color: string, i: number) => {
+                                const wobble = seededRandom(image.id + 'pw' + i) * 6 - 3;
+                                return (
+                                    <svg key={i} width="28" height="28" viewBox="0 0 28 28">
+                                        <circle cx="14" cy="14" r="11" fill={color}
+                                            stroke={color} strokeWidth="1.5"
+                                            transform={`rotate(${wobble}, 14, 14)`}
+                                            style={{ filter: 'url(#hand-drawn-filter)' }} />
+                                        {/* Rough edge overlay */}
+                                        <circle cx="14" cy="14"
+                                            r={10 + seededRandom(image.id + 'pr' + i) * 2}
+                                            fill="none" stroke={color} strokeWidth="0.8"
+                                            strokeDasharray={`${3 + seededRandom(image.id + 'pd' + i) * 4} ${2 + seededRandom(image.id + 'pg' + i) * 3}`}
+                                            opacity="0.5"
+                                            transform={`rotate(${wobble * 3}, 14, 14)`} />
+                                    </svg>
+                                );
+                            })}
+                        </div>
+
+                        {/* Temporal neighbor thumbnails */}
+                        {temporalNeighbors.length > 0 && (
+                            <div className="mt-4">
+                                <span className="text-zinc-400 block text-center mb-2" style={{ fontSize: 15 }}>
+                                    Same period ({temporalNeighbors.length})
+                                </span>
+                                <div className="flex gap-1.5 flex-wrap justify-center">
+                                    {temporalNeighbors.slice(0, 8).map((s: ScoredImage) => (
+                                        <div key={s.image.id}
+                                            className="rounded overflow-hidden cursor-pointer hover:scale-105 transition-transform"
+                                            style={{ width: 40, height: 40 }}
+                                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); onNavigate(s.image); }}>
+                                            <img src={getThumbnailUrl(s.image.id)} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <span className="text-zinc-400 mt-8" style={{ fontSize: 14 }}>
+                            tap to flip back
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* Scroll indicator */}
             <div ref={scrollIndicatorRef} className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 transition-opacity duration-500">
@@ -1059,7 +1047,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     </div>
 
                     {/* Section 3: Album (appears at 3+ traits) */}
-                    <div style={{ scrollSnapAlign: 'start' }}>
+                    <div>
                         <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
                             onSelect={handleAlbumSelect} />
                     </div>
