@@ -490,13 +490,31 @@ const TraitSelector: React.FC<{
 
     const traitCount = selectedTraits.size;
     const maxTraits = 6;
+    const isFull = traitCount >= maxTraits;
+
+    // Generate stable random fly-away vectors per item
+    const flyAwayStyle = useCallback((seed: string, isActive: boolean): React.CSSProperties => {
+        if (!isFull || isActive) return {};
+        const angle = seededRandom(seed + 'fa') * 360;
+        const dist = 80 + seededRandom(seed + 'fd') * 120;
+        const tx = Math.cos(angle * Math.PI / 180) * dist;
+        const ty = Math.sin(angle * Math.PI / 180) * dist;
+        const rot = (seededRandom(seed + 'fr') - 0.5) * 60;
+        const delay = seededRandom(seed + 'dl') * 200;
+        return {
+            transform: `translate(${tx}px, ${ty}px) rotate(${rot}deg) scale(0.3)`,
+            opacity: 0,
+            transition: `all 600ms cubic-bezier(0.4, 0, 0.2, 1) ${delay}ms`,
+            pointerEvents: 'none' as const,
+        };
+    }, [isFull]);
 
     return (
         <div className="px-6 py-8 max-w-2xl mx-auto">
             {/* Header + counter */}
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-[11px] tracking-[0.2em] uppercase text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    Choose your traits
+                    {isFull ? 'Your traits' : 'Choose your traits'}
                 </h2>
                 <div className="flex items-center gap-2"
                     style={{ animation: pulsing ? 'trait-pulse 300ms ease' : 'none' }}>
@@ -516,8 +534,13 @@ const TraitSelector: React.FC<{
             </div>
 
             {/* Palette row */}
-            <div className="mb-5">
-                <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            <div className="transition-all duration-600 overflow-hidden"
+                style={{
+                    marginBottom: isFull && !palette.slice(0, 5).some(c => selectedTraits.has(`color:${c}`)) ? 0 : 20,
+                    maxHeight: isFull && !palette.slice(0, 5).some(c => selectedTraits.has(`color:${c}`)) ? 0 : 200,
+                }}>
+                <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2 transition-opacity duration-400"
+                    style={{ fontFamily: 'JetBrains Mono, monospace', opacity: isFull ? 0 : 1 }}>
                     Palette
                 </span>
                 <div className="flex gap-3">
@@ -527,7 +550,7 @@ const TraitSelector: React.FC<{
                         const canSelect = traitCount < maxTraits || isActive;
                         return (
                             <button key={i} onClick={() => canSelect && onToggleTrait(key)}
-                                className="rounded-full transition-all duration-200"
+                                className="rounded-full"
                                 style={{
                                     backgroundColor: color,
                                     width: isActive ? 32 : 24,
@@ -536,6 +559,8 @@ const TraitSelector: React.FC<{
                                     outlineOffset: 2,
                                     opacity: canSelect ? 1 : 0.4,
                                     cursor: canSelect ? 'pointer' : 'default',
+                                    transition: 'all 200ms ease',
+                                    ...flyAwayStyle(color, isActive),
                                 }} />
                         );
                     })}
@@ -543,8 +568,13 @@ const TraitSelector: React.FC<{
             </div>
 
             {/* Image tags */}
-            <div className="mb-5">
-                <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            <div className="transition-all duration-600 overflow-hidden"
+                style={{
+                    marginBottom: isFull && !anchorTagIds.some(t => selectedTraits.has(`tag:${t}`)) ? 0 : 20,
+                    maxHeight: isFull && !anchorTagIds.some(t => selectedTraits.has(`tag:${t}`)) ? 0 : 400,
+                }}>
+                <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2 transition-opacity duration-400"
+                    style={{ fontFamily: 'JetBrains Mono, monospace', opacity: isFull ? 0 : 1 }}>
                     This image
                 </span>
                 <div className="flex flex-wrap gap-2">
@@ -555,7 +585,7 @@ const TraitSelector: React.FC<{
                         const canSelect = traitCount < maxTraits || isActive;
                         return (
                             <button key={tagId} onClick={() => canSelect && onToggleTrait(key)}
-                                className="px-3 py-1 rounded-full text-[11px] transition-all duration-200"
+                                className="px-3 py-1 rounded-full text-[11px]"
                                 style={{
                                     fontFamily: 'Inter, sans-serif',
                                     backgroundColor: isActive ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
@@ -564,6 +594,8 @@ const TraitSelector: React.FC<{
                                     fontWeight: isActive ? 600 : 400,
                                     opacity: canSelect ? 1 : 0.4,
                                     cursor: canSelect ? 'pointer' : 'default',
+                                    transition: 'all 200ms ease',
+                                    ...flyAwayStyle(tagId, isActive),
                                 }}>
                                 {label}
                             </button>
@@ -574,8 +606,12 @@ const TraitSelector: React.FC<{
 
             {/* Discovery tags */}
             {discoveryTags.length > 0 && (
-                <div>
-                    <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <div className="transition-all duration-600 overflow-hidden"
+                    style={{
+                        maxHeight: isFull && !discoveryTags.some(d => selectedTraits.has(`tag:${d.tagId}`)) ? 0 : 600,
+                    }}>
+                    <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2 transition-opacity duration-400"
+                        style={{ fontFamily: 'JetBrains Mono, monospace', opacity: isFull ? 0 : 1 }}>
                         Discover nearby
                     </span>
                     <div className="flex flex-wrap gap-2 items-center">
@@ -589,7 +625,7 @@ const TraitSelector: React.FC<{
                             const py = 2 + relevance * 2;
                             return (
                                 <button key={tagId} onClick={() => canSelect && onToggleTrait(key)}
-                                    className="rounded-full transition-all duration-200"
+                                    className="rounded-full"
                                     style={{
                                         fontFamily: 'Inter, sans-serif',
                                         fontSize,
@@ -603,6 +639,8 @@ const TraitSelector: React.FC<{
                                         fontWeight: isActive ? 600 : relevance > 0.7 ? 500 : 400,
                                         opacity: canSelect ? 1 : 0.4,
                                         cursor: canSelect ? 'pointer' : 'default',
+                                        transition: 'all 200ms ease',
+                                        ...flyAwayStyle(tagId, isActive),
                                     }}>
                                     {label}
                                 </button>
