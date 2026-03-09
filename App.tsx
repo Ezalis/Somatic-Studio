@@ -4,7 +4,7 @@ import { initDatabase, clearDatabase, saveTagDefinitions, saveAITagsForFile } fr
 import { hydrateFromImmich, generateClipTags, syncTagsToImmich } from './services/immichService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
-import NavigationPrototype from './components/NavigationPrototype';
+import NavigationPrototype from './components/flow';
 import { LoadingOverlay } from './components/VisualElements';
 import { LayoutGrid, Network, HardDrive, Shield, ShieldAlert, Trash2, RefreshCw } from 'lucide-react';
 
