@@ -32,7 +32,17 @@ App.tsx                       → Root component, global state, view routing
 │   ├── FieldGuideOverlay.tsx → Onboarding overlay explaining the navigation metaphor
 │   ├── Gallery.tsx           → Fullscreen vertical snap-scroll gallery
 │   ├── HistoryTimeline.tsx   → Fullscreen chronological exploration history
-│   ├── NavigationPrototype.tsx → Flow-state navigation prototype (vertical scroll journey)
+│   ├── flow/                     → Flow-state navigation (vertical scroll journey)
+│   │   ├── NavigationPrototype.tsx  → Orchestrator (state machine, scroll layout)
+│   │   ├── MiniSprite.tsx           → SVG sprite with bloom animation
+│   │   ├── BloomOverlay.tsx         → Bloom scatter transition
+│   │   ├── HeroSection.tsx          → Fullscreen hero with 3D card flip
+│   │   ├── TraitSelector.tsx        → Color/tag/discovery-tag picker
+│   │   ├── WaterfallAlbum.tsx       → Tiered album layout
+│   │   ├── IdleField.tsx            → Drifting sprite field
+│   │   ├── flowTypes.ts             → Flow-specific types
+│   │   ├── flowHelpers.ts           → Scoring, color math, seeded random
+│   │   └── flow.css                 → Keyframe animations
 │   ├── ProgressiveImage.tsx  → Preview→full-res crossfade image loader
 │   └── SatelliteLayer.tsx    → Spectral ID + Semantic Web side panels
 ├── hooks/
@@ -230,12 +240,14 @@ Tracked on [GitHub Projects](https://github.com/users/Ezalis/projects/1) with mi
 - [x] **Configure Nginx proxy for Immich** — Nginx upstream keepalive + 7d cache headers for image responses (DockerAdmin repo)
 - [x] **Generate package-lock.json** — Deterministic builds, Docker can use `npm ci`
 
-### M2: Navigation Intelligence (Next)
+### M2: Flow State Navigation (Next)
 
-- [ ] **Score indicator glow halos** — Visual relevance feedback on neighbor sprites (#7)
-- [ ] **Intersection hover cards** — Show shared attributes between anchor and hovered neighbor (#8)
-- [ ] **Keyboard navigation + browser history** — Arrow keys, Enter/Escape, URL state, back button (#9)
-- [ ] **Context-aware panels + temporal thread** — Neighborhood-weighted satellites, timeline strip (#10)
+- [ ] **Decompose NavigationPrototype into production components** — Extract MiniSprite, BloomOverlay, HeroSection, TraitSelector, WaterfallAlbum, IdleField into separate files; reuse `useRelevanceScoring` and `dataService` (#19)
+- [ ] **Integrate flow-state navigation with main app** — Wire components into App.tsx, decide routing (replace Experience or coexist), connect Immich hydration (#20)
+- [ ] **Keyboard navigation + URL state + browser back** — Arrow keys, Enter/Escape, hero ID in URL, history stack (#9)
+- [ ] **Mobile responsive flow-state layout** — Touch targets, bloom perf, trait selector on narrow viewports, album grid sizing (#21)
+- [ ] **Trail/history visualization in flow journey** — Exploration trail within vertical scroll context (#22)
+- [ ] **Show shared-attribute labels on album items** — Surface why each image appears (e.g. "same session", "shared tag: Portrait") (#8)
 
 ### M3: AI Pipeline
 

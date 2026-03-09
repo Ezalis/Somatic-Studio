@@ -1,0 +1,22 @@
+@keyframes drift {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(3px, -4px); }
+    50% { transform: translate(-2px, 3px); }
+    75% { transform: translate(4px, 2px); }
+}
+
+@keyframes scroll-hint-bounce {
+    0%, 100% { transform: translateY(0); opacity: 0.6; }
+    50% { transform: translateY(8px); opacity: 0.9; }
+}
+
+@keyframes trait-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+@keyframes album-reveal {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+}
