@@ -12,10 +12,31 @@ interface TraitSelectorProps {
     albumImages: AlbumImage[];
 }
 
+const SkeletonPill: React.FC<{ width: number; delay: number }> = ({ width, delay }) => (
+    <div className="rounded-full"
+        style={{
+            width, height: 22,
+            backgroundColor: '#d4d4d8',
+            animation: `skeleton-pulse 2s ease-in-out ${delay}s infinite`,
+        }} />
+);
+
+const SkeletonCircle: React.FC<{ size: number; delay: number }> = ({ size, delay }) => (
+    <div className="rounded-full flex-shrink-0"
+        style={{
+            width: size, height: size,
+            backgroundColor: '#d4d4d8',
+            animation: `skeleton-pulse 2s ease-in-out ${delay}s infinite`,
+        }} />
+);
+
 const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, tags, selectedTraits, onToggleTrait, albumImages }) => {
+    const paletteLoading = image.palette.length === 0;
     const palette = image.palette.length > 0 ? image.palette : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
     const anchorTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
     const anchorTagSet = new Set(anchorTagIds);
+    // Tags are loading if image has no AI tags AND global tags haven't arrived yet
+    const tagsLoading = (image.aiTagIds || []).length === 0 && tags.length === 0;
     const [pulsing, setPulsing] = useState(false);
     const prevCount = useRef(selectedTraits.size);
 
@@ -230,24 +251,30 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                     Palette
                 </span>
                 <div className="flex gap-3 py-1">
-                    {palette.slice(0, 5).map((color: string, i: number) => {
-                        const key = `color:${color}`;
-                        const isActive = selectedTraits.has(key);
-                        const canSelect = traitCount < maxTraits || isActive;
-                        return (
-                            <button key={i} onClick={() => canSelect && onToggleTrait(key)}
-                                className="rounded-full transition-all duration-200 flex-shrink-0"
-                                style={{
-                                    backgroundColor: color,
-                                    width: isActive ? 32 : 24,
-                                    height: isActive ? 32 : 24,
-                                    outline: isActive ? '2.5px solid rgba(0,0,0,0.3)' : 'none',
-                                    outlineOffset: 2,
-                                    opacity: canSelect ? 1 : 0.4,
-                                    cursor: canSelect ? 'pointer' : 'default',
-                                }} />
-                        );
-                    })}
+                    {paletteLoading ? (
+                        Array.from({ length: 5 }, (_, i) => (
+                            <SkeletonCircle key={i} size={24} delay={i * 0.15} />
+                        ))
+                    ) : (
+                        palette.slice(0, 5).map((color: string, i: number) => {
+                            const key = `color:${color}`;
+                            const isActive = selectedTraits.has(key);
+                            const canSelect = traitCount < maxTraits || isActive;
+                            return (
+                                <button key={i} onClick={() => canSelect && onToggleTrait(key)}
+                                    className="rounded-full transition-all duration-200 flex-shrink-0"
+                                    style={{
+                                        backgroundColor: color,
+                                        width: isActive ? 32 : 24,
+                                        height: isActive ? 32 : 24,
+                                        outline: isActive ? '2.5px solid rgba(0,0,0,0.3)' : 'none',
+                                        outlineOffset: 2,
+                                        opacity: canSelect ? 1 : 0.4,
+                                        cursor: canSelect ? 'pointer' : 'default',
+                                    }} />
+                            );
+                        })
+                    )}
                 </div>
             </div>
 
@@ -256,22 +283,55 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                 <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     This image
                 </span>
-                <div className="space-y-2">
-                    {categoryOrder.map(cat => {
-                        const items = anchorTagsByCategory.get(cat);
-                        if (!items || items.length === 0) return null;
-                        return (
-                            <div key={cat} className="flex flex-wrap items-center gap-1.5">
-                                {renderCategoryLabel(cat)}
-                                {items.map(({ tagId, label }) => renderTagButton(tagId, label))}
-                            </div>
-                        );
-                    })}
-                </div>
+                {tagsLoading ? (
+                    <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <SkeletonPill width={52} delay={0} />
+                            <SkeletonPill width={68} delay={0.1} />
+                            <SkeletonPill width={44} delay={0.2} />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <SkeletonPill width={60} delay={0.15} />
+                            <SkeletonPill width={76} delay={0.25} />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {categoryOrder.map(cat => {
+                            const items = anchorTagsByCategory.get(cat);
+                            if (!items || items.length === 0) return null;
+                            return (
+                                <div key={cat} className="flex flex-wrap items-center gap-1.5">
+                                    {renderCategoryLabel(cat)}
+                                    {items.map(({ tagId, label }) => renderTagButton(tagId, label))}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             {/* Discovery tags — grouped by category */}
-            {discoveryTagsByCategory.size > 0 && (
+            {tagsLoading ? (
+                <div>
+                    <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        Discover nearby
+                    </span>
+                    <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <SkeletonPill width={56} delay={0.3} />
+                            <SkeletonPill width={72} delay={0.4} />
+                            <SkeletonPill width={48} delay={0.5} />
+                            <SkeletonPill width={64} delay={0.35} />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <SkeletonPill width={44} delay={0.45} />
+                            <SkeletonPill width={80} delay={0.55} />
+                            <SkeletonPill width={56} delay={0.5} />
+                        </div>
+                    </div>
+                </div>
+            ) : discoveryTagsByCategory.size > 0 ? (
                 <div>
                     <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Discover nearby
@@ -292,7 +352,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                         })}
                     </div>
                 </div>
-            )}
+            ) : null}
         </div>
     );
 };

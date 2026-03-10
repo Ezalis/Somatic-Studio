@@ -336,24 +336,13 @@ const App: React.FC = () => {
         setPathname('/');
     };
 
-    if (isInitializing) {
-        return <div className="fixed inset-0 bg-black z-[9999]" />;
+    // Prototype view — renders immediately with skeleton, no black screen or loading counter
+    if (isPrototype) {
+        return <NavigationPrototype images={images} tags={tags} onExit={handleExitPrototype} onPrioritizeAssets={handlePrioritizeAssets} />;
     }
 
-    // Prototype view — completely separate from main app
-    if (isPrototype) {
-        if (loadingProgress) {
-            return (
-                <div className="fixed inset-0 bg-[#faf9f6] flex items-center justify-center">
-                    <div className="text-center">
-                        <p className="text-sm text-zinc-400 tracking-widest uppercase" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            Loading {loadingProgress.current} / {loadingProgress.total > 0 ? loadingProgress.total : '...'}
-                        </p>
-                    </div>
-                </div>
-            );
-        }
-        return <NavigationPrototype images={images} tags={tags} onExit={handleExitPrototype} onPrioritizeAssets={handlePrioritizeAssets} />;
+    if (isInitializing) {
+        return <div className="fixed inset-0 bg-black z-[9999]" />;
     }
 
     // --- RENDERING ---
