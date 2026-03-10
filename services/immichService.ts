@@ -1,4 +1,4 @@
-import { ImageNode, Tag, TagType } from '../types';
+import { ImageNode, Tag, TagType, TagCategory, TAG_CATEGORY_TYPE } from '../types';
 import { extractColorPalette, getSeason, formatShutterSpeed } from './dataService';
 import { getCachedPalette, saveCachedPalette, getCachedAITagsForFile, getCachedTagDefinitions } from './resourceService';
 
@@ -225,6 +225,15 @@ async function extractPaletteFromAsset(assetId: string): Promise<string[]> {
 
 const TAG_PREFIX = 'SomaticStudio/';
 
+// Category prefixes from the Ollama tagging pipeline (e.g. "SomaticStudio/Mood/Contemplative")
+const CATEGORY_MAP: Record<string, TagCategory> = {
+    'Mood': 'mood',
+    'Lighting': 'lighting',
+    'Subject': 'subject',
+    'Setting': 'setting',
+    'Style': 'style',
+};
+
 function buildTagsFromImmichNative(
     assets: ImmichAsset[]
 ): { tags: Tag[]; assetTagMap: Map<string, string[]> } {
@@ -236,18 +245,36 @@ function buildTagsFromImmichNative(
         if (asset.tags) {
             for (const t of asset.tags) {
                 const rawName = t.value || t.name;
-                // Strip SomaticStudio/ prefix if present, otherwise use raw name
-                const label = rawName.startsWith(TAG_PREFIX)
-                    ? rawName.slice(TAG_PREFIX.length)
-                    : rawName;
+                if (!rawName.startsWith(TAG_PREFIX)) continue;
+
+                const afterPrefix = rawName.slice(TAG_PREFIX.length);
+
+                // Parse categorized tags: "Mood/Contemplative" → category=mood, label="Contemplative"
+                const slashIdx = afterPrefix.indexOf('/');
+                let label: string;
+                let category: TagCategory | undefined;
+                let type: TagType = TagType.AI_GENERATED;
+
+                if (slashIdx > 0) {
+                    const catStr = afterPrefix.slice(0, slashIdx);
+                    category = CATEGORY_MAP[catStr];
+                    if (category) {
+                        label = afterPrefix.slice(slashIdx + 1);
+                        type = TAG_CATEGORY_TYPE[category];
+                    } else {
+                        // Unknown category prefix — skip parent nodes like "SomaticStudio/Mood"
+                        continue;
+                    }
+                } else {
+                    // Skip bare parent nodes (e.g. "SomaticStudio/Mood", "SomaticStudio/Lighting")
+                    if (Object.keys(CATEGORY_MAP).includes(afterPrefix)) continue;
+                    // Legacy flat tag without category
+                    label = afterPrefix;
+                }
 
                 const id = createTagId(label);
                 if (!tagMap.has(id)) {
-                    tagMap.set(id, {
-                        id,
-                        label,
-                        type: TagType.AI_GENERATED,
-                    });
+                    tagMap.set(id, { id, label, type, category });
                 }
                 tagIds.push(id);
             }

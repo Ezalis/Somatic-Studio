@@ -42,7 +42,17 @@ export function scoreImageNode(
     sharedTags.forEach(tid => {
         const t = getTagById(tid);
         if (t) {
-            if (t.type === TagType.AI_GENERATED) {
+            // Categorized AI tags (from Ollama pipeline) get weighted by category
+            if (t.category) {
+                if (t.category === 'mood' || t.category === 'style') {
+                    breakdown.thematic += 25;
+                } else if (t.category === 'lighting') {
+                    breakdown.thematic += 20; // Lighting is a creative choice, not just metadata
+                } else {
+                    breakdown.thematic += 20; // subject, setting
+                }
+                meaningfulTagMatches++;
+            } else if (t.type === TagType.AI_GENERATED) {
                 breakdown.thematic += 20;
                 meaningfulTagMatches++;
             } else if (t.type === TagType.QUALITATIVE) {
