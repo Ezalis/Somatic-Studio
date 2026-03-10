@@ -232,7 +232,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
                     {/* Section 2: Traits */}
                     <div id="trait-section" style={{ minHeight: selectedTraits.size >= 6 ? undefined : '60vh', scrollSnapAlign: 'start' }}>
-                        <TraitSelector image={anchor} scored={scored} tagMap={tagMap}
+                        <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
                             selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
                             albumImages={albumPool} />
                     </div>

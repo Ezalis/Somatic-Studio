@@ -1,22 +1,42 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ImageNode } from '../../types';
+import { ImageNode, Tag, TAG_CATEGORIES, TAG_CATEGORY_LABELS, TagCategory } from '../../types';
 import { AlbumImage, ScoredImage } from './flowTypes';
 
 interface TraitSelectorProps {
     image: ImageNode;
     scored: ScoredImage[];
     tagMap: Map<string, string>;
+    tags: Tag[];
     selectedTraits: Set<string>;
     onToggleTrait: (key: string) => void;
     albumImages: AlbumImage[];
 }
 
-const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, selectedTraits, onToggleTrait, albumImages }) => {
+const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, tags, selectedTraits, onToggleTrait, albumImages }) => {
     const palette = image.palette.length > 0 ? image.palette : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
     const anchorTagIds = [...new Set([...image.tagIds, ...(image.aiTagIds || [])])];
     const anchorTagSet = new Set(anchorTagIds);
     const [pulsing, setPulsing] = useState(false);
     const prevCount = useRef(selectedTraits.size);
+
+    // Build tag lookup by id
+    const tagById = useMemo(() => {
+        const map = new Map<string, Tag>();
+        for (const t of tags) map.set(t.id, t);
+        return map;
+    }, [tags]);
+
+    // Group anchor tags by category
+    const anchorTagsByCategory = useMemo(() => {
+        const groups = new Map<TagCategory | 'other', { tagId: string; label: string }[]>();
+        for (const tagId of anchorTagIds) {
+            const tag = tagById.get(tagId);
+            const cat = tag?.category || 'other';
+            if (!groups.has(cat)) groups.set(cat, []);
+            groups.get(cat)!.push({ tagId, label: tag?.label || tagMap.get(tagId) || tagId });
+        }
+        return groups;
+    }, [anchorTagIds, tagById, tagMap]);
 
     // Pulse counter on increment
     useEffect(() => {
@@ -29,8 +49,8 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, se
         prevCount.current = selectedTraits.size;
     }, [selectedTraits.size]);
 
-    // Discovery tags from top 30 scored neighbors
-    const discoveryTags = useMemo((): { tagId: string; count: number; relevance: number }[] => {
+    // Discovery tags from top 30 scored neighbors, grouped by category
+    const discoveryTagsByCategory = useMemo(() => {
         const tagCounts = new Map<string, number>();
         const hasFilters = selectedTraits.size > 0;
         const excludeTags = new Set(anchorTagSet);
@@ -57,16 +77,74 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, se
             .slice(0, limit);
         const maxCount = sorted.length > 0 ? sorted[0][1] : 1;
 
-        return sorted.map(([tagId, count]) => ({
-            tagId,
-            count,
-            relevance: count / maxCount,
-        }));
-    }, [scored, anchorTagSet, selectedTraits, albumImages]);
+        // Group by category
+        const groups = new Map<TagCategory | 'other', { tagId: string; count: number; relevance: number }[]>();
+        for (const [tagId, count] of sorted) {
+            const tag = tagById.get(tagId);
+            const cat = tag?.category || 'other';
+            if (!groups.has(cat)) groups.set(cat, []);
+            groups.get(cat)!.push({ tagId, count, relevance: count / maxCount });
+        }
+        return groups;
+    }, [scored, anchorTagSet, selectedTraits, albumImages, tagById]);
 
     const traitCount = selectedTraits.size;
     const maxTraits = 6;
     const isFull = traitCount >= maxTraits;
+
+    // Shared tag button renderer
+    const renderTagButton = (tagId: string, label: string, opts?: { relevance?: number; dashed?: boolean }) => {
+        const key = `tag:${tagId}`;
+        const isActive = selectedTraits.has(key);
+        const canSelect = traitCount < maxTraits || isActive;
+        const relevance = opts?.relevance;
+        const dashed = opts?.dashed ?? false;
+
+        const fontSize = relevance != null ? 9 + relevance * 4 : 11;
+        const px = relevance != null ? 6 + relevance * 4 : 12;
+        const py = relevance != null ? 2 + relevance * 2 : 4;
+
+        return (
+            <button key={tagId} onClick={() => canSelect && onToggleTrait(key)}
+                className="rounded-full transition-all duration-200"
+                style={{
+                    fontFamily: 'JetBrains Mono, monospace',
+                    fontSize,
+                    paddingLeft: px,
+                    paddingRight: px,
+                    paddingTop: py,
+                    paddingBottom: py,
+                    backgroundColor: isActive
+                        ? 'rgba(0,0,0,0.12)'
+                        : relevance != null
+                            ? `rgba(0,0,0,${0.01 + relevance * 0.04})`
+                            : 'rgba(0,0,0,0.04)',
+                    color: isActive
+                        ? '#18181b'
+                        : relevance != null
+                            ? `rgba(63,63,70,${0.5 + relevance * 0.5})`
+                            : '#3f3f46',
+                    outline: isActive
+                        ? '1.5px solid rgba(0,0,0,0.25)'
+                        : dashed && relevance != null
+                            ? `1px dashed rgba(0,0,0,${0.08 + relevance * 0.12})`
+                            : 'none',
+                    fontWeight: isActive ? 600 : (relevance != null && relevance > 0.7) ? 500 : 400,
+                    opacity: canSelect ? 1 : 0.4,
+                    cursor: canSelect ? 'pointer' : 'default',
+                }}>
+                {label}
+            </button>
+        );
+    };
+
+    // Category section header
+    const renderCategoryLabel = (cat: TagCategory | 'other') => (
+        <span className="text-[8px] tracking-[0.15em] uppercase text-zinc-400 mr-2 flex-shrink-0 self-center"
+            style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            {cat === 'other' ? 'Other' : TAG_CATEGORY_LABELS[cat]}
+        </span>
+    );
 
     // When full: compact row of just the 6 selected traits
     if (isFull) {
@@ -119,6 +197,9 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, se
         );
     }
 
+    // Ordered categories for display
+    const categoryOrder: (TagCategory | 'other')[] = [...TAG_CATEGORIES, 'other'];
+
     return (
         <div className="px-6 py-8 max-w-2xl mx-auto">
             {/* Header + counter */}
@@ -170,70 +251,43 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, se
                 </div>
             </div>
 
-            {/* Image tags */}
+            {/* Image tags — grouped by category */}
             <div className="mb-5">
                 <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     This image
                 </span>
-                <div className="flex flex-wrap gap-2">
-                    {anchorTagIds.map((tagId: string) => {
-                        const label = tagMap.get(tagId) || tagId;
-                        const key = `tag:${tagId}`;
-                        const isActive = selectedTraits.has(key);
-                        const canSelect = traitCount < maxTraits || isActive;
+                <div className="space-y-2">
+                    {categoryOrder.map(cat => {
+                        const items = anchorTagsByCategory.get(cat);
+                        if (!items || items.length === 0) return null;
                         return (
-                            <button key={tagId} onClick={() => canSelect && onToggleTrait(key)}
-                                className="px-3 py-1 rounded-full text-[11px] transition-all duration-200"
-                                style={{
-                                    fontFamily: 'JetBrains Mono, monospace',
-                                    backgroundColor: isActive ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
-                                    color: isActive ? '#18181b' : '#3f3f46',
-                                    outline: isActive ? '1.5px solid rgba(0,0,0,0.25)' : 'none',
-                                    fontWeight: isActive ? 600 : 400,
-                                    opacity: canSelect ? 1 : 0.4,
-                                    cursor: canSelect ? 'pointer' : 'default',
-                                }}>
-                                {label}
-                            </button>
+                            <div key={cat} className="flex flex-wrap items-center gap-1.5">
+                                {renderCategoryLabel(cat)}
+                                {items.map(({ tagId, label }) => renderTagButton(tagId, label))}
+                            </div>
                         );
                     })}
                 </div>
             </div>
 
-            {/* Discovery tags */}
-            {discoveryTags.length > 0 && (
+            {/* Discovery tags — grouped by category */}
+            {discoveryTagsByCategory.size > 0 && (
                 <div>
                     <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Discover nearby
                     </span>
-                    <div className="flex flex-wrap gap-2 items-center">
-                        {discoveryTags.map(({ tagId, relevance }) => {
-                            const label = tagMap.get(tagId) || tagId;
-                            const key = `tag:${tagId}`;
-                            const isActive = selectedTraits.has(key);
-                            const canSelect = traitCount < maxTraits || isActive;
-                            const fontSize = 9 + relevance * 4;
-                            const px = 6 + relevance * 4;
-                            const py = 2 + relevance * 2;
+                    <div className="space-y-2">
+                        {categoryOrder.map(cat => {
+                            const items = discoveryTagsByCategory.get(cat);
+                            if (!items || items.length === 0) return null;
                             return (
-                                <button key={tagId} onClick={() => canSelect && onToggleTrait(key)}
-                                    className="rounded-full transition-all duration-200"
-                                    style={{
-                                        fontFamily: 'JetBrains Mono, monospace',
-                                        fontSize,
-                                        paddingLeft: px,
-                                        paddingRight: px,
-                                        paddingTop: py,
-                                        paddingBottom: py,
-                                        backgroundColor: isActive ? 'rgba(0,0,0,0.12)' : `rgba(0,0,0,${0.01 + relevance * 0.04})`,
-                                        color: isActive ? '#18181b' : `rgba(63,63,70,${0.5 + relevance * 0.5})`,
-                                        outline: isActive ? '1.5px solid rgba(0,0,0,0.25)' : `1px dashed rgba(0,0,0,${0.08 + relevance * 0.12})`,
-                                        fontWeight: isActive ? 600 : relevance > 0.7 ? 500 : 400,
-                                        opacity: canSelect ? 1 : 0.4,
-                                        cursor: canSelect ? 'pointer' : 'default',
-                                    }}>
-                                    {label}
-                                </button>
+                                <div key={cat} className="flex flex-wrap items-center gap-1.5">
+                                    {renderCategoryLabel(cat)}
+                                    {items.map(({ tagId, relevance }) => {
+                                        const label = tagMap.get(tagId) || tagId;
+                                        return renderTagButton(tagId, label, { relevance, dashed: true });
+                                    })}
+                                </div>
                             );
                         })}
                     </div>
