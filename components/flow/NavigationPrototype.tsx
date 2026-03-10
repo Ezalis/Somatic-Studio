@@ -6,6 +6,7 @@ import BloomOverlay from './BloomOverlay';
 import HeroSection from './HeroSection';
 import TraitSelector from './TraitSelector';
 import WaterfallAlbum from './WaterfallAlbum';
+import SpriteBackground from './SpriteBackground';
 import IdleField from './IdleField';
 import './flow.css';
 
@@ -173,20 +174,30 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             if (next.has(key)) next.delete(key);
             else if (next.size < 6) next.add(key);
 
-            // Trigger gentle reveal when going from 5→6 traits
+            // Trigger album phase when going from 5→6 traits
             if (prev.size === 5 && next.size === 6) {
                 setGentleReveal(true);
                 setTimeout(() => setGentleReveal(false), 2000);
+                // Scroll to top and enter album phase
+                if (scrollRef.current) {
+                    scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+                setTimeout(() => setFlowPhase('album'), 500);
+                return next;
             }
-            // Re-trigger if deselecting and re-selecting back to 6
+            // Deselecting from album phase returns to exploring
             if (prev.size === 6 && next.size === 5) {
                 setGentleReveal(false);
+                setFlowPhase('exploring');
+                return next;
             }
 
             return next;
         });
-        setFlowPhase('exploring');
-    }, []);
+        if (flowPhase !== 'album') {
+            setFlowPhase('exploring');
+        }
+    }, [flowPhase]);
 
     const handleClear = useCallback(() => {
         setTrail([]);
@@ -239,21 +250,25 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             )}
 
             {/* HERO + TRAITS + ALBUM — single scroll (render during blooming too, behind overlay) */}
-            {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring') && anchor && (
+            {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
                 <div ref={scrollRef} className="fixed inset-0 pt-12 z-10 overflow-y-auto"
                     style={{ scrollSnapType: 'y proximity', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
 
                     {/* Section 1: Hero — sticky, stays behind traits/album */}
                     <div style={{ position: 'sticky', top: 0, zIndex: 1, minHeight: '100vh' }}>
-                        <HeroSection image={anchor} blur={heroBlur}
-                            heroRevealed={flowPhase !== 'blooming'} />
+                        <HeroSection image={anchor} blur={flowPhase === 'album' ? 4 : heroBlur}
+                            heroRevealed={flowPhase !== 'blooming'}
+                            position={flowPhase === 'album' ? 'bottom' : 'center'} />
                     </div>
+
+                    {/* Sprite background — appears at 3+ traits */}
+                    <SpriteBackground images={albumPool.slice(0, 20).map(a => a.image)}
+                        count={selectedTraits.size < 3 ? 0 : Math.min(20, 4 + (selectedTraits.size - 2) * 6)} />
 
                     {/* Section 2: Traits — scrolls over blurred hero */}
                     <div id="trait-section" style={{
                         position: 'relative',
                         zIndex: 2,
-                        background: '#faf9f6',
                         minHeight: selectedTraits.size >= 6 ? undefined : '60vh',
                         scrollSnapAlign: 'start',
                     }}>
@@ -263,10 +278,20 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     </div>
 
                     {/* Section 3: Album (appears at 3+ traits) */}
-                    <div style={{ position: 'relative', zIndex: 2, background: '#faf9f6' }}>
+                    <div style={{ position: 'relative', zIndex: 2 }}>
                         <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
-                            onSelect={handleAlbumSelect} gentleReveal={gentleReveal} />
+                            onSelect={handleAlbumSelect} gentleReveal={gentleReveal}
+                            isAlbumPhase={flowPhase === 'album'} />
                     </div>
+                </div>
+            )}
+
+            {/* Album phase: compact trait bar at top */}
+            {flowPhase === 'album' && anchor && (
+                <div className="fixed top-12 left-0 right-0 z-50 pointer-events-auto">
+                    <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
+                        selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
+                        albumImages={albumPool} />
                 </div>
             )}
         </div>

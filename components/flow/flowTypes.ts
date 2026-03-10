@@ -1,6 +1,6 @@
 import { ImageNode } from '../../types';
 
-export type FlowPhase = 'idle' | 'blooming' | 'hero' | 'exploring';
+export type FlowPhase = 'idle' | 'blooming' | 'hero' | 'exploring' | 'album';
 
 export interface ScoredImage {
     image: ImageNode;
