@@ -256,14 +256,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
                     {/* Section 1: Hero — sticky, stays behind traits/album */}
                     <div style={{ position: 'sticky', top: 0, zIndex: 1, minHeight: '100vh' }}>
-                        <HeroSection image={anchor} blur={flowPhase === 'album' ? 4 : heroBlur}
-                            heroRevealed={flowPhase !== 'blooming'}
-                            position={flowPhase === 'album' ? 'bottom' : 'center'} />
+                        <HeroSection image={anchor} blur={heroBlur}
+                            heroRevealed={flowPhase !== 'blooming'} />
                     </div>
-
-                    {/* Sprite background — appears at 3+ traits */}
-                    <SpriteBackground images={albumPool.slice(0, 20).map(a => a.image)}
-                        count={selectedTraits.size < 3 ? 0 : Math.min(20, 4 + (selectedTraits.size - 2) * 6)} />
 
                     {/* Section 2: Traits — scrolls over blurred hero */}
                     <div id="trait-section" style={{
@@ -284,6 +279,12 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                             isAlbumPhase={flowPhase === 'album'} />
                     </div>
                 </div>
+            )}
+
+            {/* Sprite background — fixed layer, appears at 3+ traits behind trait selector */}
+            {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
+                <SpriteBackground images={albumPool.slice(0, 20).map(a => a.image)}
+                    count={selectedTraits.size < 3 ? 0 : Math.min(20, 4 + (selectedTraits.size - 2) * 6)} />
             )}
 
             {/* Album phase: compact trait bar at top */}
