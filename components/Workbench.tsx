@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ImageNode, Tag, TagType, ViewMode } from '../types';
 import {
-    Camera, Plus, Search, X, Check, Eraser, AlertCircle, Sparkles, BrainCircuit
+    Camera, Plus, Search, X, Check, Eraser, AlertCircle
 } from 'lucide-react';
 import {
     saveTagsForFile,
@@ -14,9 +14,6 @@ interface WorkbenchProps {
     onUpdateImages: (images: ImageNode[]) => void;
     onAddTag: (newTag: Tag) => void;
     onViewChange: (mode: ViewMode) => void;
-    onRunAIAnalysis: () => void;
-    isAnalyzing: boolean;
-    analysisProgress: number;
 }
 
 const getTagColor = (type: TagType) => {
@@ -35,9 +32,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
     tags,
     onUpdateImages,
     onAddTag,
-    onRunAIAnalysis,
-    isAnalyzing,
-    analysisProgress
 }) => {
     // --- STATE ---
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -228,22 +222,6 @@ const Workbench: React.FC<WorkbenchProps> = ({
                     </div>
                 </div>
 
-                {/* CLIP Smart Search */}
-                <div className="flex items-center gap-3 pl-4 border-l border-zinc-200">
-                     <button
-                        onClick={onRunAIAnalysis}
-                        disabled={isAnalyzing || images.length === 0}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors text-xs font-bold ${isAnalyzing ? 'opacity-70 cursor-wait' : ''}`}
-                        title="Generate CLIP Smart Search tags via Immich"
-                    >
-                        {isAnalyzing ? (
-                             <div className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                            <BrainCircuit size={14} />
-                        )}
-                        <span>{isAnalyzing ? `${analysisProgress}%` : 'CLIP TAGS'}</span>
-                    </button>
-                </div>
             </div>
 
             {/* --- LIST HEADER --- */}
@@ -257,10 +235,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                     <div>Preview</div>
                     <div>Captured</div>
                     <div>Metadata & Tags</div>
-                    <div className="flex items-center gap-2 text-violet-400">
-                        <Sparkles size={10} />
-                        CLIP Tags
-                    </div>
+                    <div className="text-violet-400">AI Tags</div>
                     <div>Technical</div>
                 </div>
             )}
@@ -375,7 +350,7 @@ const Workbench: React.FC<WorkbenchProps> = ({
                                         );
                                     })
                                 ) : (
-                                    <span className="text-[10px] text-zinc-300 italic">No CLIP data</span>
+                                    <span className="text-[10px] text-zinc-300 italic">No AI tags</span>
                                 )}
                             </div>
 
