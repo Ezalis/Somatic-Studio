@@ -518,6 +518,56 @@ export async function enrichWithTagsAndPalettes(
     onTagsReady(allTags, assetTagMap);
 }
 
+// --- On-Demand Tag Enrichment (Priority Fetch) ---
+
+export async function enrichAssetTags(
+    assetIds: string[]
+): Promise<{ tags: Tag[]; assetTagMap: Map<string, string[]> }> {
+    const detailedAssets: ImmichAsset[] = [];
+    for (let i = 0; i < assetIds.length; i += DETAIL_BATCH_SIZE) {
+        const batch = assetIds.slice(i, i + DETAIL_BATCH_SIZE);
+        const details = await Promise.all(
+            batch.map(id => getAssetDetail(id).catch(() => null))
+        );
+        for (const d of details) { if (d) detailedAssets.push(d); }
+    }
+
+    const { tags: nativeTags, assetTagMap } = buildTagsFromImmichNative(detailedAssets);
+
+    // Build technical/seasonal tags
+    const technicalTagMap = new Map<string, Tag>();
+    const ensureTag = (label: string, type: TagType): void => {
+        const id = createTagId(label);
+        if (!technicalTagMap.has(id)) technicalTagMap.set(id, { id, label, type });
+    };
+    for (const asset of detailedAssets) {
+        const exif = asset.exifInfo || {};
+        const captureDate = exif.dateTimeOriginal ? new Date(exif.dateTimeOriginal) : new Date();
+        const validDate = !isNaN(captureDate.getTime()) ? captureDate : new Date();
+        ensureTag(getSeason(validDate), TagType.SEASONAL);
+        let camera = exif.model || exif.make || 'Unknown Camera';
+        let lens = exif.lensModel || 'Unknown Lens';
+        if (lens !== 'Unknown Lens') lens = lens.replace(/^Fujifilm\s+Fujinon\s+/i, '').trim();
+        if (lens === '18.5 mm f/2.8') camera = 'X70';
+        if (camera !== 'Unknown Camera') ensureTag(camera, TagType.TECHNICAL);
+        if (lens !== 'Unknown Lens') ensureTag(lens, TagType.TECHNICAL);
+    }
+
+    // Include cached AI tags for assets with no Immich tags
+    for (const asset of detailedAssets) {
+        const nativeTagIds = assetTagMap.get(asset.id) || [];
+        if (nativeTagIds.length === 0) {
+            const cachedAiTags = getCachedAITagsForFile(asset.id);
+            if (cachedAiTags.length > 0) {
+                assetTagMap.set(asset.id, [...new Set([...nativeTagIds, ...cachedAiTags])]);
+            }
+        }
+    }
+
+    const allTags = [...nativeTags, ...Array.from(technicalTagMap.values())];
+    return { tags: allTags, assetTagMap };
+}
+
 // --- CLIP Smart Search (Supplementary Tagging) ---
 
 interface SmartSearchResult {

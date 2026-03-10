@@ -13,9 +13,10 @@ interface NavigationPrototypeProps {
     images: ImageNode[];
     tags: Tag[];
     onExit: () => void;
+    onPrioritizeAssets?: (assetIds: string[]) => void;
 }
 
-const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags, onExit }) => {
+const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags, onExit, onPrioritizeAssets }) => {
     const [flowPhase, setFlowPhase] = useState<FlowPhase>('idle');
     const [anchorId, setAnchorId] = useState<string | null>(null);
     const [trail, setTrail] = useState<TrailPoint[]>([]);
@@ -57,6 +58,16 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     }, [anchor, images]);
 
     const temporalNeighbors = useMemo(() => scored.filter((s: ScoredImage) => s.isTemporalNeighbor).slice(0, 12), [scored]);
+
+    // Priority-fetch tags for anchor + top neighbors when hero changes
+    const lastPrioritizedId = useRef<string | null>(null);
+    useEffect(() => {
+        if (!anchorId || anchorId === lastPrioritizedId.current || !onPrioritizeAssets) return;
+        lastPrioritizedId.current = anchorId;
+        // Anchor + top 24 scored neighbors (scored uses temporal/camera/color even without tags)
+        const ids = [anchorId, ...scored.slice(0, 24).map((s: ScoredImage) => s.image.id)];
+        onPrioritizeAssets(ids);
+    }, [anchorId, scored, onPrioritizeAssets]);
 
     // Album pool derived from selectedTraits
     const albumPool = useMemo((): AlbumImage[] => {
