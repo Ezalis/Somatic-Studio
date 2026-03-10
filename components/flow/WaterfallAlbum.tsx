@@ -13,6 +13,29 @@ interface WaterfallAlbumProps {
     isAlbumPhase?: boolean;
 }
 
+// Distribute items across the viewport without overlapping too much
+// Returns positions that feel like photos scattered on a surface
+function scatterPositions(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }) {
+    const positions: { x: number; y: number }[] = [];
+    const cols = Math.ceil(Math.sqrt(count * 1.5));
+    const rows = Math.ceil(count / cols);
+    const cellW = (bounds.xMax - bounds.xMin) / cols;
+    const cellH = (bounds.yMax - bounds.yMin) / rows;
+
+    for (let i = 0; i < count; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        // Place in grid cell with jitter
+        const jitterX = (seededRandom(seed + i + 'sx') - 0.5) * cellW * 0.6;
+        const jitterY = (seededRandom(seed + i + 'sy') - 0.5) * cellH * 0.6;
+        positions.push({
+            x: bounds.xMin + (col + 0.5) * cellW + jitterX,
+            y: bounds.yMin + (row + 0.5) * cellH + jitterY,
+        });
+    }
+    return positions;
+}
+
 const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount, onSelect, gentleReveal, isAlbumPhase }) => {
     const isPartial = traitCount >= 3 && traitCount < 6;
     const visible = traitCount >= 3;
@@ -48,13 +71,25 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
             else tier3.push(node);
         }
 
-        // Cap tiers for visual clarity
         return {
-            tier1: tier1.slice(0, 6),
+            tier1: tier1.slice(0, 5),
             tier2: tier2.slice(0, 8),
-            tier3: tier3.slice(0, 12),
+            tier3: tier3.slice(0, 10),
         };
     }, [isAlbumPhase, nodes]);
+
+    // Pre-compute scattered positions for each tier
+    const tierPositions = useMemo(() => {
+        if (!tiers) return null;
+        return {
+            // Tier 1: large photos, spread across center
+            tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 5, xMax: 70, yMin: 15, yMax: 65 }),
+            // Tier 2: smaller photos, wider spread
+            tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 3, xMax: 80, yMin: 10, yMax: 75 }),
+            // Tier 3: sprites scattered everywhere
+            tier3: scatterPositions(tiers.tier3.length, 't3', { xMin: 5, xMax: 85, yMin: 20, yMax: 80 }),
+        };
+    }, [tiers]);
 
     if (!visible) return null;
 
@@ -63,94 +98,82 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         onSelect(img, rect);
     };
 
-    // Album phase: fullscreen tiered layout
-    if (isAlbumPhase && tiers) {
+    // Album phase: photos scattered on a surface
+    if (isAlbumPhase && tiers && tierPositions) {
         return (
-            <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 3 }}>
-                {/* Tier 3: Sprites — lower-middle area */}
-                <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '30vh' }}>
-                    <div className="relative" style={{ width: '80vw', height: '40vh' }}>
-                        {tiers.tier3.map((node, index) => {
-                            const x = seededRandom(node.image.id + 't3x') * 100;
-                            const y = seededRandom(node.image.id + 't3y') * 100;
-                            const spriteSize = 40 + seededRandom(node.image.id + 't3sz') * 20;
-                            return (
-                                <div key={node.image.id}
-                                    className="absolute pointer-events-auto cursor-pointer"
-                                    style={{
-                                        left: `${x}%`,
-                                        top: `${y}%`,
-                                        animation: `gentle-unveil 800ms cubic-bezier(0.22,1,0.36,1) ${index * 60}ms both,
-                                                    drift ${6 + seededRandom(node.image.id + 'td') * 6}s ease-in-out infinite`,
-                                    }}
-                                    onClick={(e) => handleClick(node.image, e)}>
-                                    <MiniSprite image={node.image} size={spriteSize} convergence={node.relevance} />
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
+            <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 15 }}>
+                {/* Tier 3: Sprites — scattered, lowest layer */}
+                {tiers.tier3.map((node, index) => {
+                    const pos = tierPositions.tier3[index];
+                    const spriteSize = 35 + seededRandom(node.image.id + 't3sz') * 25;
+                    return (
+                        <div key={node.image.id}
+                            className="absolute pointer-events-auto cursor-pointer"
+                            style={{
+                                left: `${pos.x}%`,
+                                top: `${pos.y}%`,
+                                zIndex: 1,
+                                animation: `gentle-unveil 800ms cubic-bezier(0.22,1,0.36,1) ${index * 60}ms both`,
+                            }}
+                            onClick={(e) => handleClick(node.image, e)}>
+                            <MiniSprite image={node.image} size={spriteSize} convergence={node.relevance} />
+                        </div>
+                    );
+                })}
 
-                {/* Tier 2: Smaller photo cards — upper-middle */}
-                <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-                    <div className="relative w-full h-full">
-                        {tiers.tier2.map((node, index) => {
-                            const x = 10 + seededRandom(node.image.id + 't2x') * 70;
-                            const y = 20 + seededRandom(node.image.id + 't2y') * 35;
-                            const rotate = (seededRandom(node.image.id + 't2r') - 0.5) * 12;
-                            const cardWidth = 120 + seededRandom(node.image.id + 't2w') * 40;
-                            return (
-                                <div key={node.image.id}
-                                    className="absolute pointer-events-auto cursor-pointer"
-                                    style={{
-                                        left: `${x}%`,
-                                        top: `${y}%`,
-                                        width: cardWidth,
-                                        '--card-rotate': `${rotate}deg`,
-                                        animation: `card-scatter 700ms cubic-bezier(0.22,1,0.36,1) ${400 + index * 60}ms both`,
-                                        filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.12))',
-                                    } as React.CSSProperties}
-                                    onClick={(e) => handleClick(node.image, e)}>
-                                    <img src={getThumbnailUrl(node.image.id)} alt=""
-                                        className="w-full rounded-lg object-cover"
-                                        style={{ aspectRatio: '4/3' }}
-                                        draggable={false} />
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
+                {/* Tier 2: Smaller photo prints — natural aspect ratio */}
+                {tiers.tier2.map((node, index) => {
+                    const pos = tierPositions.tier2[index];
+                    const rotate = (seededRandom(node.image.id + 't2r') - 0.5) * 8;
+                    const cardWidth = 140 + seededRandom(node.image.id + 't2w') * 40;
+                    return (
+                        <div key={node.image.id}
+                            className="absolute pointer-events-auto cursor-pointer"
+                            style={{
+                                left: `${pos.x}%`,
+                                top: `${pos.y}%`,
+                                width: cardWidth,
+                                zIndex: 2,
+                                '--card-rotate': `${rotate}deg`,
+                                animation: `card-scatter 700ms cubic-bezier(0.22,1,0.36,1) ${400 + index * 80}ms both`,
+                            } as React.CSSProperties}
+                            onClick={(e) => handleClick(node.image, e)}>
+                            <div className="bg-white p-1.5 rounded shadow-md"
+                                style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)' }}>
+                                <img src={getThumbnailUrl(node.image.id)} alt=""
+                                    className="w-full rounded-sm"
+                                    draggable={false} />
+                            </div>
+                        </div>
+                    );
+                })}
 
-                {/* Tier 1: Large photo cards — top third */}
-                <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-                    <div className="relative w-full h-full">
-                        {tiers.tier1.map((node, index) => {
-                            const x = 8 + seededRandom(node.image.id + 't1x') * 60;
-                            const y = 5 + seededRandom(node.image.id + 't1y') * 25;
-                            const rotate = (seededRandom(node.image.id + 't1r') - 0.5) * 16;
-                            const cardWidth = 200 + seededRandom(node.image.id + 't1w') * 40;
-                            return (
-                                <div key={node.image.id}
-                                    className="absolute pointer-events-auto cursor-pointer"
-                                    style={{
-                                        left: `${x}%`,
-                                        top: `${y}%`,
-                                        width: cardWidth,
-                                        zIndex: 4,
-                                        '--card-rotate': `${rotate}deg`,
-                                        animation: `card-scatter 700ms cubic-bezier(0.22,1,0.36,1) ${800 + index * 60}ms both`,
-                                        filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.18))',
-                                    } as React.CSSProperties}
-                                    onClick={(e) => handleClick(node.image, e)}>
-                                    <img src={getPreviewUrl(node.image.id)} alt=""
-                                        className="w-full rounded-lg object-cover"
-                                        style={{ aspectRatio: '4/3' }}
-                                        draggable={false} />
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
+                {/* Tier 1: Large photo prints — most prominent */}
+                {tiers.tier1.map((node, index) => {
+                    const pos = tierPositions.tier1[index];
+                    const rotate = (seededRandom(node.image.id + 't1r') - 0.5) * 6;
+                    const cardWidth = 260 + seededRandom(node.image.id + 't1w') * 60;
+                    return (
+                        <div key={node.image.id}
+                            className="absolute pointer-events-auto cursor-pointer"
+                            style={{
+                                left: `${pos.x}%`,
+                                top: `${pos.y}%`,
+                                width: cardWidth,
+                                zIndex: 3,
+                                '--card-rotate': `${rotate}deg`,
+                                animation: `card-scatter 800ms cubic-bezier(0.22,1,0.36,1) ${800 + index * 100}ms both`,
+                            } as React.CSSProperties}
+                            onClick={(e) => handleClick(node.image, e)}>
+                            <div className="bg-white p-2 rounded-md"
+                                style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08)' }}>
+                                <img src={getPreviewUrl(node.image.id)} alt=""
+                                    className="w-full rounded-sm"
+                                    draggable={false} />
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         );
     }
