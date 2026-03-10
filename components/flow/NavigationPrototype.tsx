@@ -272,12 +272,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                             albumImages={albumPool} />
                     </div>
 
-                    {/* Section 3: Album (appears at 3+ traits) */}
-                    <div style={{ position: 'relative', zIndex: 2 }}>
-                        <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
-                            onSelect={handleAlbumSelect} gentleReveal={gentleReveal}
-                            isAlbumPhase={flowPhase === 'album'} />
-                    </div>
+                    {/* Album content only rendered in album phase as fixed overlay */}
                 </div>
             )}
 
@@ -287,13 +282,17 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     count={selectedTraits.size < 3 ? 0 : Math.min(20, 4 + (selectedTraits.size - 2) * 6)} />
             )}
 
-            {/* Album phase: compact trait bar at top */}
+            {/* Album phase: tiered album + compact trait bar */}
             {flowPhase === 'album' && anchor && (
-                <div className="fixed top-12 left-0 right-0 z-50 pointer-events-auto">
-                    <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
-                        selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
-                        albumImages={albumPool} />
-                </div>
+                <>
+                    <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
+                        onSelect={handleAlbumSelect} isAlbumPhase />
+                    <div className="fixed top-12 left-0 right-0 z-50 pointer-events-auto">
+                        <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
+                            selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
+                            albumImages={albumPool} />
+                    </div>
+                </>
             )}
         </div>
     );

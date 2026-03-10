@@ -26,8 +26,8 @@ function scatterPositions(count: number, seed: string, bounds: { xMin: number; x
         const col = i % cols;
         const row = Math.floor(i / cols);
         // Place in grid cell with jitter
-        const jitterX = (seededRandom(seed + i + 'sx') - 0.5) * cellW * 0.6;
-        const jitterY = (seededRandom(seed + i + 'sy') - 0.5) * cellH * 0.6;
+        const jitterX = (seededRandom('X' + seed + i * 7) - 0.5) * cellW * 0.6;
+        const jitterY = (seededRandom('Y' + seed + i * 13) - 0.5) * cellH * 0.6;
         positions.push({
             x: bounds.xMin + (col + 0.5) * cellW + jitterX,
             y: bounds.yMin + (row + 0.5) * cellH + jitterY,
