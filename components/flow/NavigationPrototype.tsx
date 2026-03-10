@@ -249,30 +249,29 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 <BloomOverlay image={pendingImage} sourceRect={bloomSourceRect} onComplete={handleBloomComplete} />
             )}
 
-            {/* HERO + TRAITS + ALBUM — single scroll (render during blooming too, behind overlay) */}
+            {/* HERO — fixed behind everything, unaffected by scroll bounce */}
             {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
-                <div ref={scrollRef} className="fixed inset-0 pt-12 z-10 overflow-y-auto"
-                    style={{ scrollSnapType: 'y proximity', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+                <div className="fixed inset-0 pt-12 z-10">
+                    <HeroSection image={anchor} blur={heroBlur}
+                        heroRevealed={flowPhase !== 'blooming'} />
+                </div>
+            )}
 
-                    {/* Section 1: Hero — sticky, stays behind traits/album */}
-                    <div style={{ position: 'sticky', top: 0, zIndex: 1, minHeight: '100vh' }}>
-                        <HeroSection image={anchor} blur={heroBlur}
-                            heroRevealed={flowPhase !== 'blooming'} />
-                    </div>
+            {/* TRAITS — scrollable layer above hero */}
+            {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
+                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto">
+                    {/* Spacer: first screen is transparent, showing hero behind */}
+                    <div style={{ minHeight: '100vh', pointerEvents: 'none' }} />
 
-                    {/* Section 2: Traits — scrolls over blurred hero */}
+                    {/* Trait section scrolls up over the hero */}
                     <div id="trait-section" style={{
                         position: 'relative',
-                        zIndex: 2,
                         minHeight: selectedTraits.size >= 6 ? undefined : '60vh',
-                        scrollSnapAlign: 'start',
                     }}>
                         <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
                             selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
                             albumImages={albumPool} />
                     </div>
-
-                    {/* Album content only rendered in album phase as fixed overlay */}
                 </div>
             )}
 
