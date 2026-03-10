@@ -1,6 +1,6 @@
 import { ImageNode, Tag, TagType, TagCategory, TAG_CATEGORY_TYPE } from '../types';
 import { extractColorPalette, getSeason, formatShutterSpeed } from './dataService';
-import { getCachedPalette, saveCachedPalette, getCachedAITagsForFile, getCachedTagDefinitions } from './resourceService';
+import { getCachedPalette, getCachedPaletteSync, saveCachedPalette, getCachedAITagsForFile, getCachedTagDefinitions } from './resourceService';
 
 const ALBUM_NAME = 'SomaticStudio';
 const API_BASE = '/api/immich';
@@ -411,6 +411,111 @@ export async function hydrateFromImmich(
         images: allNodes.sort((a, b) => a.captureTimestamp - b.captureTimestamp),
         tags: allTags,
     };
+}
+
+// --- Two-Phase Hydration (Prototype Fast Path) ---
+
+export async function hydrateSkeletonFromImmich(
+    onBatchLoaded: (nodes: ImageNode[]) => void
+): Promise<{ skeletonNodes: ImageNode[]; albumAssets: ImmichAsset[] }> {
+    const albumId = await findAlbum();
+    const assets = await getAlbumAssets(albumId);
+
+    const nodes: ImageNode[] = [];
+    for (const asset of assets) {
+        const node = assetToImageNode(asset, [], []);
+        const cached = getCachedPaletteSync(asset.id);
+        if (cached) node.palette = cached;
+        nodes.push(node);
+    }
+
+    onBatchLoaded(nodes);
+    return { skeletonNodes: nodes, albumAssets: assets };
+}
+
+export async function enrichWithTagsAndPalettes(
+    assets: ImmichAsset[],
+    onTagsReady: (tags: Tag[], assetTagMap: Map<string, string[]>) => void,
+    onPaletteUpdate: (updates: { id: string; palette: string[] }[]) => void
+): Promise<void> {
+    // 1. Extract palettes for uncached images (first load only)
+    const uncachedAssets = assets.filter(a => !getCachedPaletteSync(a.id));
+    if (uncachedAssets.length > 0) {
+        for (let i = 0; i < uncachedAssets.length; i += PALETTE_BATCH_SIZE) {
+            const batch = uncachedAssets.slice(i, i + PALETTE_BATCH_SIZE);
+            const results = await Promise.all(
+                batch.map(async a => {
+                    try {
+                        const palette = await extractPaletteFromAsset(a.id);
+                        return { id: a.id, palette };
+                    } catch {
+                        return { id: a.id, palette: [] as string[] };
+                    }
+                })
+            );
+            const valid = results.filter(r => r.palette.length > 0);
+            if (valid.length > 0) onPaletteUpdate(valid);
+            await new Promise(resolve => setTimeout(resolve, 20));
+        }
+    }
+
+    // 2. Fetch asset details for tags in batches
+    const detailedAssets: ImmichAsset[] = [];
+    for (let i = 0; i < assets.length; i += DETAIL_BATCH_SIZE) {
+        const batch = assets.slice(i, i + DETAIL_BATCH_SIZE);
+        const details = await Promise.all(
+            batch.map(a => getAssetDetail(a.id).catch(() => a))
+        );
+        detailedAssets.push(...details);
+    }
+
+    // 3. Build tags
+    const { tags: nativeTags, assetTagMap } = buildTagsFromImmichNative(detailedAssets);
+
+    // Build technical/seasonal tags
+    const technicalTagMap = new Map<string, Tag>();
+    const ensureTag = (label: string, type: TagType): string => {
+        const id = createTagId(label);
+        if (!technicalTagMap.has(id)) {
+            technicalTagMap.set(id, { id, label, type });
+        }
+        return id;
+    };
+
+    for (const asset of detailedAssets) {
+        const exif = asset.exifInfo || {};
+        const captureDate = exif.dateTimeOriginal ? new Date(exif.dateTimeOriginal) : new Date();
+        const validDate = !isNaN(captureDate.getTime()) ? captureDate : new Date();
+        ensureTag(getSeason(validDate), TagType.SEASONAL);
+
+        let camera = exif.model || exif.make || 'Unknown Camera';
+        let lens = exif.lensModel || 'Unknown Lens';
+        if (lens !== 'Unknown Lens') lens = lens.replace(/^Fujifilm\s+Fujinon\s+/i, '').trim();
+        if (lens === '18.5 mm f/2.8') camera = 'X70';
+
+        if (camera !== 'Unknown Camera') ensureTag(camera, TagType.TECHNICAL);
+        if (lens !== 'Unknown Lens') ensureTag(lens, TagType.TECHNICAL);
+    }
+
+    // Merge cached AI tag definitions
+    const cachedDefs = getCachedTagDefinitions().filter(t => t.type === TagType.AI_GENERATED);
+    const tagIdSet = new Set([...nativeTags.map(t => t.id), ...Array.from(technicalTagMap.keys())]);
+    const restoredDefs = cachedDefs.filter(t => !tagIdSet.has(t.id));
+
+    const allTags = [...nativeTags, ...Array.from(technicalTagMap.values()), ...restoredDefs];
+
+    // Also enrich assetTagMap with cached AI tags for assets with no Immich tags
+    for (const asset of detailedAssets) {
+        const nativeTagIds = assetTagMap.get(asset.id) || [];
+        if (nativeTagIds.length === 0) {
+            const cachedAiTags = getCachedAITagsForFile(asset.id);
+            if (cachedAiTags.length > 0) {
+                assetTagMap.set(asset.id, [...new Set([...nativeTagIds, ...cachedAiTags])]);
+            }
+        }
+    }
+
+    onTagsReady(allTags, assetTagMap);
 }
 
 // --- CLIP Smart Search (Supplementary Tagging) ---

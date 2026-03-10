@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ViewMode, ExperienceMode, ImageNode, Tag, AnchorState, ExperienceContext } from './types';
 import { initDatabase, clearDatabase, saveTagDefinitions, saveAITagsForFile } from './services/resourceService';
-import { hydrateFromImmich, generateClipTags, syncTagsToImmich } from './services/immichService';
+import { hydrateFromImmich, hydrateSkeletonFromImmich, enrichWithTagsAndPalettes, generateClipTags, syncTagsToImmich } from './services/immichService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
 import NavigationPrototype from './components/flow';
@@ -36,9 +36,75 @@ const App: React.FC = () => {
     useEffect(() => {
         let cancelled = false; // Prevent StrictMode double-run from racing
 
-        const init = async () => {
-            await initDatabase();
+        const mergeImageBatch = (newBatch: ImageNode[]) => {
+            if (cancelled) return;
+            setImages(prev => {
+                const prevMap = new Map(prev.map(i => [i.id, i]));
+                let changed = false;
+                for (const node of newBatch) {
+                    const existing = prevMap.get(node.id);
+                    if (!existing) {
+                        prevMap.set(node.id, node);
+                        changed = true;
+                    } else if (node.palette.length > 0 && existing.palette.length === 0) {
+                        prevMap.set(node.id, { ...existing, palette: node.palette });
+                        changed = true;
+                    }
+                }
+                if (!changed) return prev;
+                return Array.from(prevMap.values()).sort((a, b) => a.captureTimestamp - b.captureTimestamp);
+            });
+        };
 
+        const initPrototype = async () => {
+            await initDatabase();
+            if (cancelled) return;
+            setLoadingProgress({ current: 0, total: 0 });
+            setIsInitializing(false);
+
+            try {
+                // Phase 1: skeleton with cached palettes — renders IdleField immediately
+                const { albumAssets } = await hydrateSkeletonFromImmich(mergeImageBatch);
+                if (cancelled) return;
+                setLoadingProgress(null);
+
+                // Phase 2: background enrichment (palettes + tags)
+                await enrichWithTagsAndPalettes(
+                    albumAssets,
+                    (enrichedTags, assetTagMap) => {
+                        if (cancelled) return;
+                        setTags(enrichedTags);
+                        saveTagDefinitions(enrichedTags);
+                        setImages(prev => prev.map(img => {
+                            const aiTagIds = assetTagMap.get(img.id);
+                            return aiTagIds && aiTagIds.length > 0 ? { ...img, aiTagIds } : img;
+                        }));
+                    },
+                    (paletteUpdates) => {
+                        if (cancelled) return;
+                        setImages(prev => {
+                            const map = new Map(prev.map(i => [i.id, i]));
+                            let changed = false;
+                            for (const u of paletteUpdates) {
+                                const existing = map.get(u.id);
+                                if (existing && existing.palette.length === 0) {
+                                    map.set(u.id, { ...existing, palette: u.palette });
+                                    changed = true;
+                                }
+                            }
+                            if (!changed) return prev;
+                            return Array.from(map.values());
+                        });
+                    }
+                );
+            } catch (e) {
+                console.error("Failed to hydrate from Immich (prototype)", e);
+                if (!cancelled) setLoadingProgress(null);
+            }
+        };
+
+        const initFull = async () => {
+            await initDatabase();
             if (cancelled) return;
             setLoadingProgress({ current: 0, total: 0 });
             setIsInitializing(false);
@@ -48,25 +114,7 @@ const App: React.FC = () => {
                     (current, total) => {
                         if (!cancelled) setLoadingProgress({ current, total });
                     },
-                    (newBatch) => {
-                        if (cancelled) return;
-                        setImages(prev => {
-                            const prevMap = new Map(prev.map(i => [i.id, i]));
-                            let changed = false;
-                            for (const node of newBatch) {
-                                const existing = prevMap.get(node.id);
-                                if (!existing) {
-                                    prevMap.set(node.id, node);
-                                    changed = true;
-                                } else if (node.palette.length > 0 && existing.palette.length === 0) {
-                                    prevMap.set(node.id, { ...existing, palette: node.palette });
-                                    changed = true;
-                                }
-                            }
-                            if (!changed) return prev;
-                            return Array.from(prevMap.values()).sort((a, b) => a.captureTimestamp - b.captureTimestamp);
-                        });
-                    }
+                    mergeImageBatch
                 );
 
                 if (cancelled) return;
@@ -79,7 +127,12 @@ const App: React.FC = () => {
                 if (!cancelled) setLoadingProgress(null);
             }
         };
-        init();
+
+        if (window.location.pathname === '/prototype') {
+            initPrototype();
+        } else {
+            initFull();
+        }
 
         return () => { cancelled = true; };
     }, []);
