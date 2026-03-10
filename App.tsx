@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ViewMode, ExperienceMode, ImageNode, Tag, AnchorState, ExperienceContext } from './types';
-import { initDatabase, clearDatabase, saveTagDefinitions, saveAITagsForFile } from './services/resourceService';
-import { hydrateFromImmich, hydrateSkeletonFromImmich, enrichWithTagsAndPalettes, enrichAssetTags, generateClipTags, syncTagsToImmich } from './services/immichService';
+import { initDatabase, clearDatabase, saveTagDefinitions } from './services/resourceService';
+import { hydrateFromImmich, hydrateSkeletonFromImmich, enrichWithTagsAndPalettes, enrichAssetTags } from './services/immichService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
 import NavigationPrototype from './components/flow';
@@ -16,11 +16,6 @@ const App: React.FC = () => {
     const [tags, setTags] = useState<Tag[]>([]);
     const [loadingProgress, setLoadingProgress] = useState<{current: number, total: number} | null>(null);
     const [isInitializing, setIsInitializing] = useState(true);
-
-    // AI State (CLIP Smart Search)
-    const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
-    const [analysisProgress, setAnalysisProgress] = useState(0);
-    const [shouldAutoRunClip, setShouldAutoRunClip] = useState(false);
 
     // Experience State
     const [experienceAnchor, setExperienceAnchor] = useState<AnchorState>({ mode: 'NONE', id: '' });
@@ -249,77 +244,6 @@ const App: React.FC = () => {
         setExperienceAnchor({ mode: 'COLOR', id: colorHex, meta: colorHex });
     };
 
-    // --- AUTO-CLIP TRIGGER ---
-    useEffect(() => {
-        if (shouldAutoRunClip && images.length > 0 && !isAIAnalyzing && !loadingProgress) {
-            setShouldAutoRunClip(false);
-            runClipAnalysis(images);
-        }
-    }, [shouldAutoRunClip, images, isAIAnalyzing, loadingProgress]);
-
-    // --- CLIP SMART SEARCH ---
-    const runClipAnalysis = async (batchToProcess: ImageNode[]) => {
-
-        setIsAIAnalyzing(true);
-        setAnalysisProgress(0);
-
-        try {
-            const assetIds = batchToProcess.map(img => img.id);
-            const { tags: clipTags, assetTagMap } = await generateClipTags(assetIds, (completed, total) => {
-                setAnalysisProgress(Math.round((completed / total) * 100));
-            });
-
-            const newTagsToAdd: Tag[] = [];
-            clipTags.forEach(t => {
-                if (!tags.some(existing => existing.id === t.id) && !newTagsToAdd.some(pending => pending.id === t.id)) {
-                    newTagsToAdd.push(t);
-                }
-            });
-
-            const updatedImages = images.map(img => {
-                const clipTagIds = assetTagMap.get(img.id);
-                if (clipTagIds && clipTagIds.length > 0) {
-                    const mergedAiTags = [...new Set([...(img.aiTagIds || []), ...clipTagIds])];
-                    saveAITagsForFile(img.id, mergedAiTags);
-                    return { ...img, aiTagIds: mergedAiTags };
-                }
-                return img;
-            });
-
-            if (newTagsToAdd.length > 0) {
-                const mergedTags = [...tags, ...newTagsToAdd];
-                setTags(mergedTags);
-                await saveTagDefinitions(mergedTags);
-            }
-
-            setImages(updatedImages);
-
-            // Sync CLIP tags to Immich for cross-device persistence
-            syncTagsToImmich(clipTags, assetTagMap).catch(e =>
-                console.error('Background Immich sync failed:', e)
-            );
-
-        } catch (error) {
-            console.error("CLIP Analysis Failed", error);
-            alert("CLIP analysis interrupted. Please check console.");
-        } finally {
-            setIsAIAnalyzing(false);
-            setAnalysisProgress(0);
-        }
-    };
-
-    const handleRunClipAnalysis = async () => {
-        if (images.length === 0) return;
-
-        const unanalyzedImages = images.filter(img => !img.aiTagIds || img.aiTagIds.length === 0);
-
-        if (unanalyzedImages.length > 0) {
-            runClipAnalysis(unanalyzedImages);
-        } else if (window.confirm("All images have CLIP tags. Re-analyze everything?")) {
-            runClipAnalysis(images);
-        }
-    };
-
     // --- SIMPLE ROUTE STATE ---
     const [pathname, setPathname] = useState(window.location.pathname);
 
@@ -429,9 +353,6 @@ const App: React.FC = () => {
                         onUpdateImages={handleUpdateImages}
                         onAddTag={handleAddTag}
                         onViewChange={setViewMode}
-                        onRunAIAnalysis={handleRunClipAnalysis}
-                        isAnalyzing={isAIAnalyzing}
-                        analysisProgress={analysisProgress}
                     />
                 ) : (
                     <Experience
@@ -446,8 +367,6 @@ const App: React.FC = () => {
                         onExperienceModeChange={setExperienceMode}
                         nsfwFilterActive={nsfwFilterActive}
                         loadingProgress={loadingProgress}
-                        isAIAnalyzing={isAIAnalyzing}
-                        analysisProgress={analysisProgress}
                     />
                 )}
             </main>

@@ -9,7 +9,7 @@ A photography asset management and discovery system — a "living web of memory,
 | Framework | React 19, TypeScript 5.8 |
 | Styling | Tailwind CSS v4 (build-time via `@tailwindcss/vite`) |
 | Physics/Layout | D3.js 7.9 (force simulation) |
-| Image Service | Immich (docker-01:2283) — images, EXIF, ML tags, CLIP Smart Search |
+| Image Service | Immich (docker-01:2283) — images, EXIF, tags |
 | Icons | Lucide React |
 | Build | Vite 6 |
 | Linting | ESLint + typescript-eslint (errors-only config) |
@@ -51,7 +51,7 @@ App.tsx                       → Root component, global state, view routing
 │   └── __tests__/
 │       └── useRelevanceScoring.test.ts → Scoring engine test suite
 ├── services/
-│   ├── immichService.ts      → Immich API: album discovery, asset loading, CLIP Smart Search
+│   ├── immichService.ts      → Immich API: album discovery, asset loading, tag reading
 │   ├── dataService.ts        → Color palette extraction, color math, relationship scoring
 │   └── resourceService.ts    → IndexedDB persistence (palette cache, user tag edits)
 ├── scripts/
@@ -84,17 +84,15 @@ App.tsx                       → Root component, global state, view routing
 - **Search** — Full-text across filenames, tags, camera/lens models
 - **Multi-Select** — Click, Shift+Click range, Cmd+Click toggle
 - **Batch Operations** — Add/remove tags across selection
-- **AI Analysis** — CLIP Smart Search tagging (35 labels across subject/setting/lighting/mood/content categories)
 - **Export** — Download tags.json and AI-tags.json
 
 ## Data Flow
 
 1. **Initialization** — `initDatabase()` loads IndexedDB palette cache and user tag edits
-2. **Hydration** — `hydrateFromImmich()` finds "SomaticStudio" album → fetches assets with EXIF → reads native ML tags → builds ImageNodes → extracts palettes from thumbnails (batches of 4)
+2. **Hydration** — `hydrateFromImmich()` finds "SomaticStudio" album → fetches assets with EXIF → reads `SomaticStudio/*` tags → builds ImageNodes → extracts palettes from thumbnails (batches of 4)
 3. **Scoring** — When an anchor changes, images are scored by temporal/semantic/visual/technical similarity
 4. **Physics** — D3 force simulation positions nodes; top 12 by score become visible neighbors
-5. **CLIP Tagging** — On-demand via Workbench "CLIP TAGS" button: queries Immich Smart Search for 35 semantic labels (portrait/editorial-optimized, top-5 position cutoff, 30% penetration limit)
-6. **Persistence** — Manual tag edits + palette cache saved to IndexedDB
+5. **Persistence** — Manual tag edits + palette cache saved to IndexedDB
 
 ## Image Proxy
 
@@ -156,7 +154,7 @@ Docker infrastructure lives in the DockerAdmin repo at `compose-templates/somati
 Migrated from local gallery + Gemini AI to Immich image service:
 - Images served from Immich (docker-01:2283) "SomaticStudio" album, not `public/gallery/`
 - EXIF metadata from Immich API, not client-side `exifr` extraction
-- AI tagging via Immich CLIP Smart Search, replacing Gemini
+- AI tagging originally via Immich CLIP Smart Search (removed 2026-03-10, replaced by Ollama pipeline)
 - Removed `exifr`, `@google/genai`, process shim plugin
 - API key injected server-side via proxy (Vite dev / Nginx prod)
 
@@ -173,15 +171,17 @@ Migrated original Gemini AI tags from `main:public/resources/AI-tags.json` into 
 - 2 unmatched files: `F38245A5-...` and `Petite LeMans-41 Edited.jpg` (not in Immich album)
 - Script ran inside `somatic-dev` Docker container (Node v22) on docker-01 since no local Node.js installed
 - Bug fix applied between runs: Immich GET /tags returns `{name: "Portrait", value: "SomaticStudio/Portrait"}` — first run matched on `name` only, missing 17 existing CLIP tags; fixed to index by both `name` and `value`
-- Immich now contains `SomaticStudio/*` tags from both legacy Gemini data and CLIP Smart Search
+- Immich contains `SomaticStudio/*` tags from legacy Gemini data, former CLIP Smart Search, and Ollama pipeline
 - `buildTagsFromImmichNative` reads all Immich tags (strips `SomaticStudio/` prefix if present)
 - Immich-first hydration: tags from Immich take priority, IndexedDB cache only used as fallback when Immich has zero tags for an asset
 
-### 2026-03-01: CLIP Tag Revision
-- Expanded from 27 to 35 CLIP tag definitions optimized for portrait/editorial collection
-- Categories: Subject (8), Setting (5), Lighting & Technique (10), Mood & Atmosphere (6), Content & Visual (6)
-- Tighter search params: `size: 10`, top-5 position cutoff, 30% penetration limit
-- Tags written back to Immich as `SomaticStudio/*` via `syncTagsToImmich()`
+### 2026-03-10: CLIP Smart Search Removed
+- Removed `CLIP_TAG_DEFINITIONS`, `generateClipTags()`, `syncTagsToImmich()` from `immichService.ts`
+- Removed CLIP TAGS button from Workbench, AI analyzing state/UI from App.tsx and Experience.tsx
+- Immich ML container (`immich-machine-learning`) disabled and removed from docker-01
+- Existing `SomaticStudio/*` tags in Immich preserved — readable via `buildTagsFromImmichNative()`
+- `aiTagIds` field kept on ImageNode for Ollama pipeline (M3)
+- Tagging strategy replaced by Ollama on MacBook Air (llava + llama3.1)
 
 ### 2026-03-02: M1 Structural Foundation
 Refactored Experience.tsx from a monolithic ~2000-line component into clean modules:
@@ -236,7 +236,7 @@ Tracked on [GitHub Projects](https://github.com/users/Ezalis/projects/1) with mi
 ### Completed
 
 - [x] **M1: Structural Foundation** — Scoring engine, physics simulation, UI component extraction, ESLint, Vitest, package-lock.json (#1–#6)
-- [x] **Replace Gemini with Immich CLIP Smart Search** — Immich provides ML auto-tags and CLIP semantic search, eliminating the Google API dependency
+- [x] **Replace Gemini with Immich CLIP Smart Search** — Eliminated Google API dependency (CLIP later removed in favor of Ollama)
 - [x] **Configure Nginx proxy for Immich** — Nginx upstream keepalive + 7d cache headers for image responses (DockerAdmin repo)
 - [x] **Generate package-lock.json** — Deterministic builds, Docker can use `npm ci`
 
