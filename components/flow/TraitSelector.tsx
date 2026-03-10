@@ -75,9 +75,6 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
         const tagCounts = new Map<string, number>();
         const hasFilters = selectedTraits.size > 0;
         const excludeTags = new Set(anchorTagSet);
-        for (const key of selectedTraits) {
-            if (key.startsWith('tag:')) excludeTags.add(key.slice(4));
-        }
 
         const sourceImages = hasFilters && albumImages.length > 0
             ? albumImages.map((a: AlbumImage) => a.image)
