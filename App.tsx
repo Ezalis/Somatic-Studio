@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ViewMode, ExperienceMode, ImageNode, Tag, AnchorState, ExperienceContext } from './types';
 import { initDatabase, clearDatabase, saveTagDefinitions, saveAITagsForFile } from './services/resourceService';
-import { hydrateFromImmich, hydrateSkeletonFromImmich, enrichWithTagsAndPalettes, generateClipTags, syncTagsToImmich } from './services/immichService';
+import { hydrateFromImmich, hydrateSkeletonFromImmich, enrichWithTagsAndPalettes, enrichAssetTags, generateClipTags, syncTagsToImmich } from './services/immichService';
 import Workbench from './components/Workbench';
 import Experience from './components/Experience';
 import NavigationPrototype from './components/flow';
@@ -31,6 +31,32 @@ const App: React.FC = () => {
 
     // History Log (Newest first)
     const [history, setHistory] = useState<AnchorState[]>([]);
+
+    // Track which assets have had tags fetched (for prototype progressive loading)
+    const enrichedAssetIds = useRef(new Set<string>());
+
+    // Priority tag enrichment — called when hero changes in prototype
+    const handlePrioritizeAssets = useCallback(async (assetIds: string[]) => {
+        const unenriched = assetIds.filter(id => !enrichedAssetIds.current.has(id));
+        if (unenriched.length === 0) return;
+
+        const { tags: newTags, assetTagMap } = await enrichAssetTags(unenriched);
+        for (const id of unenriched) enrichedAssetIds.current.add(id);
+
+        setTags(prev => {
+            const existing = new Set(prev.map(t => t.id));
+            const toAdd = newTags.filter(t => !existing.has(t.id));
+            return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+        });
+
+        setImages(prev => prev.map(img => {
+            const aiTagIds = assetTagMap.get(img.id);
+            if (!aiTagIds || aiTagIds.length === 0) return img;
+            const merged = [...new Set([...(img.aiTagIds || []), ...aiTagIds])];
+            if (merged.length === (img.aiTagIds || []).length) return img;
+            return { ...img, aiTagIds: merged };
+        }));
+    }, []);
 
     // --- INITIALIZATION ---
     useEffect(() => {
@@ -73,11 +99,20 @@ const App: React.FC = () => {
                     albumAssets,
                     (enrichedTags, assetTagMap) => {
                         if (cancelled) return;
-                        setTags(enrichedTags);
+                        // Mark all assets as enriched so priority fetch skips them
+                        for (const id of assetTagMap.keys()) enrichedAssetIds.current.add(id);
+                        setTags(prev => {
+                            const existing = new Set(prev.map(t => t.id));
+                            const toAdd = enrichedTags.filter(t => !existing.has(t.id));
+                            return toAdd.length > 0 ? [...prev, ...toAdd] : (prev.length === 0 ? enrichedTags : prev);
+                        });
                         saveTagDefinitions(enrichedTags);
                         setImages(prev => prev.map(img => {
-                            const aiTagIds = assetTagMap.get(img.id);
-                            return aiTagIds && aiTagIds.length > 0 ? { ...img, aiTagIds } : img;
+                            const newTagIds = assetTagMap.get(img.id);
+                            if (!newTagIds || newTagIds.length === 0) return img;
+                            const merged = [...new Set([...(img.aiTagIds || []), ...newTagIds])];
+                            if (merged.length === (img.aiTagIds || []).length) return img;
+                            return { ...img, aiTagIds: merged };
                         }));
                     },
                     (paletteUpdates) => {
@@ -318,7 +353,7 @@ const App: React.FC = () => {
                 </div>
             );
         }
-        return <NavigationPrototype images={images} tags={tags} onExit={handleExitPrototype} />;
+        return <NavigationPrototype images={images} tags={tags} onExit={handleExitPrototype} onPrioritizeAssets={handlePrioritizeAssets} />;
     }
 
     // --- RENDERING ---
