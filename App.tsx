@@ -34,18 +34,22 @@ const App: React.FC = () => {
 
     // --- INITIALIZATION ---
     useEffect(() => {
+        let cancelled = false; // Prevent StrictMode double-run from racing
+
         const init = async () => {
             await initDatabase();
 
+            if (cancelled) return;
             setLoadingProgress({ current: 0, total: 0 });
             setIsInitializing(false);
 
             try {
                 const { tags: loadedTags } = await hydrateFromImmich(
                     (current, total) => {
-                        setLoadingProgress({ current, total });
+                        if (!cancelled) setLoadingProgress({ current, total });
                     },
                     (newBatch) => {
+                        if (cancelled) return;
                         setImages(prev => {
                             const prevMap = new Map(prev.map(i => [i.id, i]));
                             let changed = false;
@@ -65,21 +69,19 @@ const App: React.FC = () => {
                     }
                 );
 
+                if (cancelled) return;
                 setTags(loadedTags);
                 await saveTagDefinitions(loadedTags);
 
-                // Auto-trigger CLIP if no images have AI tags
-                const hasAnyAiTags = loadedImages.some(img => img.aiTagIds && img.aiTagIds.length > 0);
-                if (!hasAnyAiTags && loadedImages.length > 0) {
-                    setShouldAutoRunClip(true);
-                }
             } catch (e) {
                 console.error("Failed to hydrate from Immich", e);
             } finally {
-                setLoadingProgress(null);
+                if (!cancelled) setLoadingProgress(null);
             }
         };
         init();
+
+        return () => { cancelled = true; };
     }, []);
 
     // --- HISTORY TRACKING ENGINE ---
