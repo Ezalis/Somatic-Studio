@@ -22,7 +22,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     const [trail, setTrail] = useState<TrailPoint[]>([]);
     const [selectedTraits, setSelectedTraits] = useState<Set<string>>(new Set());
     const [bloomSourceRect, setBloomSourceRect] = useState<DOMRect | null>(null);
-    const [heroFlipped, setHeroFlipped] = useState(false);
+    const [heroBlur, setHeroBlur] = useState(0);
+    const [gentleReveal, setGentleReveal] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -41,6 +42,19 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         return () => window.removeEventListener('resize', update);
     }, []);
 
+    // Scroll-driven hero blur
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const onScroll = () => {
+            const heroHeight = window.innerHeight;
+            const blur = Math.min(16, Math.max(0, (el.scrollTop / heroHeight) * 16));
+            setHeroBlur(blur);
+        };
+        el.addEventListener('scroll', onScroll, { passive: true });
+        return () => el.removeEventListener('scroll', onScroll);
+    }, [flowPhase]);
+
     const tagMap = useMemo(() => {
         const map = new Map<string, string>();
         for (const t of tags) map.set(t.id, t.label);
@@ -57,14 +71,11 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             .sort((a: ScoredImage, b: ScoredImage) => b.score - a.score);
     }, [anchor, images]);
 
-    const temporalNeighbors = useMemo(() => scored.filter((s: ScoredImage) => s.isTemporalNeighbor).slice(0, 12), [scored]);
-
     // Priority-fetch tags for anchor + top neighbors when hero changes
     const lastPrioritizedId = useRef<string | null>(null);
     useEffect(() => {
         if (!anchorId || anchorId === lastPrioritizedId.current || !onPrioritizeAssets) return;
         lastPrioritizedId.current = anchorId;
-        // Anchor + top 24 scored neighbors (scored uses temporal/camera/color even without tags)
         const ids = [anchorId, ...scored.slice(0, 24).map((s: ScoredImage) => s.image.id)];
         onPrioritizeAssets(ids);
     }, [anchorId, scored, onPrioritizeAssets]);
@@ -129,7 +140,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setTrail((t: TrailPoint[]) => [...t, { id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp }]);
         setAnchorId(image.id);
         setSelectedTraits(new Set());
-        setHeroFlipped(false);
+        setHeroBlur(0);
+        setGentleReveal(false);
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
         setPendingImage(image);
         setBloomSourceRect(rect);
@@ -147,7 +159,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setTrail((t: TrailPoint[]) => [...t, { id: img.id, palette: img.palette, label, timestamp: img.captureTimestamp }]);
         setAnchorId(img.id);
         setSelectedTraits(new Set());
-        setHeroFlipped(false);
+        setHeroBlur(0);
+        setGentleReveal(false);
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
         setPendingImage(img);
         setBloomSourceRect(rect);
@@ -159,30 +172,28 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             const next = new Set(prev);
             if (next.has(key)) next.delete(key);
             else if (next.size < 6) next.add(key);
+
+            // Trigger gentle reveal when going from 5→6 traits
+            if (prev.size === 5 && next.size === 6) {
+                setGentleReveal(true);
+                setTimeout(() => setGentleReveal(false), 2000);
+            }
+            // Re-trigger if deselecting and re-selecting back to 6
+            if (prev.size === 6 && next.size === 5) {
+                setGentleReveal(false);
+            }
+
             return next;
         });
         setFlowPhase('exploring');
-    }, []);
-
-    const handleFlip = useCallback(() => {
-        setHeroFlipped(prev => !prev);
-    }, []);
-
-    const handleNavigateFromHero = useCallback((img: ImageNode) => {
-        const label = new Date(img.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        setTrail((t: TrailPoint[]) => [...t, { id: img.id, palette: img.palette, label, timestamp: img.captureTimestamp }]);
-        setAnchorId(img.id);
-        setSelectedTraits(new Set());
-        setHeroFlipped(false);
-        setFlowPhase('hero');
-        if (scrollRef.current) scrollRef.current.scrollTop = 0;
     }, []);
 
     const handleClear = useCallback(() => {
         setTrail([]);
         setAnchorId(null);
         setSelectedTraits(new Set());
-        setHeroFlipped(false);
+        setHeroBlur(0);
+        setGentleReveal(false);
         setFlowPhase('idle');
     }, []);
 
@@ -232,26 +243,29 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 <div ref={scrollRef} className="fixed inset-0 pt-12 z-10 overflow-y-auto"
                     style={{ scrollSnapType: 'y proximity', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
 
-                    {/* Section 1: Hero */}
-                    <div style={{ minHeight: '100vh', scrollSnapAlign: 'start' }}>
-                        <HeroSection image={anchor} allImages={images}
-                            temporalNeighbors={temporalNeighbors}
-                            flipped={heroFlipped} onFlip={handleFlip}
-                            onNavigate={handleNavigateFromHero}
+                    {/* Section 1: Hero — sticky, stays behind traits/album */}
+                    <div style={{ position: 'sticky', top: 0, zIndex: 1, minHeight: '100vh' }}>
+                        <HeroSection image={anchor} blur={heroBlur}
                             heroRevealed={flowPhase !== 'blooming'} />
                     </div>
 
-                    {/* Section 2: Traits */}
-                    <div id="trait-section" style={{ minHeight: selectedTraits.size >= 6 ? undefined : '60vh', scrollSnapAlign: 'start' }}>
+                    {/* Section 2: Traits — scrolls over blurred hero */}
+                    <div id="trait-section" style={{
+                        position: 'relative',
+                        zIndex: 2,
+                        background: '#faf9f6',
+                        minHeight: selectedTraits.size >= 6 ? undefined : '60vh',
+                        scrollSnapAlign: 'start',
+                    }}>
                         <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
                             selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
                             albumImages={albumPool} />
                     </div>
 
                     {/* Section 3: Album (appears at 3+ traits) */}
-                    <div>
+                    <div style={{ position: 'relative', zIndex: 2, background: '#faf9f6' }}>
                         <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
-                            onSelect={handleAlbumSelect} />
+                            onSelect={handleAlbumSelect} gentleReveal={gentleReveal} />
                     </div>
                 </div>
             )}
