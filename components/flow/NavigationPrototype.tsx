@@ -257,41 +257,43 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 </div>
             )}
 
-            {/* TRAITS — scrollable layer above hero */}
-            {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
-                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto">
-                    {/* Spacer: first screen is transparent, showing hero behind */}
-                    <div style={{ minHeight: '100vh', pointerEvents: 'none' }} />
-
-                    {/* Trait section scrolls up over the hero */}
-                    <div id="trait-section" style={{
-                        position: 'relative',
-                        minHeight: selectedTraits.size >= 6 ? undefined : '60vh',
-                    }}>
-                        <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
-                            selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
-                            albumImages={albumPool} />
-                    </div>
-                </div>
-            )}
-
-            {/* Sprite background — fixed layer, appears at 3+ traits behind trait selector */}
+            {/* Sprite background — fixed layer, appears at 3+ traits */}
             {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
                 <SpriteBackground images={albumPool.slice(0, 20).map(a => a.image)}
                     count={selectedTraits.size < 3 ? 0 : Math.min(20, 4 + (selectedTraits.size - 2) * 6)} />
             )}
 
-            {/* Album phase: tiered album + compact trait bar */}
+            {/* Album phase: tiered album (below trait bar, above hero) */}
             {flowPhase === 'album' && anchor && (
-                <>
-                    <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
-                        onSelect={handleAlbumSelect} isAlbumPhase />
-                    <div className="fixed top-12 left-0 right-0 z-50 pointer-events-auto">
+                <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
+                    onSelect={handleAlbumSelect} isAlbumPhase />
+            )}
+
+            {/* TRAITS — scrollable in exploring, fixed at top in album */}
+            {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
+                flowPhase === 'album' ? (
+                    <div className="fixed top-12 left-0 right-0 z-30 pointer-events-auto"
+                        style={{ animation: 'slide-to-top 400ms cubic-bezier(0.22,1,0.36,1) both' }}>
                         <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
                             selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
                             albumImages={albumPool} />
                     </div>
-                </>
+                ) : (
+                    <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto">
+                        {/* Spacer: first screen is transparent, showing hero behind */}
+                        <div style={{ minHeight: '100vh', pointerEvents: 'none' }} />
+
+                        {/* Trait section scrolls up over the hero */}
+                        <div id="trait-section" style={{
+                            position: 'relative',
+                            minHeight: '60vh',
+                        }}>
+                            <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
+                                selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
+                                albumImages={albumPool} />
+                        </div>
+                    </div>
+                )
             )}
         </div>
     );
