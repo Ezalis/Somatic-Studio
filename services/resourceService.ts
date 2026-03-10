@@ -152,6 +152,10 @@ export const saveAITagsForFile = async (assetId: string, tagIds: string[]) => {
 
 // --- PALETTE CACHE ---
 
+export const getCachedPaletteSync = (assetId: string): string[] | null => {
+    return paletteCacheMemory[assetId] || null;
+};
+
 export const getCachedPalette = async (assetId: string): Promise<string[] | null> => {
     if (paletteCacheMemory[assetId]) return paletteCacheMemory[assetId];
     return null;

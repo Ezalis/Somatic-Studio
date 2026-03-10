@@ -11,18 +11,30 @@ interface IdleFieldProps {
 }
 
 const IdleField: React.FC<IdleFieldProps> = ({ images, onSelect, canvasW, canvasH }) => {
+    // Session seed — stable for component lifetime, different each page load
+    const sessionSeed = useMemo(() => Math.random().toString(36), []);
+
     const nodes = useMemo(() => {
         const count = Math.min(images.length, 36);
+
+        // Fisher-Yates partial shuffle using session seed for random sampling
+        const indices = images.map((_, i) => i);
+        for (let i = indices.length - 1; i > 0 && indices.length - 1 - i < count; i--) {
+            const j = Math.floor(seededRandom(sessionSeed + i) * (i + 1));
+            [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+        const sampled = indices.slice(indices.length - count).map(i => images[i]);
+
         const cols = Math.ceil(Math.sqrt(count * (canvasW / canvasH)));
         const rows = Math.ceil(count / cols);
         const cellW = canvasW / (cols + 1);
         const cellH = canvasH / (rows + 1);
-        return images.slice(0, count).map((img: ImageNode, i: number) => ({
+        return sampled.map((img: ImageNode, i: number) => ({
             image: img,
             x: cellW * ((i % cols) + 1) + (seededRandom(img.id + 'ix') - 0.5) * cellW * 0.4,
             y: cellH * (Math.floor(i / cols) + 1) + (seededRandom(img.id + 'iy') - 0.5) * cellH * 0.3,
         }));
-    }, [images, canvasW, canvasH]);
+    }, [images, canvasW, canvasH, sessionSeed]);
 
     return (
         <div className="fixed inset-0">
