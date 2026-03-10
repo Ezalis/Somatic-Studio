@@ -173,6 +173,12 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
 
         return (
             <div className="px-6 py-4 max-w-2xl mx-auto">
+              <div className="rounded-2xl px-5 py-4" style={{
+                  backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                  background: 'rgba(250, 249, 246, 0.65)',
+                  border: '1px solid rgba(255,255,255,0.4)',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+              }}>
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-[11px] tracking-[0.2em] uppercase text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Your traits
@@ -211,6 +217,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                         );
                     })}
                 </div>
+              </div>
             </div>
         );
     }
@@ -220,6 +227,12 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
 
     return (
         <div className="px-6 py-8 max-w-2xl mx-auto">
+          <div className="rounded-2xl px-5 py-6" style={{
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              background: 'rgba(250, 249, 246, 0.65)',
+              border: '1px solid rgba(255,255,255,0.4)',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+          }}>
             {/* Header + counter */}
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-[11px] tracking-[0.2em] uppercase text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
@@ -350,6 +363,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                     </div>
                 </div>
             ) : null}
+          </div>
         </div>
     );
 };

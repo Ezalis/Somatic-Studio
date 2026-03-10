@@ -6,15 +6,16 @@ interface HeroSectionProps {
     image: ImageNode;
     blur?: number;
     heroRevealed: boolean;
+    position?: 'center' | 'bottom';
 }
 
-const HeroSection: React.FC<HeroSectionProps> = ({ image, blur = 0, heroRevealed }) => {
+const HeroSection: React.FC<HeroSectionProps> = ({ image, blur = 0, heroRevealed, position = 'center' }) => {
     const scrollIndicatorRef = useRef<HTMLDivElement>(null);
 
     const palette = image.palette.length > 0 ? image.palette : ['#52525b', '#71717a', '#a1a1aa', '#d4d4d8', '#f4f4f5'];
 
     return (
-        <div className="relative min-h-screen flex flex-col items-center justify-center px-4"
+        <div className={`relative min-h-screen flex flex-col items-center px-4 ${position === 'bottom' ? 'justify-end pb-8' : 'justify-center'}`}
             style={{
                 opacity: heroRevealed ? 1 : 0,
                 transform: heroRevealed ? 'translateY(0)' : 'translateY(48px)',
@@ -25,7 +26,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ image, blur = 0, heroRevealed
                 <div className="w-full max-w-3xl mx-auto">
                     <div className="flex items-center justify-center">
                         <img src={getPreviewUrl(image.id)} alt=""
-                            className="max-w-full max-h-[85vh] object-contain rounded-lg"
+                            className={`max-w-full object-contain rounded-lg ${position === 'bottom' ? 'max-h-[50vh]' : 'max-h-[85vh]'}`}
                             style={{
                                 boxShadow: `0 16px 64px ${palette[0]}30, 0 4px 16px ${palette[1] || palette[0]}15`,
                                 filter: blur > 0 ? `blur(${blur}px)` : undefined,
