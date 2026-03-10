@@ -24,10 +24,12 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     const [selectedTraits, setSelectedTraits] = useState<Set<string>>(new Set());
     const [bloomSourceRect, setBloomSourceRect] = useState<DOMRect | null>(null);
     const [heroBlur, setHeroBlur] = useState(0);
-    const [gentleReveal, setGentleReveal] = useState(false);
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Trait bar transition state
+    const [traitLeaving, setTraitLeaving] = useState(false);
 
     // Pending image for bloom transition
     const [pendingImage, setPendingImage] = useState<ImageNode | null>(null);
@@ -134,6 +136,12 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         };
     }, [anchor]);
 
+    // Sprite background count based on trait count
+    const spriteCount = useMemo(() => {
+        if (selectedTraits.size < 3) return 0;
+        return Math.min(20, 4 + (selectedTraits.size - 2) * 6);
+    }, [selectedTraits.size]);
+
     // --- Event handlers ---
 
     const handleSelectFromIdle = useCallback((image: ImageNode, rect: DOMRect) => {
@@ -142,7 +150,6 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setAnchorId(image.id);
         setSelectedTraits(new Set());
         setHeroBlur(0);
-        setGentleReveal(false);
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
         setPendingImage(image);
         setBloomSourceRect(rect);
@@ -161,7 +168,6 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setAnchorId(img.id);
         setSelectedTraits(new Set());
         setHeroBlur(0);
-        setGentleReveal(false);
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
         setPendingImage(img);
         setBloomSourceRect(rect);
@@ -174,21 +180,25 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             if (next.has(key)) next.delete(key);
             else if (next.size < 6) next.add(key);
 
-            // Trigger album phase when going from 5→6 traits
+            // 5→6: enter album phase
             if (prev.size === 5 && next.size === 6) {
-                setGentleReveal(true);
-                setTimeout(() => setGentleReveal(false), 2000);
-                // Scroll to top and enter album phase
-                if (scrollRef.current) {
-                    scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-                setTimeout(() => setFlowPhase('album'), 500);
+                setFlowPhase('album');
                 return next;
             }
-            // Deselecting from album phase returns to exploring
+
+            // 6→5: leave album phase with exit animation
             if (prev.size === 6 && next.size === 5) {
-                setGentleReveal(false);
-                setFlowPhase('exploring');
+                setTraitLeaving(true);
+                // After exit animation, switch to exploring and restore scroll
+                setTimeout(() => {
+                    setFlowPhase('exploring');
+                    setTraitLeaving(false);
+                    requestAnimationFrame(() => {
+                        if (scrollRef.current) {
+                            scrollRef.current.scrollTop = window.innerHeight;
+                        }
+                    });
+                }, 400);
                 return next;
             }
 
@@ -204,9 +214,14 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setAnchorId(null);
         setSelectedTraits(new Set());
         setHeroBlur(0);
-        setGentleReveal(false);
+        setTraitLeaving(false);
         setFlowPhase('idle');
     }, []);
+
+    // Whether to show the scroll container (exploring phases)
+    const showScrollContainer = flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring';
+    // Whether to show the fixed trait bar (album phase + exit transition)
+    const showFixedTraitBar = flowPhase === 'album' || traitLeaving;
 
     return (
         <div ref={containerRef} className="fixed inset-0 overflow-hidden" style={surfaceStyle}>
@@ -257,10 +272,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 </div>
             )}
 
-            {/* Sprite background — fixed layer, appears at 3+ traits */}
+            {/* Sprite background — smooth pool transitions, convergence rings show trait relevance */}
             {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
-                <SpriteBackground images={albumPool.slice(0, 20).map(a => a.image)}
-                    count={selectedTraits.size < 3 ? 0 : Math.min(20, 4 + (selectedTraits.size - 2) * 6)} />
+                <SpriteBackground albumImages={albumPool} maxCount={spriteCount} />
             )}
 
             {/* Album phase: tiered album (below trait bar, above hero) */}
@@ -269,31 +283,33 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     onSelect={handleAlbumSelect} isAlbumPhase />
             )}
 
-            {/* TRAITS — scrollable in exploring, fixed at top in album */}
-            {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
-                flowPhase === 'album' ? (
-                    <div className="fixed top-12 left-0 right-0 z-30 pointer-events-auto"
-                        style={{ animation: 'slide-to-top 400ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            {/* TRAIT SELECTOR — scroll container for exploring, fixed bar for album */}
+            {showScrollContainer && anchor && (
+                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto">
+                    {/* Spacer: first screen is transparent, showing hero behind */}
+                    <div style={{ minHeight: '100vh', pointerEvents: 'none' }} />
+
+                    {/* Trait section scrolls up over the hero */}
+                    <div id="trait-section" style={{ position: 'relative', minHeight: '60vh' }}>
                         <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
                             selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
                             albumImages={albumPool} />
                     </div>
-                ) : (
-                    <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto">
-                        {/* Spacer: first screen is transparent, showing hero behind */}
-                        <div style={{ minHeight: '100vh', pointerEvents: 'none' }} />
+                </div>
+            )}
 
-                        {/* Trait section scrolls up over the hero */}
-                        <div id="trait-section" style={{
-                            position: 'relative',
-                            minHeight: '60vh',
-                        }}>
-                            <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
-                                selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
-                                albumImages={albumPool} />
-                        </div>
-                    </div>
-                )
+            {/* Fixed compact trait bar — album phase + exit transition overlay */}
+            {showFixedTraitBar && anchor && (
+                <div className="fixed top-12 left-0 right-0 z-30 pointer-events-auto"
+                    style={{
+                        animation: traitLeaving
+                            ? 'trait-settle-out 400ms cubic-bezier(0.22,1,0.36,1) both'
+                            : 'trait-settle-in 400ms cubic-bezier(0.22,1,0.36,1) both',
+                    }}>
+                    <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
+                        selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
+                        albumImages={albumPool} />
+                </div>
             )}
         </div>
     );
