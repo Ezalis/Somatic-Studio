@@ -31,7 +31,6 @@ export interface WaterfallNode {
     tagHits: number;
     relevance: number;
     size: number;
-    photoOpacity: number;
     driftDuration: number;
     driftDelay: number;
 }

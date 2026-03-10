@@ -21,6 +21,12 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes gentle-unveil {
+    0%   { opacity: 0; transform: scale(0.6) translateY(12px); filter: blur(4px); }
+    60%  { opacity: 0.8; transform: scale(1.05) translateY(-2px); filter: blur(0); }
+    100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+}
+
 @keyframes skeleton-pulse {
     0%, 100% { opacity: 0.25; }
     50% { opacity: 0.55; }
