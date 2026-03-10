@@ -18,7 +18,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ image, blur = 0, heroRevealed
             style={{
                 opacity: heroRevealed ? 1 : 0,
                 transform: heroRevealed ? 'translateY(0)' : 'translateY(48px)',
-                transition: 'opacity 700ms ease, transform 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+                // Only animate when revealing — instant hide prevents flash of new image during bloom
+                transition: heroRevealed
+                    ? 'opacity 700ms ease, transform 700ms cubic-bezier(0.22, 1, 0.36, 1)'
+                    : 'none',
             }}>
             {/* Hero image */}
             <div className="flex items-center justify-center w-full">

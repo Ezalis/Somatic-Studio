@@ -1,54 +1,121 @@
-import React, { useMemo } from 'react';
-import { ImageNode } from '../../types';
-import MiniSprite from './MiniSprite';
+import React, { useState, useEffect, useMemo } from 'react';
+import { AlbumImage } from './flowTypes';
 import { seededRandom } from './flowHelpers';
+import MiniSprite from './MiniSprite';
 
 interface SpriteBackgroundProps {
-    images: ImageNode[];
-    count: number;
+    albumImages: AlbumImage[];
+    maxCount: number;
 }
 
-const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ images, count }) => {
-    const visibleImages = useMemo(() => images.slice(0, count), [images, count]);
+interface SpriteData {
+    albumItem: AlbumImage;
+    x: number;
+    y: number;
+    size: number;
+    relevance: number;
+    driftDuration: number;
+    driftDelay: number;
+    fading: boolean;
+}
 
-    const positions = useMemo(() => {
-        // Use grid-jitter: divide viewport into cells, place one sprite per cell with random offset
-        const cols = Math.max(3, Math.ceil(Math.sqrt(visibleImages.length * 1.5)));
-        const rows = Math.max(2, Math.ceil(visibleImages.length / cols));
-        const cellW = 90 / cols;  // 5-95% range
-        const cellH = 70 / rows;  // 15-85% range
+const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCount }) => {
+    const [sprites, setSprites] = useState<Map<string, SpriteData>>(new Map());
 
-        return visibleImages.map((img, i) => {
-            const col = i % cols;
-            const row = Math.floor(i / cols);
-            const jitterX = (seededRandom('sprX' + i + img.id.slice(0, 8)) - 0.5) * cellW * 0.7;
-            const jitterY = (seededRandom('sprY' + i + img.id.slice(-8)) - 0.5) * cellH * 0.7;
-            return {
-                x: 5 + (col + 0.5) * cellW + jitterX,
-                y: 15 + (row + 0.5) * cellH + jitterY,
-                size: 30 + seededRandom('sprS' + i + img.id.slice(4, 12)) * 20,
-                driftDuration: 8 + seededRandom('sprD' + i) * 10,
-                driftDelay: seededRandom('sprDL' + i) * 5,
-            };
+    // Sync sprite pool when albumImages or maxCount changes
+    useEffect(() => {
+        if (maxCount === 0) {
+            setSprites(new Map());
+            return;
+        }
+
+        const pool = albumImages.slice(0, maxCount);
+        const maxHits = Math.max(1, ...pool.map(a => a.tagHits));
+        const currentIds = new Set(pool.map(a => a.image.id));
+
+        setSprites(prev => {
+            const next = new Map(prev);
+
+            // Mark removed sprites for fadeout
+            for (const [id, sprite] of next) {
+                if (!currentIds.has(id) && !sprite.fading) {
+                    next.set(id, { ...sprite, fading: true });
+                }
+            }
+
+            // Update existing or un-fade returning sprites
+            for (const item of pool) {
+                const existing = next.get(item.image.id);
+                if (existing) {
+                    next.set(item.image.id, {
+                        ...existing,
+                        albumItem: item,
+                        relevance: item.tagHits / maxHits,
+                        fading: false,
+                    });
+                }
+            }
+
+            // Add new sprites with scattered positions
+            const newItems = pool.filter(item => !next.has(item.image.id));
+            for (let i = 0; i < newItems.length; i++) {
+                const item = newItems[i];
+                const id = item.image.id;
+                // Use very different seed construction for x vs y to avoid correlation
+                const x = 5 + seededRandom('XXBG' + id.slice(0, 8) + i) * 85;
+                const y = 15 + seededRandom(id.slice(-8) + 'YYBG' + (i * 7)) * 65;
+
+                next.set(id, {
+                    albumItem: item,
+                    x,
+                    y,
+                    size: 28 + seededRandom('SZ' + id.slice(4, 12)) * 22,
+                    relevance: item.tagHits / maxHits,
+                    driftDuration: 8 + seededRandom('DR' + id.slice(2, 10)) * 10,
+                    driftDelay: seededRandom('DL' + id.slice(6, 14)) * 5,
+                    fading: false,
+                });
+            }
+
+            return next;
         });
-    }, [visibleImages]);
+    }, [albumImages, maxCount]);
 
-    if (count === 0) return null;
+    // Clean up fully faded sprites after transition
+    useEffect(() => {
+        const hasFading = [...sprites.values()].some(s => s.fading);
+        if (!hasFading) return;
+        const timer = setTimeout(() => {
+            setSprites(prev => {
+                const next = new Map(prev);
+                for (const [id, s] of next) {
+                    if (s.fading) next.delete(id);
+                }
+                return next;
+            });
+        }, 800);
+        return () => clearTimeout(timer);
+    }, [sprites]);
+
+    // Stable sprite list for rendering (avoid key changes)
+    const spriteList = useMemo(() => [...sprites.entries()], [sprites]);
+
+    if (spriteList.length === 0) return null;
 
     return (
-        <div className="fixed inset-0 pointer-events-none overflow-hidden"
-            style={{ zIndex: 11 }}>
-            {visibleImages.map((img, i) => (
-                <div key={img.id}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 11 }}>
+            {spriteList.map(([id, sprite]) => (
+                <div key={id}
                     className="absolute"
                     style={{
-                        left: `${positions[i].x}%`,
-                        top: `${positions[i].y}%`,
-                        opacity: 0.4,
-                        animation: `gentle-unveil 800ms cubic-bezier(0.22,1,0.36,1) ${i * 100}ms both,
-                                    drift ${positions[i].driftDuration}s ease-in-out ${positions[i].driftDelay}s infinite`,
+                        left: `${sprite.x}%`,
+                        top: `${sprite.y}%`,
+                        opacity: sprite.fading ? 0 : 0.25 + sprite.relevance * 0.35,
+                        transition: 'opacity 600ms ease',
+                        animation: `drift ${sprite.driftDuration}s ease-in-out ${sprite.driftDelay}s infinite`,
                     }}>
-                    <MiniSprite image={img} size={positions[i].size} />
+                    <MiniSprite image={sprite.albumItem.image} size={sprite.size}
+                        convergence={sprite.relevance} />
                 </div>
             ))}
         </div>

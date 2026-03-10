@@ -32,9 +32,14 @@
     50% { opacity: 0.55; }
 }
 
-@keyframes slide-to-top {
-    0%   { opacity: 0; transform: translateY(40px); }
-    100% { opacity: 1; transform: translateY(0); }
+@keyframes trait-settle-in {
+    0%   { transform: translateY(60px); opacity: 0.7; }
+    100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes trait-settle-out {
+    0%   { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(60px); opacity: 0; }
 }
 
 @keyframes card-scatter {
