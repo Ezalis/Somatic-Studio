@@ -27,6 +27,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const heroTouchY = useRef<number | null>(null);
 
     // Trait bar transition state
     const [traitLeaving, setTraitLeaving] = useState(false);
@@ -299,8 +300,19 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         }
                     }}
                     onWheel={(e) => {
-                        // Forward wheel events to the scroll container so scrolling over the hero works
                         if (scrollRef.current) scrollRef.current.scrollTop += e.deltaY;
+                    }}
+                    onTouchStart={(e) => {
+                        heroTouchY.current = e.touches[0].clientY;
+                    }}
+                    onTouchMove={(e) => {
+                        if (heroTouchY.current === null || !scrollRef.current) return;
+                        const dy = heroTouchY.current - e.touches[0].clientY;
+                        heroTouchY.current = e.touches[0].clientY;
+                        scrollRef.current.scrollTop += dy;
+                    }}
+                    onTouchEnd={() => {
+                        heroTouchY.current = null;
                     }} />
             )}
 
