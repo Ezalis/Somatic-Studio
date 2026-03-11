@@ -1,0 +1,49 @@
+@keyframes drift {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(3px, -4px); }
+    50% { transform: translate(-2px, 3px); }
+    75% { transform: translate(4px, 2px); }
+}
+
+@keyframes scroll-hint-bounce {
+    0%, 100% { transform: translateY(0); opacity: 0.6; }
+    50% { transform: translateY(8px); opacity: 0.9; }
+}
+
+@keyframes trait-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+@keyframes album-reveal {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gentle-unveil {
+    0%   { opacity: 0; transform: scale(0.6) translateY(12px); filter: blur(4px); }
+    60%  { opacity: 0.8; transform: scale(1.05) translateY(-2px); filter: blur(0); }
+    100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+}
+
+@keyframes skeleton-pulse {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 0.55; }
+}
+
+@keyframes trait-settle-in {
+    0%   { transform: translateY(60px); opacity: 0.7; }
+    100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes trait-settle-out {
+    0%   { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(60px); opacity: 0; }
+}
+
+@keyframes card-scatter {
+    0%   { opacity: 0; transform: scale(0.7) rotate(0deg) translateY(20px); }
+    70%  { opacity: 1; transform: scale(1.03) rotate(var(--card-rotate)) translateY(-4px); }
+    100% { opacity: 1; transform: scale(1) rotate(var(--card-rotate)) translateY(0); }
+}

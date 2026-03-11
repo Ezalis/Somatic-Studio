@@ -1,5 +1,3 @@
-import { ImageNode, Tag, TagType, ExperienceNode } from '../types';
-
 // --- Utilities ---
 
 export const getSeason = (date: Date): string => {
@@ -45,7 +43,7 @@ export const getMinPaletteDistance = (p1: string[], p2: string[]): number => {
 export const extractColorPalette = (img: HTMLImageElement): string[] => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    if (!ctx) return ['#e4e4e7', '#d4d4d8', '#a1a1aa', '#71717a', '#52525b']; 
+    if (!ctx) return ['#e4e4e7', '#d4d4d8', '#a1a1aa', '#71717a', '#52525b'];
     const maxDim = 100;
     const scale = Math.min(maxDim / img.width, maxDim / img.height);
     canvas.width = Math.floor(img.width * scale);
@@ -75,7 +73,7 @@ export const extractColorPalette = (img: HTMLImageElement): string[] => {
             return { r, g, b, hex: `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}` };
         });
     const palette: string[] = [];
-    const thresholds = [3600, 2500, 900, 100, 0]; 
+    const thresholds = [3600, 2500, 900, 100, 0];
     for (const threshold of thresholds) {
         if (palette.length >= 5) break;
         for (const candidate of sortedCandidates) {
@@ -84,82 +82,15 @@ export const extractColorPalette = (img: HTMLImageElement): string[] => {
             if (isDistinct) palette.push(candidate.hex);
         }
     }
-    while (palette.length < 5) palette.push('#e4e4e7'); 
+    while (palette.length < 5) palette.push('#e4e4e7');
     return palette.slice(0, 5);
-};
-
-// --- RELATIONSHIP ANALYSIS ---
-
-export const getIntersectionAttributes = (imgA: ImageNode, imgB: ImageNode, allTags: Tag[]) => {
-    const tagsA = new Set([...imgA.tagIds, ...(imgA.aiTagIds||[])]);
-    const tagsB = new Set([...imgB.tagIds, ...(imgB.aiTagIds||[])]);
-    const commonTagIds = [...tagsA].filter(x => tagsB.has(x));
-    const commonTags = commonTagIds.map(id => allTags.find(t => t.id === id)).filter(Boolean) as Tag[];
-    
-    const colorMatches: {cA: string, cB: string}[] = [];
-    const usedB = new Set<string>();
-    imgA.palette.forEach(cA => {
-        let bestMatch = null;
-        let minDist = 3000;
-        imgB.palette.forEach(cB => {
-            if (usedB.has(cB)) return;
-            const dist = getColorDistSq(cA, cB);
-            if (dist < minDist) { minDist = dist; bestMatch = cB; }
-        });
-        if (bestMatch) { colorMatches.push({ cA, cB: bestMatch }); usedB.add(bestMatch); }
-    });
-    
-    const techMatches: string[] = [];
-    if (imgA.cameraModel === imgB.cameraModel && imgA.cameraModel !== 'Unknown Camera') techMatches.push(imgA.cameraModel);
-    if (imgA.iso === imgB.iso) techMatches.push(`ISO ${imgA.iso}`);
-    if (imgA.inferredSeason === imgB.inferredSeason) techMatches.push(imgA.inferredSeason);
-    
-    const d1 = new Date(imgA.captureTimestamp);
-    const d2 = new Date(imgB.captureTimestamp);
-    if (d1.toDateString() === d2.toDateString()) techMatches.push("Same Day");
-    else if (Math.abs(imgA.captureTimestamp - imgB.captureTimestamp) < 3600000) techMatches.push("Within 1 Hour");
-    
-    return { commonTags, colorMatches, techMatches };
 };
 
 export const MONO_KEYWORDS = ['b&w', 'black & white', 'black and white', 'monochrome', 'grayscale', 'noir', 'silver gelatin'];
 
-export const isMonochrome = (tags: Tag[], tagIds: string[]) => {
+export const isMonochrome = (tags: { id: string; label: string }[], tagIds: string[]) => {
     return tagIds.some(id => {
         const tag = tags.find(t => t.id === id);
         return tag && MONO_KEYWORDS.some(k => tag.label.toLowerCase().includes(k));
     });
 };
-
-export const getDominantColorsFromNodes = (nodes: ExperienceNode[], count: number = 5, excludeColor?: string): string[] => {
-    const colorCounts: Record<string, number> = {};
-    nodes.forEach(node => {
-        node.original.palette.forEach(color => {
-            if (excludeColor && color === excludeColor) return;
-            colorCounts[color] = (colorCounts[color] || 0) + 1;
-        });
-    });
-    return Object.entries(colorCounts).sort((a, b) => b[1] - a[1]).slice(0, count).map(entry => entry[0]);
-};
-
-export const getRelatedTagsFromNodes = (nodes: ExperienceNode[], tags: Tag[], count: number = 6, excludeTagId?: string, nsfwTagId?: string, nsfwFilterActive: boolean = false): Tag[] => {
-    const tagCounts: Record<string, number> = {};
-    nodes.forEach(node => {
-        const allTags = [...node.original.tagIds, ...(node.original.aiTagIds || [])];
-        allTags.forEach(tId => {
-            if (tId === excludeTagId) return;
-            const t = tags.find(tag => tag.id === tId);
-            if (!t) return;
-            if (t.type !== TagType.AI_GENERATED) return;
-            if (t.label.toLowerCase().trim() === 'nsfw') return;
-            tagCounts[tId] = (tagCounts[tId] || 0) + 1;
-        });
-    });
-    return Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, count).map(([id]) => tags.find(t => t.id === id)).filter((t): t is Tag => {
-        if (!t) return false;
-        if (nsfwFilterActive && t.label.trim().toLowerCase() === 'nsfw') return false;
-        return true;
-    });
-};
-
-// processImageFile and hydrateGalleryAssets removed — image loading now handled by immichService.ts
