@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlbumImage } from './flowTypes';
 import { seededRandom } from './flowHelpers';
-import MiniSprite from './MiniSprite';
+import { getThumbnailUrl } from '../../services/immichService';
 
 interface SpriteBackgroundProps {
     albumImages: AlbumImage[];
@@ -104,20 +104,28 @@ const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCou
 
     return (
         <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 11 }}>
-            {spriteList.map(([id, sprite]) => (
-                <div key={id}
-                    className="absolute"
-                    style={{
-                        left: `${sprite.x}%`,
-                        top: `${sprite.y}%`,
-                        opacity: sprite.fading ? 0 : 0.25 + sprite.relevance * 0.35,
-                        transition: 'opacity 600ms ease',
-                        animation: `drift ${sprite.driftDuration}s ease-in-out ${sprite.driftDelay}s infinite`,
-                    }}>
-                    <MiniSprite image={sprite.albumItem.image} size={sprite.size}
-                        convergence={sprite.relevance} />
-                </div>
-            ))}
+            {spriteList.map(([id, sprite]) => {
+                const imgSize = sprite.size * 2;
+                const blurAmount = 4 + (1 - sprite.relevance) * 6;
+                return (
+                    <div key={id}
+                        className="absolute rounded-lg overflow-hidden"
+                        style={{
+                            left: `${sprite.x}%`,
+                            top: `${sprite.y}%`,
+                            width: imgSize,
+                            height: imgSize,
+                            opacity: sprite.fading ? 0 : 0.3 + sprite.relevance * 0.4,
+                            filter: `blur(${blurAmount}px)`,
+                            transition: 'opacity 600ms ease, filter 600ms ease',
+                            animation: `drift ${sprite.driftDuration}s ease-in-out ${sprite.driftDelay}s infinite`,
+                        }}>
+                        <img src={getThumbnailUrl(sprite.albumItem.image.id)} alt=""
+                            className="w-full h-full object-cover"
+                            draggable={false} />
+                    </div>
+                );
+            })}
         </div>
     );
 };
