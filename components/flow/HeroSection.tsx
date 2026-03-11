@@ -25,10 +25,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ image, blur = 0, heroRevealed
             }}>
             {/* Hero image */}
             <div className="flex items-center justify-center w-full">
-                <div className="w-full max-w-3xl mx-auto">
+                <div className="w-full max-w-5xl mx-auto px-8">
                     <div className="flex items-center justify-center">
                         <img src={getPreviewUrl(image.id)} alt=""
-                            className="max-w-full max-h-[85vh] object-contain rounded-lg"
+                            className="max-w-full max-h-[90vh] object-contain rounded-lg"
                             style={{
                                 boxShadow: `0 16px 64px ${palette[0]}30, 0 4px 16px ${palette[1] || palette[0]}15`,
                                 filter: blur > 0 ? `blur(${blur}px)` : undefined,
