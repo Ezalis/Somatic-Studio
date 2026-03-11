@@ -274,7 +274,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
             {/* Sprite background — smooth pool transitions, convergence rings show trait relevance */}
             {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
-                <SpriteBackground albumImages={albumPool} maxCount={spriteCount} />
+                <SpriteBackground albumImages={albumPool} maxCount={spriteCount}
+                    onSelect={handleAlbumSelect} />
             )}
 
             {/* Album phase: tiered album (below trait bar, above hero) */}
