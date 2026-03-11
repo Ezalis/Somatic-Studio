@@ -17,21 +17,21 @@ interface WaterfallAlbumProps {
 // Returns positions that feel like photos scattered on a surface
 function scatterPositions(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }) {
     const positions: { x: number; y: number }[] = [];
-    const cols = Math.ceil(Math.sqrt(count * 1.5));
-    const rows = Math.ceil(count / cols);
+    // Prefer wider grids (more columns) so items spread horizontally
+    const cols = Math.max(2, Math.ceil(Math.sqrt(count * 2)));
+    const rows = Math.max(1, Math.ceil(count / cols));
     const cellW = (bounds.xMax - bounds.xMin) / cols;
     const cellH = (bounds.yMax - bounds.yMin) / rows;
 
     for (let i = 0; i < count; i++) {
         const col = i % cols;
         const row = Math.floor(i / cols);
-        // Place in grid cell with jitter
-        const jitterX = (seededRandom('X' + seed + i * 7) - 0.5) * cellW * 0.6;
-        const jitterY = (seededRandom('Y' + seed + i * 13) - 0.5) * cellH * 0.6;
-        positions.push({
-            x: bounds.xMin + (col + 0.5) * cellW + jitterX,
-            y: bounds.yMin + (row + 0.5) * cellH + jitterY,
-        });
+        // Large jitter (±40% of cell) for organic feel
+        const jitterX = (seededRandom('X' + seed + i * 7) - 0.5) * cellW * 0.8;
+        const jitterY = (seededRandom('Y' + seed + i * 13) - 0.5) * cellH * 0.8;
+        const x = Math.max(bounds.xMin, Math.min(bounds.xMax, bounds.xMin + (col + 0.5) * cellW + jitterX));
+        const y = Math.max(bounds.yMin, Math.min(bounds.yMax, bounds.yMin + (row + 0.5) * cellH + jitterY));
+        positions.push({ x, y });
     }
     return positions;
 }
@@ -82,12 +82,12 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     const tierPositions = useMemo(() => {
         if (!tiers) return null;
         return {
-            // Tier 1: large photos, spread across center
-            tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 5, xMax: 70, yMin: 15, yMax: 65 }),
-            // Tier 2: smaller photos, wider spread
-            tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 3, xMax: 80, yMin: 10, yMax: 75 }),
-            // Tier 3: sprites scattered everywhere
-            tier3: scatterPositions(tiers.tier3.length, 't3', { xMin: 5, xMax: 85, yMin: 20, yMax: 80 }),
+            // Tier 1: center zone, well-spaced (large cards need room)
+            tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 15, xMax: 65, yMin: 20, yMax: 70 }),
+            // Tier 2: full viewport edge-to-edge including corners
+            tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 1, xMax: 92, yMin: 5, yMax: 92 }),
+            // Tier 3: everywhere
+            tier3: scatterPositions(tiers.tier3.length, 't3', { xMin: 2, xMax: 95, yMin: 8, yMax: 90 }),
         };
     }, [tiers]);
 
