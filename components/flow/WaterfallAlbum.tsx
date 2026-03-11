@@ -56,25 +56,24 @@ function scatterPositions(count: number, seed: string, bounds: { xMin: number; x
 }
 
 // Compute tier opacity/scale/visibility based on scroll depth (0→1)
-// Tier 0 (large photos) starts visible, peels off first
-// Tier 1 (medium photos) enters as tier 0 exits, then peels off
-// Beyond both tiers, the SpriteBackground behind shows through
+// Full zoom sequence: traits (0→0.20) → tier 0 (0.10→0.40) → tier 1 (0.25→0.60)
+//   → sprites unblur (0.50→0.75) → sprites fade + hero unblurs (0.75→1.0)
 function getTierStyle(tier: number, depth: number): React.CSSProperties {
     let opacity: number, scale: number;
 
     if (tier === 0) {
-        // Tier 1: fully visible at 0, peels off by 0.5
-        const t = Math.min(1, Math.max(0, depth / 0.5));
+        // Tier 1 (large photos): visible at start, peels off 0.10→0.40
+        const t = Math.min(1, Math.max(0, (depth - 0.10) / 0.30));
         opacity = 1 - t;
         scale = 1 + t * 0.5;
     } else {
-        // Tier 2: fades in 0→0.35, fully visible 0.35→0.55, peels off 0.55→1.0
-        const enter = Math.min(1, Math.max(0, depth / 0.35));
-        const exit = Math.min(1, Math.max(0, (depth - 0.55) / 0.45));
+        // Tier 2 (medium photos): enters 0.15→0.35, peaks 0.35→0.45, peels off 0.45→0.65
+        const enter = Math.min(1, Math.max(0, (depth - 0.15) / 0.20));
+        const exit = Math.min(1, Math.max(0, (depth - 0.45) / 0.20));
         if (depth < 0.35) {
             opacity = 0.15 + enter * 0.85;
             scale = 0.85 + enter * 0.15;
-        } else if (depth < 0.55) {
+        } else if (depth < 0.45) {
             opacity = 1;
             scale = 1;
         } else {
@@ -303,10 +302,12 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                 {isMobile && (
                     <div className="fixed right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 pointer-events-none"
                         style={{ zIndex: 20 }}>
-                        {[0, 1, 2].map(i => {
-                            const active = i === 0 ? scrollDepth < 0.35
-                                : i === 1 ? scrollDepth >= 0.2 && scrollDepth < 0.7
-                                : scrollDepth >= 0.55;
+                        {[0, 1, 2, 3].map(i => {
+                            // 0=traits/tier1, 1=tier2, 2=sprites, 3=hero
+                            const active = i === 0 ? scrollDepth < 0.25
+                                : i === 1 ? scrollDepth >= 0.20 && scrollDepth < 0.55
+                                : i === 2 ? scrollDepth >= 0.50 && scrollDepth < 0.80
+                                : scrollDepth >= 0.75;
                             return (
                                 <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-300"
                                     style={{

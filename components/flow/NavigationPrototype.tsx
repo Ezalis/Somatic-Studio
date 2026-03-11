@@ -271,16 +271,23 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {/* HERO — fixed behind everything, unaffected by scroll bounce */}
             {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
                 <div className="fixed inset-0 pt-12 z-10">
-                    <HeroSection image={anchor} blur={heroBlur}
+                    <HeroSection image={anchor}
+                        blur={flowPhase === 'album' && albumDepth > 0.7
+                            ? 16 * Math.max(0, 1 - (albumDepth - 0.7) / 0.3)
+                            : heroBlur}
                         heroRevealed={flowPhase !== 'blooming'} />
                 </div>
             )}
 
             {/* Sprite background — smooth pool transitions, convergence rings show trait relevance */}
             {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
-                <SpriteBackground albumImages={albumPool} maxCount={spriteCount}
-                    onSelect={handleAlbumSelect}
-                    unblur={flowPhase === 'album' ? albumDepth > 0.5 : heroBlur < 2} />
+                <div style={flowPhase === 'album' && albumDepth > 0.7
+                    ? { opacity: Math.max(0, 1 - (albumDepth - 0.7) / 0.3), transition: 'opacity 0.1s' }
+                    : undefined}>
+                    <SpriteBackground albumImages={albumPool} maxCount={spriteCount}
+                        onSelect={handleAlbumSelect}
+                        unblur={flowPhase === 'album' ? albumDepth > 0.45 : heroBlur < 2} />
+                </div>
             )}
 
             {/* Album phase: tiered album (below trait bar, above hero) */}
@@ -336,18 +343,30 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             )}
 
             {/* Fixed compact trait bar — album phase + exit transition overlay */}
-            {showFixedTraitBar && anchor && (
-                <div className="fixed top-12 left-0 right-0 z-30 pointer-events-auto"
-                    style={{
-                        animation: traitLeaving
-                            ? 'trait-settle-out 400ms cubic-bezier(0.22,1,0.36,1) both'
-                            : 'trait-settle-in 400ms cubic-bezier(0.22,1,0.36,1) both',
-                    }}>
-                    <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
-                        selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
-                        albumImages={albumPool} />
-                </div>
-            )}
+            {showFixedTraitBar && anchor && (() => {
+                // Trait bar peels off at depth 0→0.20 on mobile zoom-through
+                const traitPeel = Math.min(1, Math.max(0, albumDepth / 0.20));
+                const depthDriven = albumDepth > 0;
+                return (
+                    <div className="fixed top-12 left-0 right-0 z-30 pointer-events-auto"
+                        style={{
+                            ...(depthDriven ? {
+                                opacity: 1 - traitPeel,
+                                transform: `scale(${1 + traitPeel * 0.3}) translateY(${-traitPeel * 20}px)`,
+                                transformOrigin: 'top center',
+                                ...(traitPeel > 0.9 ? { visibility: 'hidden' as const, pointerEvents: 'none' as const } : {}),
+                            } : {
+                                animation: traitLeaving
+                                    ? 'trait-settle-out 400ms cubic-bezier(0.22,1,0.36,1) both'
+                                    : 'trait-settle-in 400ms cubic-bezier(0.22,1,0.36,1) both',
+                            }),
+                        }}>
+                        <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
+                            selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
+                            albumImages={albumPool} />
+                    </div>
+                );
+            })()}
         </div>
     );
 };
