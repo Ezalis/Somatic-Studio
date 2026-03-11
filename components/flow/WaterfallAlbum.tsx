@@ -96,7 +96,7 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     const isMobile = useMemo(() =>
         typeof window !== 'undefined' && window.innerWidth < 768, []);
 
-    // Mobile scroll-depth state for zoom-through-layers effect
+    // Scroll-depth state for zoom-through-layers effect (touch on mobile, wheel on desktop)
     const [scrollDepth, setScrollDepth] = useState(0);
     const touchRef = useRef({ startY: 0, lastY: 0, lastTime: 0, velocity: 0, isScrolling: false });
     const momentumRef = useRef<number>(0);
@@ -166,6 +166,11 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         momentumRef.current = requestAnimationFrame(animate);
     }, []);
 
+    const handleWheel = useCallback((e: React.WheelEvent) => {
+        const totalDistance = window.innerHeight * 2;
+        setScrollDepth(d => Math.max(0, Math.min(1, d + e.deltaY / totalDistance)));
+    }, []);
+
     const nodes = useMemo((): WaterfallNode[] => {
         if (albumImages.length === 0) return [];
         const maxHits = Math.max(1, ...albumImages.map((a: AlbumImage) => a.tagHits));
@@ -215,28 +220,24 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     if (!visible) return null;
 
     const handleClick = (img: ImageNode, e: React.MouseEvent) => {
-        if (isMobile && isScrollingRef.current) return;
+        if (isScrollingRef.current) return;
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         onSelect(img, rect);
     };
 
-    // Album phase: photos scattered on a surface
+    // Album phase: photos scattered on a surface with zoom-through interaction
     if (isAlbumPhase && tiers && tierPositions) {
-        // Mobile touch props for zoom-through interaction
-        const touchProps = isMobile ? {
-            onTouchStart: handleTouchStart,
-            onTouchMove: handleTouchMove,
-            onTouchEnd: handleTouchEnd,
-        } : {};
-
         return (
-            <div className={`fixed inset-0 ${isMobile ? 'pointer-events-auto' : 'pointer-events-none'}`}
+            <div className="fixed inset-0 pointer-events-auto"
                 style={{ zIndex: 15, ...(isMobile ? { touchAction: 'none' } : {}) }}
-                {...touchProps}>
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onWheel={handleWheel}>
 
                 {/* Tier 2: Smaller photo prints */}
-                <div className={isMobile ? "absolute inset-0" : "contents"}
-                    style={isMobile ? getTierStyle(1, scrollDepth) : undefined}>
+                <div className="absolute inset-0"
+                    style={getTierStyle(1, scrollDepth)}>
                     {tiers.tier2.map((node, index) => {
                         const pos = tierPositions.tier2[index];
                         const rotate = (seededRandom(node.image.id + 't2r') - 0.5) * 8;
@@ -267,8 +268,8 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                 </div>
 
                 {/* Tier 1: Large photo prints — most prominent, peels off first */}
-                <div className={isMobile ? "absolute inset-0" : "contents"}
-                    style={isMobile ? getTierStyle(0, scrollDepth) : undefined}>
+                <div className="absolute inset-0"
+                    style={getTierStyle(0, scrollDepth)}>
                     {tiers.tier1.map((node, index) => {
                         const pos = tierPositions.tier1[index];
                         const rotate = (seededRandom(node.image.id + 't1r') - 0.5) * 6;
@@ -298,8 +299,8 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                     })}
                 </div>
 
-                {/* Depth indicator — dots on right edge (mobile only) */}
-                {isMobile && (
+                {/* Depth indicator — dots on right edge */}
+                {(
                     <div className="fixed right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 pointer-events-none"
                         style={{ zIndex: 20 }}>
                         {[0, 1, 2, 3].map(i => {
