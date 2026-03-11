@@ -13,11 +13,10 @@ import './flow.css';
 interface NavigationPrototypeProps {
     images: ImageNode[];
     tags: Tag[];
-    onExit: () => void;
     onPrioritizeAssets?: (assetIds: string[]) => void;
 }
 
-const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags, onExit, onPrioritizeAssets }) => {
+const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags, onPrioritizeAssets }) => {
     const [flowPhase, setFlowPhase] = useState<FlowPhase>('idle');
     const [anchorId, setAnchorId] = useState<string | null>(null);
     const [trail, setTrail] = useState<TrailPoint[]>([]);
@@ -248,14 +247,10 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-3">
-                    {trail.length > 0 && (
-                        <button onClick={handleClear} className="text-[9px] text-zinc-400 hover:text-zinc-600 transition-colors tracking-widest uppercase cursor-pointer"
-                            style={{ fontFamily: 'JetBrains Mono, monospace' }}>Clear</button>
-                    )}
-                    <button onClick={onExit} className="text-[9px] text-zinc-400 hover:text-zinc-600 transition-colors tracking-widest uppercase cursor-pointer"
-                        style={{ fontFamily: 'JetBrains Mono, monospace' }}>Exit</button>
-                </div>
+                {trail.length > 0 && (
+                    <button onClick={handleClear} className="text-[9px] text-zinc-400 hover:text-zinc-600 transition-colors tracking-widest uppercase cursor-pointer"
+                        style={{ fontFamily: 'JetBrains Mono, monospace' }}>Start over</button>
+                )}
             </header>
 
             {/* IDLE */}

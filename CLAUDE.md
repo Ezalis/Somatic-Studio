@@ -8,7 +8,6 @@ A photography asset management and discovery system — a "living web of memory,
 |-------|-----------|
 | Framework | React 19, TypeScript 5.8 |
 | Styling | Tailwind CSS v4 (build-time via `@tailwindcss/vite`) |
-| Physics/Layout | D3.js 7.9 (force simulation) |
 | Image Service | Immich (docker-01:2283) — images, EXIF, tags |
 | Icons | Lucide React |
 | Build | Vite 6 |
@@ -23,76 +22,58 @@ A photography asset management and discovery system — a "living web of memory,
 index.html                    → SPA shell, inline styles
 index.css                     → Tailwind entry (@import "tailwindcss")
 index.tsx                     → React entry, fontsource imports
-App.tsx                       → Root component, global state, view routing
+App.tsx                       → Root component, Immich hydration, renders flow navigation
 ├── components/
-│   ├── Experience.tsx        → Visual exploration (D3 physics, grid, focus views)
-│   ├── Workbench.tsx         → Admin/curation list view (tagging, search, batch ops)
-│   ├── VisualElements.tsx    → Shared visuals (EsotericSprite, LoadingOverlay, HistoryStream)
-│   ├── DetailView.tsx        → Image detail overlay (metadata, tags, EXIF)
-│   ├── FieldGuideOverlay.tsx → Onboarding overlay explaining the navigation metaphor
-│   ├── Gallery.tsx           → Fullscreen vertical snap-scroll gallery
-│   ├── HistoryTimeline.tsx   → Fullscreen chronological exploration history
-│   ├── flow/                     → Flow-state navigation (vertical scroll journey)
-│   │   ├── NavigationPrototype.tsx  → Orchestrator (state machine, scroll layout)
-│   │   ├── MiniSprite.tsx           → SVG sprite with bloom animation
-│   │   ├── BloomOverlay.tsx         → Bloom scatter transition
-│   │   ├── HeroSection.tsx          → Fullscreen hero with 3D card flip
-│   │   ├── TraitSelector.tsx        → Color/tag/discovery-tag picker
-│   │   ├── WaterfallAlbum.tsx       → Tiered album layout
-│   │   ├── IdleField.tsx            → Drifting sprite field
-│   │   ├── flowTypes.ts             → Flow-specific types
-│   │   ├── flowHelpers.ts           → Scoring, color math, seeded random
-│   │   └── flow.css                 → Keyframe animations
-│   ├── ProgressiveImage.tsx  → Preview→full-res crossfade image loader
-│   └── SatelliteLayer.tsx    → Spectral ID + Semantic Web side panels
-├── hooks/
-│   ├── useRelevanceScoring.ts   → Relevance scoring with per-dimension breakdown
-│   ├── usePhysicsSimulation.ts  → D3 force simulation with configurable physics
-│   └── __tests__/
-│       └── useRelevanceScoring.test.ts → Scoring engine test suite
+│   └── flow/                     → Flow-state navigation (the entire UI)
+│       ├── NavigationPrototype.tsx  → Orchestrator (state machine, scroll layout)
+│       ├── MiniSprite.tsx           → SVG sprite with bloom animation
+│       ├── BloomOverlay.tsx         → Bloom scatter transition
+│       ├── HeroSection.tsx          → Fullscreen hero with scroll-driven blur
+│       ├── TraitSelector.tsx        → Color/tag/discovery-tag picker
+│       ├── WaterfallAlbum.tsx       → Tiered album layout with zoom-through
+│       ├── SpriteBackground.tsx     → Convergence ring sprite layer
+│       ├── IdleField.tsx            → Drifting sprite + photo card field
+│       ├── flowTypes.ts             → Flow-specific types
+│       ├── flowHelpers.ts           → Scoring, color math, seeded random
+│       ├── index.ts                 → Barrel export
+│       └── flow.css                 → Keyframe animations
 ├── services/
 │   ├── immichService.ts      → Immich API: album discovery, asset loading, tag reading
-│   ├── dataService.ts        → Color palette extraction, color math, relationship scoring
+│   ├── dataService.ts        → Color palette extraction, color math utilities
 │   └── resourceService.ts    → IndexedDB persistence (palette cache, user tag edits)
 ├── scripts/
 │   └── migrate-legacy-tags.mjs → One-time migration of Gemini AI tags into Immich
-├── types.ts                  → Data models (ImageNode, Tag, ExperienceNode, AnchorState, ScoreBreakdown)
+├── types.ts                  → Data models (ImageNode, Tag)
 └── vite.config.ts            → Tailwind plugin, Immich proxy, Docker polling
 ```
 
 ## Key Concepts
 
 - **ImageNode** — An image with EXIF metadata, 5-color palette, manual tags, AI tags, and capture timestamp
-- **ExperienceNode** — An ImageNode wrapped with D3 physics state (position, velocity, scale, opacity, relevance score)
-- **AnchorState** — The current navigation focus: an image, tag, color, date, camera, lens, or season
-- **EsotericSprite** — A procedurally-generated SVG glyph unique to each image, derived from its palette and metadata
+- **MiniSprite** — A procedurally-generated SVG glyph unique to each image, derived from its palette and metadata
+- **FlowPhase** — State machine: `idle → blooming → hero → exploring → album`
+- **Trait** — A selected color or tag used to build the album pool; up to 6 traits per session
 - **Relevance Score** — Calculated from temporal proximity, tag overlap, color distance, and technical matches
 
-## Views
+## Flow-State Navigation
 
-### Experience (Visual Exploration)
-- **Grid View** — All images as EsotericSprites in a responsive grid; click to anchor
-- **Image Focus** — Hero image centered with 12 related neighbors orbiting via physics simulation
-- **Filter Views** — Pivot by tag, color, date, camera, lens, or season
-- **Satellite Panels** — "Spectral ID" (color navigation) and "Semantic Web" (tag navigation)
-- **History Timeline** — Fullscreen chronological view of exploration path
-- **Fullscreen Gallery** — Vertical snap-scroll for sequential viewing
-- **Field Guide** — Onboarding overlay explaining the metaphor
+The entire app is a single vertical scroll journey through images:
 
-### Workbench (Admin/Curation)
-- **List Grid** — 6-column table with preview, dates, tags, technical specs
-- **Search** — Full-text across filenames, tags, camera/lens models
-- **Multi-Select** — Click, Shift+Click range, Cmd+Click toggle
-- **Batch Operations** — Add/remove tags across selection
-- **Export** — Download tags.json and AI-tags.json
+1. **Idle** — Drifting sprites and photo cards fill the viewport; tap any to begin
+2. **Blooming** — Sprite scatters apart with staggered CSS transitions; hero preloads behind
+3. **Hero** — Fullscreen image (sticky, progressively blurs 0–16px as user scrolls past)
+4. **Exploring** — Trait selector scrolls up over blurred hero; pick colors + tags to build an album
+5. **Album** — At 6 traits: sprite background with convergence rings, zoom-through depth on mobile
+6. **Loop** — Tap any album item → bloom → new hero → new traits → new album
 
 ## Data Flow
 
-1. **Initialization** — `initDatabase()` loads IndexedDB palette cache and user tag edits
-2. **Hydration** — `hydrateFromImmich()` finds "SomaticStudio" album → fetches assets with EXIF → reads `SomaticStudio/*` tags → builds ImageNodes → extracts palettes from thumbnails (batches of 4)
-3. **Scoring** — When an anchor changes, images are scored by temporal/semantic/visual/technical similarity
-4. **Physics** — D3 force simulation positions nodes; top 12 by score become visible neighbors
-5. **Persistence** — Manual tag edits + palette cache saved to IndexedDB
+1. **Initialization** — `initDatabase()` loads IndexedDB palette cache
+2. **Skeleton hydration** — `hydrateSkeletonFromImmich()` finds "SomaticStudio" album → fetches assets with EXIF → builds ImageNodes with cached palettes → renders IdleField immediately
+3. **Background enrichment** — `enrichWithTagsAndPalettes()` fetches tags and extracts missing palettes in background
+4. **Priority enrichment** — When hero changes, `enrichAssetTags()` fetches tags for anchor + top 24 neighbors
+5. **Scoring** — `scoreRelevance()` ranks images by temporal/semantic/visual/technical similarity to anchor
+6. **Album pool** — Selected traits filter and rank the full image set; results shown as tiered album
 
 ## Image Proxy
 
@@ -150,6 +131,16 @@ Docker infrastructure lives in the DockerAdmin repo at `compose-templates/somati
 
 ## Migration Notes
 
+### 2026-03-11: v1.0 — Flow-State Promoted to Primary App
+- Flow-state navigation (previously at `/prototype`) now renders at root `/`
+- Removed old Experience (D3 orbital physics), Workbench (admin curation), and all supporting components
+- Deleted: `Experience.tsx`, `Workbench.tsx`, `DetailView.tsx`, `FieldGuideOverlay.tsx`, `Gallery.tsx`, `HistoryTimeline.tsx`, `ProgressiveImage.tsx`, `SatelliteLayer.tsx`, `VisualElements.tsx`
+- Deleted: `hooks/useRelevanceScoring.ts`, `hooks/usePhysicsSimulation.ts` and test suite
+- Removed D3.js dependency (`d3` package uninstalled)
+- Removed types: `ExperienceNode`, `ExperienceMode`, `ExperienceContext`, `ViewMode`, `ScoreBreakdown`, `PhysicsConfig`, `SimulationNode`, `AnchorState`, `InsightSnapshot`
+- Pruned `dataService.ts`: removed `getDominantColorsFromNodes`, `getRelatedTagsFromNodes`, `getIntersectionAttributes`
+- App.tsx simplified: hydration + flow navigation only, no view routing or old-view state
+
 ### 2026-03-01: Immich Integration
 Migrated from local gallery + Gemini AI to Immich image service:
 - Images served from Immich (docker-01:2283) "SomaticStudio" album, not `public/gallery/`
@@ -183,45 +174,15 @@ Migrated original Gemini AI tags from `main:public/resources/AI-tags.json` into 
 - `aiTagIds` field kept on ImageNode for Ollama pipeline (M3)
 - Tagging strategy replaced by Ollama on MacBook Air (llava + llama3.1)
 
-### 2026-03-02: M1 Structural Foundation
-Refactored Experience.tsx from a monolithic ~2000-line component into clean modules:
-- **Scoring engine** — Extracted `useRelevanceScoring` hook with `ScoreBreakdown` per-dimension type; scoring logic moved to `dataService.ts`
-- **Physics simulation** — Extracted `usePhysicsSimulation` hook with `PhysicsConfig`; tuned for slower movement and gentler transitions
-- **UI components** — Extracted `DetailView`, `FieldGuideOverlay`, `Gallery`, `HistoryTimeline`, `ProgressiveImage`, `SatelliteLayer` from inline rendering
-- **Progressive image loading** — Preview→full-res crossfade using CSS Grid stacking (no layout shift)
-- **Developer tooling** — Added ESLint + typescript-eslint (errors-only), Vitest with jsdom, `package-lock.json`
-- **Test suite** — Scoring engine tests covering dimension isolation, breakdown structure, anchor-self scoring
-
 ### 2026-03-02: Hero Image Performance Fix
 Fixed slow hero image load on production (Nginx) vs dev (Vite):
-- **Deferred preload** — Original-image preload in Experience.tsx now waits 1s before starting, so the ~267KB preview loads without the multi-MB original competing for bandwidth
-- **Nginx upstream keepalive** — Added `upstream immich_backend` with `keepalive 16` to reuse TCP connections to Immich (previously opened a new connection per request)
-- **Browser cache headers** — Added `expires 7d` + `Cache-Control: public, max-age=604800` on Immich image responses; thumbnails/previews cached for 7 days
+- **Nginx upstream keepalive** — Added `upstream immich_backend` with `keepalive 16` to reuse TCP connections to Immich
+- **Browser cache headers** — Added `expires 7d` + `Cache-Control: public, max-age=604800` on Immich image responses
 - **New env var** — `IMMICH_BACKEND` (host:port, no protocol) added to docker-compose.yml for the `upstream` block
-- Nginx config now requires `proxy_http_version 1.1` + `Connection ""` for keepalive to work
 
 ### 2026-03-01: Docker Self-Hosting
 Migrated from Google AI Studio (CDN-hosted) to self-hosted Docker:
 - Dockerfiles use `npm ci` with committed `package-lock.json` for deterministic builds
-
-## Navigation Prototype
-
-The `/prototype` route hosts the navigation exploration prototype — a self-contained single-file component (`NavigationPrototype.tsx`) that's completely independent from the main Experience view.
-
-**Active branch:** `flow-state` (off `navigation-ideation`)
-
-**Architecture (Phase 3 — "Flow State"):**
-- Single vertical scroll journey (no dashboard panels)
-- State machine: `idle → blooming → hero → exploring`
-- Bloom transition: sprite SVG elements scatter apart with staggered CSS transitions, hero preloads behind
-- Hero section: fullscreen image with card flip to handwritten details (Caveat font, SVG timeline)
-- Trait selector: pick up to 6 traits (palette colors + tags + discovery tags) to build album
-- Waterfall album: tiered by tag hit count — photos for high relevance, sprites for low
-- Navigation loop: tap album item → bloom → new hero → new traits → new album
-
-**Previous phases** (documented in memory/prototyping.md):
-- Phase 1 (iterations 1-4): Single-canvas exploration experiments
-- Phase 2 (iterations 5.0-5.5): "Living Dashboard" with left panel + center hero + dynamic album
 
 ## Known Data Issues
 
@@ -236,14 +197,13 @@ Tracked on [GitHub Projects](https://github.com/users/Ezalis/projects/1) with mi
 ### Completed
 
 - [x] **M1: Structural Foundation** — Scoring engine, physics simulation, UI component extraction, ESLint, Vitest, package-lock.json (#1–#6)
+- [x] **M2: Flow State Navigation** — Flow-state prototype built, decomposed into components, promoted to primary app as v1.0 (#19, #20)
 - [x] **Replace Gemini with Immich CLIP Smart Search** — Eliminated Google API dependency (CLIP later removed in favor of Ollama)
 - [x] **Configure Nginx proxy for Immich** — Nginx upstream keepalive + 7d cache headers for image responses (DockerAdmin repo)
 - [x] **Generate package-lock.json** — Deterministic builds, Docker can use `npm ci`
 
-### M2: Flow State Navigation (Next)
+### M2: Flow State Navigation (Remaining)
 
-- [ ] **Decompose NavigationPrototype into production components** — Extract MiniSprite, BloomOverlay, HeroSection, TraitSelector, WaterfallAlbum, IdleField into separate files; reuse `useRelevanceScoring` and `dataService` (#19)
-- [ ] **Integrate flow-state navigation with main app** — Wire components into App.tsx, decide routing (replace Experience or coexist), connect Immich hydration (#20)
 - [ ] **Keyboard navigation + URL state + browser back** — Arrow keys, Enter/Escape, hero ID in URL, history stack (#9)
 - [ ] **Mobile responsive flow-state layout** — Touch targets, bloom perf, trait selector on narrow viewports, album grid sizing (#21)
 - [ ] **Trail/history visualization in flow journey** — Exploration trail within vertical scroll context (#22)
@@ -268,7 +228,6 @@ Tracked on [GitHub Projects](https://github.com/users/Ezalis/projects/1) with mi
 - [ ] Persistent exploration state across sessions
 - [ ] Tag management UI (rename, merge, delete)
 - [ ] Advanced search (date range, ISO, aperture, color similarity)
-- [ ] InsightSnapshot capture and replay
 - [ ] Dark mode for UI chrome
 
 ### Infrastructure
