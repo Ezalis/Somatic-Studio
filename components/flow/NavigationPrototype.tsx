@@ -240,7 +240,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 <div className="flex items-center gap-3">
                     <h1 className="text-[10px] tracking-[0.25em] uppercase text-zinc-500"
                         style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        Flow State
+                        Somatic Studio
                     </h1>
                     {trail.length > 0 && (
                         <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
