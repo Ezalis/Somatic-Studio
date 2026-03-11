@@ -102,11 +102,13 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     const momentumRef = useRef<number>(0);
     const isScrollingRef = useRef(false);
 
-    // Reset scroll depth when album phase starts
+    // Reset scroll depth and touch state when album phase starts
     useEffect(() => {
         if (isAlbumPhase) {
             setScrollDepth(0);
             onScrollDepth?.(0);
+            isScrollingRef.current = false;
+            cancelAnimationFrame(momentumRef.current);
         }
     }, [isAlbumPhase, onScrollDepth]);
 
@@ -120,6 +122,7 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
 
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
         cancelAnimationFrame(momentumRef.current);
+        isScrollingRef.current = false;
         const y = e.touches[0].clientY;
         touchRef.current = { startY: y, lastY: y, lastTime: Date.now(), velocity: 0, isScrolling: false };
     }, []);
