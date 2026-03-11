@@ -178,39 +178,39 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     }, []);
 
     const handleToggleTrait = useCallback((key: string) => {
+        const currentSize = selectedTraits.size;
+        const willAdd = !selectedTraits.has(key) && currentSize < 6;
+        const newSize = selectedTraits.has(key) ? currentSize - 1 : (willAdd ? currentSize + 1 : currentSize);
+
         setSelectedTraits(prev => {
             const next = new Set(prev);
             if (next.has(key)) next.delete(key);
             else if (next.size < 6) next.add(key);
-
-            // 5→6: enter album phase
-            if (prev.size === 5 && next.size === 6) {
-                setFlowPhase('album');
-                return next;
-            }
-
-            // 6→5: leave album phase with exit animation
-            if (prev.size === 6 && next.size === 5) {
-                setTraitLeaving(true);
-                // After exit animation, switch to exploring and restore scroll
-                setTimeout(() => {
-                    setFlowPhase('exploring');
-                    setTraitLeaving(false);
-                    requestAnimationFrame(() => {
-                        if (scrollRef.current) {
-                            scrollRef.current.scrollTop = window.innerHeight;
-                        }
-                    });
-                }, 400);
-                return next;
-            }
-
             return next;
         });
-        if (flowPhase !== 'album') {
+
+        // 5→6: enter album phase
+        if (currentSize === 5 && newSize === 6) {
+            setFlowPhase('album');
+        }
+        // 6→5: leave album phase with exit animation
+        else if (currentSize === 6 && newSize === 5) {
+            setTraitLeaving(true);
+            setTimeout(() => {
+                setFlowPhase('exploring');
+                setTraitLeaving(false);
+                requestAnimationFrame(() => {
+                    if (scrollRef.current) {
+                        scrollRef.current.scrollTop = window.innerHeight;
+                    }
+                });
+            }, 400);
+        }
+        // Any other change while not in album: stay in exploring
+        else if (flowPhase !== 'album') {
             setFlowPhase('exploring');
         }
-    }, [flowPhase]);
+    }, [selectedTraits, flowPhase]);
 
     const handleClear = useCallback(() => {
         setTrail([]);
