@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ImageNode } from '../../types';
 import { AlbumImage, WaterfallNode } from './flowTypes';
 import { seededRandom } from './flowHelpers';
@@ -54,11 +54,111 @@ function scatterPositions(count: number, seed: string, bounds: { xMin: number; x
     return positions;
 }
 
+// Compute tier opacity/scale/visibility based on scroll depth (0→1)
+// Tier 0 (most relevant) starts visible, peels off first
+// Tier 1 enters as tier 0 exits, then peels off
+// Tier 2 enters last and stays
+function getTierStyle(tier: number, depth: number): React.CSSProperties {
+    let opacity: number, scale: number;
+
+    if (tier === 0) {
+        const t = Math.min(1, Math.max(0, depth / 0.45));
+        opacity = 1 - t;
+        scale = 1 + t * 0.5;
+    } else if (tier === 1) {
+        const enter = Math.min(1, Math.max(0, depth / 0.35));
+        const exit = Math.min(1, Math.max(0, (depth - 0.5) / 0.4));
+        if (depth < 0.35) {
+            opacity = 0.15 + enter * 0.85;
+            scale = 0.85 + enter * 0.15;
+        } else if (depth < 0.5) {
+            opacity = 1;
+            scale = 1;
+        } else {
+            opacity = 1 - exit;
+            scale = 1 + exit * 0.5;
+        }
+    } else {
+        const enter = Math.min(1, Math.max(0, (depth - 0.45) / 0.35));
+        opacity = 0.1 + enter * 0.9;
+        scale = 0.85 + enter * 0.15;
+    }
+
+    return {
+        opacity,
+        transform: `scale(${scale})`,
+        transformOrigin: 'center center',
+        ...(opacity < 0.15 ? { visibility: 'hidden' as const } : {}),
+    };
+}
+
 const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount, onSelect, gentleReveal, isAlbumPhase }) => {
     const isPartial = traitCount >= 3 && traitCount < 6;
     const visible = traitCount >= 3;
     const isMobile = useMemo(() =>
         typeof window !== 'undefined' && window.innerWidth < 768, []);
+
+    // Mobile scroll-depth state for zoom-through-layers effect
+    const [scrollDepth, setScrollDepth] = useState(0);
+    const touchRef = useRef({ startY: 0, lastY: 0, lastTime: 0, velocity: 0, isScrolling: false });
+    const momentumRef = useRef<number>(0);
+    const isScrollingRef = useRef(false);
+
+    // Reset scroll depth when album phase starts
+    useEffect(() => {
+        if (isAlbumPhase) setScrollDepth(0);
+    }, [isAlbumPhase]);
+
+    // Cleanup momentum on unmount
+    useEffect(() => () => cancelAnimationFrame(momentumRef.current), []);
+
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        cancelAnimationFrame(momentumRef.current);
+        const y = e.touches[0].clientY;
+        touchRef.current = { startY: y, lastY: y, lastTime: Date.now(), velocity: 0, isScrolling: false };
+    }, []);
+
+    const handleTouchMove = useCallback((e: React.TouchEvent) => {
+        const y = e.touches[0].clientY;
+        const now = Date.now();
+        const dy = touchRef.current.lastY - y; // positive = swipe up
+
+        // Only start scroll-depth tracking after 10px threshold
+        if (!touchRef.current.isScrolling) {
+            if (Math.abs(touchRef.current.startY - y) < 10) return;
+            touchRef.current.isScrolling = true;
+            isScrollingRef.current = true;
+        }
+
+        const dt = now - touchRef.current.lastTime;
+        if (dt > 0) touchRef.current.velocity = dy / dt;
+        touchRef.current.lastY = y;
+        touchRef.current.lastTime = now;
+
+        const totalDistance = window.innerHeight * 2;
+        setScrollDepth(d => Math.max(0, Math.min(1, d + dy / totalDistance)));
+    }, []);
+
+    const handleTouchEnd = useCallback(() => {
+        if (!touchRef.current.isScrolling) return;
+
+        // Apply momentum
+        let v = touchRef.current.velocity;
+        const totalDistance = window.innerHeight * 2;
+        const decay = 0.95;
+
+        const animate = () => {
+            if (Math.abs(v) < 0.005) {
+                // Clear scrolling flag after momentum settles
+                setTimeout(() => { isScrollingRef.current = false; }, 50);
+                return;
+            }
+            v *= decay;
+            setScrollDepth(d => Math.max(0, Math.min(1, d + (v * 16) / totalDistance)));
+            momentumRef.current = requestAnimationFrame(animate);
+        };
+        momentumRef.current = requestAnimationFrame(animate);
+    }, []);
 
     const nodes = useMemo((): WaterfallNode[] => {
         if (albumImages.length === 0) return [];
@@ -99,115 +199,143 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     }, [isAlbumPhase, nodes]);
 
     // Pre-compute scattered positions for each tier
+    // All tiers share viewport bounds — zoom-through effect means only one is visible at a time
     const tierPositions = useMemo(() => {
         if (!tiers) return null;
-        if (isMobile) {
-            return {
-                tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 5, xMax: 80, yMin: 5, yMax: 35 }),
-                tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 3, xMax: 90, yMin: 25, yMax: 65 }, 0.7),
-                tier3: scatterPositions(tiers.tier3.length, 't3', { xMin: 5, xMax: 92, yMin: 55, yMax: 92 }),
-            };
-        }
         return {
-            // Tier 1: center zone starting near top, well-spaced (large cards need room)
             tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 10, xMax: 70, yMin: 10, yMax: 75 }),
-            // Tier 2: full viewport edge-to-edge, biased toward outer edges to avoid tier 1 overlap
             tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 1, xMax: 92, yMin: 8, yMax: 88 }, 0.7),
-            // Tier 3: everywhere
             tier3: scatterPositions(tiers.tier3.length, 't3', { xMin: 2, xMax: 95, yMin: 5, yMax: 90 }),
         };
-    }, [tiers, isMobile]);
+    }, [tiers]);
 
     if (!visible) return null;
 
     const handleClick = (img: ImageNode, e: React.MouseEvent) => {
+        if (isMobile && isScrollingRef.current) return;
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         onSelect(img, rect);
     };
 
     // Album phase: photos scattered on a surface
     if (isAlbumPhase && tiers && tierPositions) {
+        // Mobile touch props for zoom-through interaction
+        const touchProps = isMobile ? {
+            onTouchStart: handleTouchStart,
+            onTouchMove: handleTouchMove,
+            onTouchEnd: handleTouchEnd,
+        } : {};
+
         return (
-            <div className={isMobile ? "relative pointer-events-none" : "fixed inset-0 pointer-events-none"}
-                style={isMobile ? { zIndex: 15, minHeight: '300vh' } : { zIndex: 15 }}>
-                {/* Tier 3: Sprites — scattered, lowest layer */}
-                {tiers.tier3.map((node, index) => {
-                    const pos = tierPositions.tier3[index];
-                    const spriteSize = isMobile
-                        ? 28 + seededRandom(node.image.id + 't3sz') * 15
-                        : 35 + seededRandom(node.image.id + 't3sz') * 25;
-                    return (
-                        <div key={node.image.id}
-                            className="absolute pointer-events-auto cursor-pointer"
-                            style={{
-                                left: `${pos.x}%`,
-                                top: `${pos.y}%`,
-                                zIndex: 1,
-                                animation: `gentle-unveil 800ms cubic-bezier(0.22,1,0.36,1) ${index * 60}ms both`,
-                            }}
-                            onClick={(e) => handleClick(node.image, e)}>
-                            <MiniSprite image={node.image} size={spriteSize} convergence={node.relevance} />
-                        </div>
-                    );
-                })}
+            <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 15 }}
+                {...touchProps}>
 
-                {/* Tier 2: Smaller photo prints — natural aspect ratio */}
-                {tiers.tier2.map((node, index) => {
-                    const pos = tierPositions.tier2[index];
-                    const rotate = (seededRandom(node.image.id + 't2r') - 0.5) * 8;
-                    const cardWidth = isMobile
-                        ? 100 + seededRandom(node.image.id + 't2w') * 24
-                        : 140 + seededRandom(node.image.id + 't2w') * 40;
-                    return (
-                        <div key={node.image.id}
-                            className="absolute pointer-events-auto cursor-pointer"
-                            style={{
-                                left: `${pos.x}%`,
-                                top: `${pos.y}%`,
-                                width: cardWidth,
-                                zIndex: 2,
-                                '--card-rotate': `${rotate}deg`,
-                                animation: `card-scatter 700ms cubic-bezier(0.22,1,0.36,1) ${400 + index * 80}ms both`,
-                            } as React.CSSProperties}
-                            onClick={(e) => handleClick(node.image, e)}>
-                            <div className="bg-white p-1.5 rounded shadow-md"
-                                style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)' }}>
-                                <img src={getThumbnailUrl(node.image.id)} alt=""
-                                    className="w-full rounded-sm"
-                                    draggable={false} />
+                {/* Tier 3: Sprites — deepest layer */}
+                <div className={isMobile ? "absolute inset-0" : "contents"}
+                    style={isMobile ? getTierStyle(2, scrollDepth) : undefined}>
+                    {tiers.tier3.map((node, index) => {
+                        const pos = tierPositions.tier3[index];
+                        const spriteSize = isMobile
+                            ? 28 + seededRandom(node.image.id + 't3sz') * 15
+                            : 35 + seededRandom(node.image.id + 't3sz') * 25;
+                        return (
+                            <div key={node.image.id}
+                                className="absolute pointer-events-auto cursor-pointer"
+                                style={{
+                                    left: `${pos.x}%`,
+                                    top: `${pos.y}%`,
+                                    zIndex: 1,
+                                    animation: `gentle-unveil 800ms cubic-bezier(0.22,1,0.36,1) ${index * 60}ms both`,
+                                }}
+                                onClick={(e) => handleClick(node.image, e)}>
+                                <MiniSprite image={node.image} size={spriteSize} convergence={node.relevance} />
                             </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </div>
 
-                {/* Tier 1: Large photo prints — most prominent */}
-                {tiers.tier1.map((node, index) => {
-                    const pos = tierPositions.tier1[index];
-                    const rotate = (seededRandom(node.image.id + 't1r') - 0.5) * 6;
-                    const cardWidth = isMobile
-                        ? 160 + seededRandom(node.image.id + 't1w') * 30
-                        : 260 + seededRandom(node.image.id + 't1w') * 60;
-                    return (
-                        <div key={node.image.id}
-                            className="absolute pointer-events-auto cursor-pointer"
-                            style={{
-                                left: `${pos.x}%`,
-                                top: `${pos.y}%`,
-                                width: cardWidth,
-                                zIndex: 3,
-                                '--card-rotate': `${rotate}deg`,
-                                animation: `card-scatter 800ms cubic-bezier(0.22,1,0.36,1) ${800 + index * 100}ms both`,
-                            } as React.CSSProperties}
-                            onClick={(e) => handleClick(node.image, e)}>
-                            <div className="bg-white p-2 rounded-md"
-                                style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08)' }}>
-                                <img src={getPreviewUrl(node.image.id)} alt=""
-                                    className="w-full rounded-sm"
-                                    draggable={false} />
+                {/* Tier 2: Smaller photo prints */}
+                <div className={isMobile ? "absolute inset-0" : "contents"}
+                    style={isMobile ? getTierStyle(1, scrollDepth) : undefined}>
+                    {tiers.tier2.map((node, index) => {
+                        const pos = tierPositions.tier2[index];
+                        const rotate = (seededRandom(node.image.id + 't2r') - 0.5) * 8;
+                        const cardWidth = isMobile
+                            ? 100 + seededRandom(node.image.id + 't2w') * 24
+                            : 140 + seededRandom(node.image.id + 't2w') * 40;
+                        return (
+                            <div key={node.image.id}
+                                className="absolute pointer-events-auto cursor-pointer"
+                                style={{
+                                    left: `${pos.x}%`,
+                                    top: `${pos.y}%`,
+                                    width: cardWidth,
+                                    zIndex: 2,
+                                    '--card-rotate': `${rotate}deg`,
+                                    animation: `card-scatter 700ms cubic-bezier(0.22,1,0.36,1) ${400 + index * 80}ms both`,
+                                } as React.CSSProperties}
+                                onClick={(e) => handleClick(node.image, e)}>
+                                <div className="bg-white p-1.5 rounded shadow-md"
+                                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)' }}>
+                                    <img src={getThumbnailUrl(node.image.id)} alt=""
+                                        className="w-full rounded-sm"
+                                        draggable={false} />
+                                </div>
                             </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </div>
+
+                {/* Tier 1: Large photo prints — most prominent, peels off first */}
+                <div className={isMobile ? "absolute inset-0" : "contents"}
+                    style={isMobile ? getTierStyle(0, scrollDepth) : undefined}>
+                    {tiers.tier1.map((node, index) => {
+                        const pos = tierPositions.tier1[index];
+                        const rotate = (seededRandom(node.image.id + 't1r') - 0.5) * 6;
+                        const cardWidth = isMobile
+                            ? 160 + seededRandom(node.image.id + 't1w') * 30
+                            : 260 + seededRandom(node.image.id + 't1w') * 60;
+                        return (
+                            <div key={node.image.id}
+                                className="absolute pointer-events-auto cursor-pointer"
+                                style={{
+                                    left: `${pos.x}%`,
+                                    top: `${pos.y}%`,
+                                    width: cardWidth,
+                                    zIndex: 3,
+                                    '--card-rotate': `${rotate}deg`,
+                                    animation: `card-scatter 800ms cubic-bezier(0.22,1,0.36,1) ${800 + index * 100}ms both`,
+                                } as React.CSSProperties}
+                                onClick={(e) => handleClick(node.image, e)}>
+                                <div className="bg-white p-2 rounded-md"
+                                    style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08)' }}>
+                                    <img src={getPreviewUrl(node.image.id)} alt=""
+                                        className="w-full rounded-sm"
+                                        draggable={false} />
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Depth indicator — 3 dots on right edge (mobile only) */}
+                {isMobile && (
+                    <div className="fixed right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 pointer-events-none"
+                        style={{ zIndex: 20 }}>
+                        {[0, 1, 2].map(i => {
+                            const active = i === 0 ? scrollDepth < 0.3
+                                : i === 1 ? scrollDepth >= 0.2 && scrollDepth < 0.7
+                                : scrollDepth >= 0.5;
+                            return (
+                                <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-300"
+                                    style={{
+                                        backgroundColor: active ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.12)',
+                                        transform: active ? 'scale(1.3)' : 'scale(1)',
+                                    }} />
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         );
     }

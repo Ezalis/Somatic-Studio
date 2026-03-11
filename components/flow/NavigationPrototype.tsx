@@ -18,8 +18,6 @@ interface NavigationPrototypeProps {
 }
 
 const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags, onExit, onPrioritizeAssets }) => {
-    const isMobile = useMemo(() =>
-        typeof window !== 'undefined' && window.innerWidth < 768, []);
     const [flowPhase, setFlowPhase] = useState<FlowPhase>('idle');
     const [anchorId, setAnchorId] = useState<string | null>(null);
     const [trail, setTrail] = useState<TrailPoint[]>([]);
@@ -283,15 +281,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
             {/* Album phase: tiered album (below trait bar, above hero) */}
             {flowPhase === 'album' && anchor && (
-                isMobile ? (
-                    <div className="fixed inset-0 pt-24 overflow-y-auto" style={{ zIndex: 15 }}>
-                        <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
-                            onSelect={handleAlbumSelect} isAlbumPhase />
-                    </div>
-                ) : (
-                    <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
-                        onSelect={handleAlbumSelect} isAlbumPhase />
-                )
+                <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
+                    onSelect={handleAlbumSelect} isAlbumPhase />
             )}
 
             {/* TRAIT SELECTOR — scroll container for exploring, fixed bar for album */}
