@@ -228,7 +228,7 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
 
         return (
             <div className={`fixed inset-0 ${isMobile ? 'pointer-events-auto' : 'pointer-events-none'}`}
-                style={{ zIndex: 15 }}
+                style={{ zIndex: 15, ...(isMobile ? { touchAction: 'none' } : {}) }}
                 {...touchProps}>
 
                 {/* Tier 3: Sprites — deepest layer */}
