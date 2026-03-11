@@ -268,12 +268,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
                 <div className="fixed inset-0 pt-12 z-10">
                     <HeroSection image={anchor} blur={heroBlur}
-                        heroRevealed={flowPhase !== 'blooming'}
-                        onImageClick={() => {
-                            if (scrollRef.current) {
-                                scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-                            }
-                        }} />
+                        heroRevealed={flowPhase !== 'blooming'} />
                 </div>
             )}
 
@@ -292,8 +287,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {/* TRAIT SELECTOR — scroll container for exploring, fixed bar for album */}
             {showScrollContainer && anchor && (
                 <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto">
-                    {/* Spacer: first screen is transparent, showing hero behind */}
-                    <div style={{ minHeight: '100vh', pointerEvents: 'none' }} />
+                    {/* Spacer: first screen is transparent — clicking scrolls to traits */}
+                    <div style={{ minHeight: '100vh', cursor: 'pointer' }}
+                        onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })} />
 
                     {/* Trait section scrolls up over the hero */}
                     <div id="trait-section" style={{ position: 'relative', minHeight: '60vh' }}>
