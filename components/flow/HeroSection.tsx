@@ -23,20 +23,18 @@ const HeroSection: React.FC<HeroSectionProps> = ({ image, blur = 0, heroRevealed
                     ? 'opacity 700ms ease, transform 700ms cubic-bezier(0.22, 1, 0.36, 1)'
                     : 'none',
             }}>
-            {/* Hero image */}
+            {/* Hero image — sized to viewport with breathing room */}
             <div className="flex items-center justify-center w-full">
-                <div className="w-full max-w-5xl mx-auto px-8">
-                    <div className="flex items-center justify-center">
-                        <img src={getPreviewUrl(image.id)} alt=""
-                            className="max-w-full max-h-[90vh] object-contain rounded-lg"
-                            style={{
-                                boxShadow: `0 16px 64px ${palette[0]}30, 0 4px 16px ${palette[1] || palette[0]}15`,
-                                filter: blur > 0 ? `blur(${blur}px)` : undefined,
-                                willChange: 'filter',
-                            }}
-                            draggable={false} />
-                    </div>
-                </div>
+                <img src={getPreviewUrl(image.id)} alt=""
+                    className="object-contain rounded-lg"
+                    style={{
+                        maxWidth: 'calc(100vw - 80px)',
+                        maxHeight: 'calc(100vh - 120px)',
+                        boxShadow: `0 16px 64px ${palette[0]}30, 0 4px 16px ${palette[1] || palette[0]}15`,
+                        filter: blur > 0 ? `blur(${blur}px)` : undefined,
+                        willChange: 'filter',
+                    }}
+                    draggable={false} />
             </div>
 
             {/* Scroll indicator — fades when blur > 1 */}
