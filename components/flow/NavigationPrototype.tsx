@@ -275,7 +275,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
             {/* Sprite background — smooth pool transitions, convergence rings show trait relevance */}
             {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
-                <div style={flowPhase === 'album' && albumDepth > 0.7
+                <div className="fixed inset-0" style={flowPhase === 'album' && albumDepth > 0.7
                     ? (() => {
                         const t = Math.min(1, (albumDepth - 0.7) / 0.2);
                         return {
