@@ -1,7 +1,3 @@
-<div align="center">
-  <!-- TODO: Add screenshot of Experience Grid view (full EsotericSprite canvas) -->
-</div>
-
 # Somatic Studio
 
 > A photography asset management and discovery system — a living web of memory, color, and light. Navigate by feeling, not folders.
@@ -17,48 +13,30 @@
 
 Every photograph carries memory — not just pixels, but the light that afternoon, the hum of the lens, the season encoded in color. Somatic Studio treats images as nodes in a living network, connected by palette, time, subject, and technical DNA. There are no folders, no albums to scroll. You navigate by feeling.
 
-Click any image and the system **anchors** on it — revealing its neighbors by color distance, seasonal proximity, shared tags, and camera/lens match. A portrait shot on golden-hour film stock surfaces beside another from a different year, connected by warmth and shallow focus. The relationships are calculated, but the experience is intuitive.
-
-Two modes shape the interface: **Experience** is the exploration space — a physics-driven canvas of procedural glyphs, orbital neighbors, and color satellites. **Workbench** is the curation layer — a structured grid for tagging, CLIP analysis, and batch operations, hidden behind a 5-click admin gesture.
+Tap any image and the system **blooms** — scattering its sprite apart to reveal a fullscreen hero. Scroll past the hero into a trait selector where you pick colors and tags that resonate. At six traits, an album materializes from the full collection, ranked by relevance. Tap any album image and the cycle begins again — a continuous loop of discovery through your photographs.
 
 ---
 
-*The rest of this document describes the architecture that makes the feeling possible.*
+## How It Works
 
-## Views
+The entire app is a single vertical scroll journey through five phases:
 
-### Experience (Visual Exploration)
-
-<!-- TODO: Add screenshot of Image Focus mode (hero image + 12 physics orbit neighbors) -->
-
-- **Grid View** — All images rendered as EsotericSprites in a responsive grid; click to anchor
-- **Image Focus** — Hero image centered with 12 related neighbors orbiting via D3 force simulation
-- **Filter Views** — Pivot the canvas by tag, color, date, camera, lens, or season
-- **Satellite Panels** — "Spectral ID" (color-based navigation) and "Semantic Web" (tag-based navigation)
-- **History Timeline** — Fullscreen chronological view of your exploration path
-- **Fullscreen Gallery** — Vertical snap-scroll for sequential viewing
-- **Field Guide** — Onboarding overlay explaining the navigation metaphor
-
-### Workbench (Admin / Curation)
-
-<!-- TODO: Add screenshot of list grid with multi-select and CLIP TAGS button -->
-
-- **List Grid** — 6-column table with preview thumbnails, dates, tags, technical specs
-- **Search** — Full-text across filenames, tags, camera/lens models
-- **Multi-Select** — Click, Shift+Click range, Cmd+Click toggle
-- **Batch Operations** — Add/remove tags across selection
-- **CLIP Smart Search** — AI tagging via Immich's CLIP model (35 labels across 5 categories)
-- **Export** — Download `tags.json` and `AI-tags.json`
+1. **Idle** — Drifting sprites and photo cards fill the viewport; tap any to begin
+2. **Blooming** — The sprite scatters apart with staggered CSS transitions; the hero preloads behind
+3. **Hero** — Fullscreen image (sticky, progressively blurs 0–16px as you scroll past)
+4. **Exploring** — Trait selector scrolls up over the blurred hero; pick colors + tags to build an album
+5. **Album** — At 6 traits: sprite background with convergence rings, tiered waterfall layout with zoom-through depth
+6. **Loop** — Tap any album item to bloom into a new hero, new traits, new album
 
 ## Key Concepts
 
 | Concept | Definition |
 |---------|-----------|
 | **ImageNode** | An image from Immich with EXIF metadata, 5-color palette, manual + AI tags, and capture timestamp |
-| **ExperienceNode** | An ImageNode wrapped with D3 physics state — position, velocity, scale, opacity, relevance score |
-| **AnchorState** | The current navigation focus: an image, tag, color, date, camera, lens, or season |
-| **EsotericSprite** | A procedurally-generated SVG glyph unique to each image, derived from its palette and ID hash |
-| **Relevance Score** | Composite of temporal proximity, tag overlap, color distance, and technical match |
+| **MiniSprite** | A procedurally-generated SVG glyph unique to each image, derived from its palette and metadata |
+| **FlowPhase** | State machine governing the scroll journey: `idle → blooming → hero → exploring → album` |
+| **Trait** | A selected color or tag used to filter the album pool; up to 6 traits per session |
+| **Relevance Score** | Composite of temporal proximity, tag overlap, color distance, and technical match (camera/lens) |
 
 ## Architecture
 
@@ -68,8 +46,7 @@ Two modes shape the interface: **Experience** is the exploration space — a phy
 |-------|-----------|
 | Framework | React 19, TypeScript 5.8 |
 | Styling | Tailwind CSS v4 (build-time via `@tailwindcss/vite`) |
-| Physics / Layout | D3.js 7.9 (force simulation) |
-| Image Service | [Immich](https://immich.app/) — images, EXIF, ML tags, CLIP Smart Search |
+| Image Service | [Immich](https://immich.app/) — images, EXIF, tags |
 | Icons | [Lucide React](https://lucide.dev/) |
 | Build | Vite 6 |
 | Linting | ESLint + typescript-eslint (errors-only config) |
@@ -80,58 +57,35 @@ Two modes shape the interface: **Experience** is the exploration space — a phy
 ### File Structure
 
 ```
-index.html                       → SPA shell, inline styles
-index.css                        → Tailwind entry (@import "tailwindcss")
-index.tsx                        → React entry, fontsource imports
-App.tsx                          → Root component, global state, view routing
+index.html                    → SPA shell, inline styles
+index.css                     → Tailwind entry (@import "tailwindcss")
+index.tsx                     → React entry, fontsource imports
+App.tsx                       → Root component, Immich hydration, renders flow navigation
 ├── components/
-│   ├── Experience.tsx           → Visual exploration (D3 physics, grid, focus views)
-│   ├── Workbench.tsx            → Admin/curation list view (tagging, search, batch ops)
-│   ├── VisualElements.tsx       → Shared visuals (EsotericSprite, LoadingOverlay, HistoryStream)
-│   ├── DetailView.tsx           → Image detail overlay (metadata, tags, EXIF)
-│   ├── FieldGuideOverlay.tsx    → Onboarding overlay explaining the navigation metaphor
-│   ├── Gallery.tsx              → Fullscreen vertical snap-scroll gallery
-│   ├── HistoryTimeline.tsx      → Fullscreen chronological exploration history
-│   ├── ProgressiveImage.tsx     → Preview→full-res crossfade image loader
-│   └── SatelliteLayer.tsx       → Spectral ID + Semantic Web side panels
-├── hooks/
-│   ├── useRelevanceScoring.ts   → Relevance scoring with per-dimension breakdown
-│   ├── usePhysicsSimulation.ts  → D3 force simulation with configurable physics
-│   └── __tests__/
-│       └── useRelevanceScoring.test.ts → Scoring engine test suite
+│   └── flow/                     → Flow-state navigation (the entire UI)
+│       ├── NavigationPrototype.tsx  → Orchestrator (state machine, scroll layout)
+│       ├── MiniSprite.tsx           → SVG sprite with bloom animation
+│       ├── BloomOverlay.tsx         → Bloom scatter transition
+│       ├── HeroSection.tsx          → Fullscreen hero with scroll-driven blur
+│       ├── TraitSelector.tsx        → Color/tag/discovery-tag picker
+│       ├── WaterfallAlbum.tsx       → Tiered album layout with zoom-through
+│       ├── SpriteBackground.tsx     → Convergence ring sprite layer
+│       ├── IdleField.tsx            → Drifting sprite + photo card field
+│       ├── flowTypes.ts             → Flow-specific types
+│       ├── flowHelpers.ts           → Scoring, color math, seeded random
+│       ├── index.ts                 → Barrel export
+│       └── flow.css                 → Keyframe animations
 ├── services/
-│   ├── immichService.ts         → Immich API: album discovery, asset loading, CLIP Smart Search
-│   ├── dataService.ts           → Color palette extraction, color math, relationship scoring
-│   └── resourceService.ts       → IndexedDB persistence (palette cache, user tag edits)
+│   ├── immichService.ts      → Immich API: album discovery, asset loading, tag reading
+│   ├── dataService.ts        → Color palette extraction, color math utilities
+│   └── resourceService.ts    → IndexedDB persistence (palette cache, user tag edits)
 ├── scripts/
-│   └── migrate-legacy-tags.mjs  → One-time migration of Gemini AI tags into Immich
-├── types.ts                     → Data models (ImageNode, Tag, ExperienceNode, ScoreBreakdown)
-└── vite.config.ts               → Tailwind plugin, Immich proxy, Docker polling
+│   └── migrate-legacy-tags.mjs → One-time migration of Gemini AI tags into Immich
+├── types.ts                  → Data models (ImageNode, Tag)
+└── vite.config.ts            → Tailwind plugin, Immich proxy, Docker polling
 ```
 
 ### Data Flow
-
-#### System Architecture
-
-```mermaid
-graph TD
-    Immich[Immich Server] -->|"/api/immich/*"| Proxy[Vite Dev Proxy / Nginx]
-    Proxy --> ImmichService[immichService.ts]
-    ImmichService --> DataService[dataService.ts]
-    ImmichService --> ResourceService[resourceService.ts]
-    DataService --> App[App.tsx]
-    ResourceService -->|IndexedDB| App
-    App --> Experience[Experience.tsx]
-    App --> Workbench[Workbench.tsx]
-    Experience --> Scoring[useRelevanceScoring]
-    Experience --> Physics[usePhysicsSimulation]
-    Experience --> VisualElements[VisualElements.tsx]
-    Experience --> DetailView[DetailView.tsx]
-    Experience --> SatelliteLayer[SatelliteLayer.tsx]
-    Experience --> Gallery[Gallery.tsx]
-```
-
-#### Hydration Sequence
 
 ```mermaid
 sequenceDiagram
@@ -145,25 +99,13 @@ sequenceDiagram
     Immich-->>App: albumId
     App->>Immich: getAlbumAssets(albumId)
     Immich-->>App: assets[] with EXIF
-    App->>Immich: getAssetDetail() per asset (batches of 4)
-    Immich-->>App: assets[] with tags
     App->>DS: extractPaletteFromAsset() per asset
-    DS-->>App: 5-color palettes
-    App->>App: Build ImageNodes, score by relevance
-    App->>IDB: Cache palettes
-```
-
-#### CLIP Tagging Flow
-
-```mermaid
-flowchart LR
-    A[Workbench: CLIP TAGS button] --> B[35 CLIP queries]
-    B --> C[Immich Smart Search]
-    C --> D[Top-5 position cutoff]
-    D --> E[30% penetration filter]
-    E --> F[Update app state]
-    F --> G[syncTagsToImmich]
-    G --> H[SomaticStudio/* tags in Immich]
+    DS-->>App: 5-color palettes (cached in IDB)
+    App->>App: Build ImageNodes → render IdleField
+    Note over App,Immich: Background enrichment
+    App->>Immich: enrichWithTagsAndPalettes()
+    Immich-->>App: tags for all assets
+    Note over App: On hero select: priority-enrich anchor + top 24 neighbors
 ```
 
 ### Image Proxy
@@ -171,7 +113,7 @@ flowchart LR
 All Immich API calls route through `/api/immich/*`, which rewrites to Immich's `/api/*` and injects the API key server-side. The browser never sees the key.
 
 - **Dev:** Vite proxy configured in `vite.config.ts`
-- **Prod:** Nginx proxy block (configured in the DockerAdmin repo)
+- **Prod:** Nginx proxy with upstream keepalive (16 connections) and 7-day browser cache on image responses
 
 ## Getting Started
 
@@ -206,9 +148,30 @@ npm run lint       # ESLint (errors-only)
 npm run test       # Vitest (single run)
 ```
 
-On first load, the app discovers the `SomaticStudio` album, fetches EXIF metadata for each asset, and extracts color palettes from thumbnails (batched, ~20ms delay between groups). Subsequent loads use the IndexedDB palette cache.
+On first load, the app discovers the `SomaticStudio` album, fetches EXIF metadata for each asset, and extracts color palettes from thumbnails. Subsequent loads use the IndexedDB palette cache.
 
-For Docker deployment, see the `compose-templates/somatic-studio/` directory in the DockerAdmin repo.
+## Deployment
+
+Docker containers run on `docker-01` (192.168.50.66):
+
+| Environment | Port | Server |
+|-------------|------|--------|
+| Production | 3100 | Nginx serving Vite build output |
+| Development | 3001 | Vite dev server with hot reload |
+
+```bash
+# Update production
+ssh user@docker-01 \
+  "cd ~/somatic-studio-src && git pull origin main && \
+   cd ~/compose-stacks/somatic-studio && docker compose --profile prod up -d --build"
+
+# Update dev
+ssh user@docker-01 \
+  "cd ~/somatic-studio-src && git fetch origin && git checkout BRANCH && git pull && \
+   cd ~/compose-stacks/somatic-studio && docker compose --profile dev up -d --build"
+```
+
+Docker infrastructure lives in the DockerAdmin repo at `compose-templates/somatic-studio/`.
 
 ## Roadmap
 
@@ -216,36 +179,37 @@ Tracked on [GitHub Projects](https://github.com/users/Ezalis/projects/1) with mi
 
 ### Completed
 
-- [x] **M1: Structural Foundation** — Scoring engine extraction, physics hook, UI component decomposition, ESLint, Vitest, package-lock.json
-- [x] Immich CLIP Smart Search (replaced Gemini AI)
+- [x] **M1: Structural Foundation** — Scoring engine, physics simulation, UI component extraction, ESLint, Vitest, package-lock.json
+- [x] **M2: Flow State Navigation (core)** — Flow-state prototype built and decomposed (#19), promoted to primary app as v1.0 (#20)
+- [x] Immich integration (replaced local gallery + Gemini AI)
 - [x] Nginx upstream keepalive + browser cache headers
-- [x] Deterministic builds (`package-lock.json`)
+- [x] Docker self-hosting (dev + prod)
 
-### Up Next — M2: Navigation Intelligence
+### In Progress — M2: Flow State Navigation (polish)
 
-- [ ] Score indicator glow halos on neighbor sprites
-- [ ] Intersection hover cards (shared attributes between anchor and neighbor)
-- [ ] Keyboard navigation + browser history (arrow keys, URL state, back button)
-- [ ] Context-aware satellite panels + temporal thread
+- [ ] Shared-attribute labels on album items (#8)
+- [ ] Keyboard navigation + URL state + browser back (#9)
+- [ ] Mobile responsive flow-state layout (#21)
+- [ ] Trail/history visualization (#22)
 
 ### Future
 
 <details>
 <summary><strong>M3: AI Pipeline</strong></summary>
 
-- [ ] Hybrid AI tagging architecture (ADR)
-- [ ] Server-side AI proxy endpoint
-- [ ] Claude Vision rich tagging
-- [ ] Embedding-based similarity scoring
+- [ ] Hybrid AI tagging architecture (ADR) (#11)
+- [ ] Server-side AI proxy endpoint (#12)
+- [ ] Claude Vision rich tagging (#13)
+- [ ] Embedding-based similarity scoring (#14)
 
 </details>
 
 <details>
 <summary><strong>M4: 3D Prototype</strong></summary>
 
-- [ ] Rendering abstraction layer
-- [ ] Three.js/R3F scene setup
-- [ ] 3D navigation with depth
+- [ ] Rendering abstraction layer (#15)
+- [ ] Three.js/R3F scene setup (#16)
+- [ ] 3D navigation with depth (#17)
 
 </details>
 
@@ -256,30 +220,9 @@ Tracked on [GitHub Projects](https://github.com/users/Ezalis/projects/1) with mi
 - [ ] Persistent exploration state across sessions
 - [ ] Tag management UI (rename, merge, delete)
 - [ ] Advanced search (date range, ISO, aperture, color similarity)
-- [ ] Cluster visualization (shoot-day / semantic groups)
-- [ ] Color wheel navigation
-- [ ] Timeline view (days / months / years)
 - [ ] Dark mode for UI chrome
 - [ ] CI/CD pipeline (GitHub Actions → SSH → Docker rebuild)
 - [ ] Nginx reverse proxy with SSL (Let's Encrypt / Tailscale)
 - [ ] Multi-user support
 
 </details>
-
-## Migration History
-
-### M1: Structural Foundation (March 2026)
-
-Refactored the monolithic Experience.tsx into clean modules: extracted `useRelevanceScoring` hook (scoring engine with per-dimension `ScoreBreakdown`), `usePhysicsSimulation` hook (D3 force sim with `PhysicsConfig`), and six UI components (`DetailView`, `FieldGuideOverlay`, `Gallery`, `HistoryTimeline`, `ProgressiveImage`, `SatelliteLayer`). Added progressive image loading with preview→full-res crossfade. Established developer tooling: ESLint + typescript-eslint, Vitest with jsdom, and committed `package-lock.json` for deterministic builds.
-
-### Immich Integration (March 2026)
-
-Migrated from local gallery + Gemini AI to Immich as the single image service. Images now served from an Immich instance, EXIF comes from the Immich API, and AI tagging uses Immich's CLIP Smart Search (35 portrait/editorial-optimized labels) instead of Google Gemini. Legacy Gemini AI tags were migrated into Immich via a one-time script — 122 `SomaticStudio/*` tags created, 158 images matched, 1,412 tag-to-asset assignments. Removed dependencies: `exifr`, `@google/genai`.
-
-### Docker Self-Hosting (March 2026)
-
-Migrated from Google AI Studio CDN hosting to self-hosted Docker containers. Development server on port 3001 (Vite dev with hot reload), production on port 3100 (Nginx serving Vite build output). Nginx configured with upstream keepalive (16 connections) and 7-day browser cache on image responses.
-
-### Origin
-
-Initially scaffolded with Google AI Studio and powered by the Gemini API for image analysis and tag generation.
