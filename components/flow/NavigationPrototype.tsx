@@ -29,6 +29,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     const scrollRef = useRef<HTMLDivElement>(null);
     const heroTouchY = useRef<number | null>(null);
 
+    // Album zoom-through depth (0→1, from WaterfallAlbum mobile touch)
+    const [albumDepth, setAlbumDepth] = useState(0);
+
     // Trait bar transition state
     const [traitLeaving, setTraitLeaving] = useState(false);
 
@@ -277,13 +280,14 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
                 <SpriteBackground albumImages={albumPool} maxCount={spriteCount}
                     onSelect={handleAlbumSelect}
-                    unblur={flowPhase !== 'album' && heroBlur < 2} />
+                    unblur={flowPhase === 'album' ? albumDepth > 0.5 : heroBlur < 2} />
             )}
 
             {/* Album phase: tiered album (below trait bar, above hero) */}
             {flowPhase === 'album' && anchor && (
                 <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
-                    onSelect={handleAlbumSelect} isAlbumPhase />
+                    onSelect={handleAlbumSelect} isAlbumPhase
+                    onScrollDepth={setAlbumDepth} />
             )}
 
             {/* Hero tap zone — sits below sprites (z-11) so sprite clicks take priority.

@@ -11,6 +11,7 @@ interface WaterfallAlbumProps {
     onSelect: (img: ImageNode, rect: DOMRect) => void;
     gentleReveal?: boolean;
     isAlbumPhase?: boolean;
+    onScrollDepth?: (depth: number) => void;
 }
 
 // Distribute items across the viewport without overlapping too much
@@ -55,33 +56,31 @@ function scatterPositions(count: number, seed: string, bounds: { xMin: number; x
 }
 
 // Compute tier opacity/scale/visibility based on scroll depth (0→1)
-// Tier 0 (most relevant) starts visible, peels off first
-// Tier 1 enters as tier 0 exits, then peels off
-// Tier 2 enters last and stays
+// Tier 0 (large photos) starts visible, peels off first
+// Tier 1 (medium photos) enters as tier 0 exits, then peels off
+// Beyond both tiers, the SpriteBackground behind shows through
 function getTierStyle(tier: number, depth: number): React.CSSProperties {
     let opacity: number, scale: number;
 
     if (tier === 0) {
-        const t = Math.min(1, Math.max(0, depth / 0.45));
+        // Tier 1: fully visible at 0, peels off by 0.5
+        const t = Math.min(1, Math.max(0, depth / 0.5));
         opacity = 1 - t;
         scale = 1 + t * 0.5;
-    } else if (tier === 1) {
+    } else {
+        // Tier 2: fades in 0→0.35, fully visible 0.35→0.55, peels off 0.55→1.0
         const enter = Math.min(1, Math.max(0, depth / 0.35));
-        const exit = Math.min(1, Math.max(0, (depth - 0.5) / 0.4));
+        const exit = Math.min(1, Math.max(0, (depth - 0.55) / 0.45));
         if (depth < 0.35) {
             opacity = 0.15 + enter * 0.85;
             scale = 0.85 + enter * 0.15;
-        } else if (depth < 0.5) {
+        } else if (depth < 0.55) {
             opacity = 1;
             scale = 1;
         } else {
             opacity = 1 - exit;
             scale = 1 + exit * 0.5;
         }
-    } else {
-        const enter = Math.min(1, Math.max(0, (depth - 0.45) / 0.35));
-        opacity = 0.1 + enter * 0.9;
-        scale = 0.85 + enter * 0.15;
     }
 
     return {
@@ -92,7 +91,7 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
     };
 }
 
-const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount, onSelect, gentleReveal, isAlbumPhase }) => {
+const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount, onSelect, gentleReveal, isAlbumPhase, onScrollDepth }) => {
     const isPartial = traitCount >= 3 && traitCount < 6;
     const visible = traitCount >= 3;
     const isMobile = useMemo(() =>
@@ -106,8 +105,16 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
 
     // Reset scroll depth when album phase starts
     useEffect(() => {
-        if (isAlbumPhase) setScrollDepth(0);
-    }, [isAlbumPhase]);
+        if (isAlbumPhase) {
+            setScrollDepth(0);
+            onScrollDepth?.(0);
+        }
+    }, [isAlbumPhase, onScrollDepth]);
+
+    // Notify parent of scroll depth changes
+    useEffect(() => {
+        onScrollDepth?.(scrollDepth);
+    }, [scrollDepth, onScrollDepth]);
 
     // Cleanup momentum on unmount
     useEffect(() => () => cancelAnimationFrame(momentumRef.current), []);
@@ -183,18 +190,16 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         const maxHits = Math.max(1, ...nodes.map(n => n.tagHits));
         const tier1: WaterfallNode[] = [];
         const tier2: WaterfallNode[] = [];
-        const tier3: WaterfallNode[] = [];
 
         for (const node of nodes) {
             if (node.tagHits === maxHits && maxHits > 1) tier1.push(node);
             else if (node.tagHits >= maxHits * 0.5 && maxHits > 1) tier2.push(node);
-            else tier3.push(node);
+            // Lower-relevance items are handled by SpriteBackground behind the album
         }
 
         return {
             tier1: tier1.slice(0, 5),
             tier2: tier2.slice(0, 8),
-            tier3: tier3.slice(0, 10),
         };
     }, [isAlbumPhase, nodes]);
 
@@ -205,7 +210,6 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         return {
             tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 10, xMax: 70, yMin: 10, yMax: 75 }),
             tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 1, xMax: 92, yMin: 8, yMax: 88 }, 0.7),
-            tier3: scatterPositions(tiers.tier3.length, 't3', { xMin: 2, xMax: 95, yMin: 5, yMax: 90 }),
         };
     }, [tiers]);
 
@@ -230,30 +234,6 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
             <div className={`fixed inset-0 ${isMobile ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 style={{ zIndex: 15, ...(isMobile ? { touchAction: 'none' } : {}) }}
                 {...touchProps}>
-
-                {/* Tier 3: Sprites — deepest layer */}
-                <div className={isMobile ? "absolute inset-0" : "contents"}
-                    style={isMobile ? getTierStyle(2, scrollDepth) : undefined}>
-                    {tiers.tier3.map((node, index) => {
-                        const pos = tierPositions.tier3[index];
-                        const spriteSize = isMobile
-                            ? 28 + seededRandom(node.image.id + 't3sz') * 15
-                            : 35 + seededRandom(node.image.id + 't3sz') * 25;
-                        return (
-                            <div key={node.image.id}
-                                className="absolute pointer-events-auto cursor-pointer"
-                                style={{
-                                    left: `${pos.x}%`,
-                                    top: `${pos.y}%`,
-                                    zIndex: 1,
-                                    animation: `gentle-unveil 800ms cubic-bezier(0.22,1,0.36,1) ${index * 60}ms both`,
-                                }}
-                                onClick={(e) => handleClick(node.image, e)}>
-                                <MiniSprite image={node.image} size={spriteSize} convergence={node.relevance} />
-                            </div>
-                        );
-                    })}
-                </div>
 
                 {/* Tier 2: Smaller photo prints */}
                 <div className={isMobile ? "absolute inset-0" : "contents"}
@@ -319,14 +299,14 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                     })}
                 </div>
 
-                {/* Depth indicator — 3 dots on right edge (mobile only) */}
+                {/* Depth indicator — dots on right edge (mobile only) */}
                 {isMobile && (
                     <div className="fixed right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 pointer-events-none"
                         style={{ zIndex: 20 }}>
                         {[0, 1, 2].map(i => {
-                            const active = i === 0 ? scrollDepth < 0.3
+                            const active = i === 0 ? scrollDepth < 0.35
                                 : i === 1 ? scrollDepth >= 0.2 && scrollDepth < 0.7
-                                : scrollDepth >= 0.5;
+                                : scrollDepth >= 0.55;
                             return (
                                 <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-300"
                                     style={{
