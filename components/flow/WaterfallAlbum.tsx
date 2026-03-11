@@ -233,6 +233,16 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         return (
             <div className="fixed inset-0 pointer-events-auto"
                 style={{ zIndex: 15, ...(isMobile ? { touchAction: 'none' } : {}) }}
+                onClick={(e) => {
+                    if (scrollDepth <= 0.65 || isScrollingRef.current) return;
+                    const el = e.currentTarget;
+                    el.style.pointerEvents = 'none';
+                    const beneath = document.elementFromPoint(e.clientX, e.clientY);
+                    el.style.pointerEvents = '';
+                    if (beneath && beneath !== el) {
+                        (beneath as HTMLElement).click();
+                    }
+                }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
