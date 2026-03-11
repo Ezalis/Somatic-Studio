@@ -12,27 +12,44 @@ interface SpriteBackgroundProps {
 
 interface SpriteData {
     albumItem: AlbumImage;
-    col: number;
-    row: number;
-    jitterX: number;
-    jitterY: number;
-    size: number;
+    x: number;
+    y: number;
+    width: number;
+    rotate: number;
     relevance: number;
     driftDuration: number;
     driftDelay: number;
     fading: boolean;
 }
 
+// Poisson-disc-like scatter: divide viewport into loose zones and place
+// one image per zone with large random offsets. Uses the full screen
+// including corners and edges.
+function scatterPositions(count: number, isMobile: boolean) {
+    // More columns on desktop to spread wider, fewer rows to use vertical space
+    const cols = isMobile ? 3 : 5;
+    const rows = Math.max(2, Math.ceil(count / cols));
+    const cellW = 100 / cols;
+    const cellH = 100 / rows;
+
+    const positions: { x: number; y: number }[] = [];
+    for (let i = 0; i < count; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        positions.push({
+            // Center of cell — jitter applied per-sprite with seededRandom
+            xBase: (col + 0.5) * cellW,
+            yBase: (row + 0.5) * cellH,
+        } as unknown as { x: number; y: number });
+    }
+    return { positions, cellW, cellH };
+}
+
 const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCount, onSelect }) => {
     const [sprites, setSprites] = useState<Map<string, SpriteData>>(new Map());
 
-    // Grid layout config — responsive columns
-    const gridConfig = useMemo(() => {
-        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-        const cols = isMobile ? 3 : 5;
-        const rows = Math.ceil(maxCount / cols) || 2;
-        return { cols, rows, isMobile };
-    }, [maxCount]);
+    const isMobile = useMemo(() =>
+        typeof window !== 'undefined' && window.innerWidth < 768, []);
 
     // Sync sprite pool when albumImages or maxCount changes
     useEffect(() => {
@@ -44,7 +61,11 @@ const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCou
         const pool = albumImages.slice(0, maxCount);
         const maxHits = Math.max(1, ...pool.map(a => a.tagHits));
         const currentIds = new Set(pool.map(a => a.image.id));
-        const { cols, rows } = gridConfig;
+
+        const cols = isMobile ? 3 : 5;
+        const rows = Math.max(2, Math.ceil(maxCount / cols));
+        const cellW = 100 / cols;
+        const cellH = 100 / rows;
 
         setSprites(prev => {
             const next = new Map(prev);
@@ -69,39 +90,42 @@ const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCou
                 }
             }
 
-            // Add new sprites — assign to grid cells
-            const usedCells = new Set<string>();
-            for (const [, sprite] of next) {
-                if (!sprite.fading) usedCells.add(`${sprite.col},${sprite.row}`);
+            // Count active sprites for grid cell assignment
+            let nextSlot = 0;
+            const usedSlots = new Set<number>();
+            for (const [, s] of next) {
+                if (!s.fading) {
+                    // Estimate which slot this sprite is in
+                    const col = Math.round((s.x / cellW) - 0.5);
+                    const row = Math.round((s.y / cellH) - 0.5);
+                    usedSlots.add(row * cols + col);
+                }
             }
 
             const newItems = pool.filter(item => !next.has(item.image.id));
-            let cellIndex = 0;
             for (const item of newItems) {
                 const id = item.image.id;
-                // Find next open grid cell
-                let col = 0, row = 0;
-                while (cellIndex < cols * rows) {
-                    col = cellIndex % cols;
-                    row = Math.floor(cellIndex / cols);
-                    if (!usedCells.has(`${col},${row}`)) break;
-                    cellIndex++;
-                }
-                usedCells.add(`${col},${row}`);
-                cellIndex++;
 
-                // Jitter within cell (±30% of cell size)
-                const jitterX = (seededRandom('JX' + id.slice(0, 6) + col) - 0.5) * 0.3;
-                const jitterY = (seededRandom(id.slice(-6) + 'JY' + row) - 0.5) * 0.3;
+                // Find next open slot
+                while (usedSlots.has(nextSlot) && nextSlot < cols * rows) nextSlot++;
+                const col = nextSlot % cols;
+                const row = Math.floor(nextSlot / cols);
+                usedSlots.add(nextSlot);
+                nextSlot++;
 
-                const baseSize = gridConfig.isMobile ? 36 : 48;
+                // Large jitter — ±40% of cell, so images feel scattered not gridded
+                const jx = (seededRandom('JX' + id.slice(0, 6) + col) - 0.5) * cellW * 0.8;
+                const jy = (seededRandom(id.slice(-6) + 'JY' + row) - 0.5) * cellH * 0.8;
+                const x = Math.max(2, Math.min(98, (col + 0.5) * cellW + jx));
+                const y = Math.max(3, Math.min(97, (row + 0.5) * cellH + jy));
+
+                const baseWidth = isMobile ? 56 : 80;
+                const width = baseWidth + seededRandom('WD' + id.slice(4, 12)) * (isMobile ? 24 : 40);
+                const rotate = (seededRandom('RT' + id.slice(3, 11)) - 0.5) * 10; // ±5°
+
                 next.set(id, {
                     albumItem: item,
-                    col,
-                    row,
-                    jitterX,
-                    jitterY,
-                    size: baseSize + seededRandom('SZ' + id.slice(4, 12)) * (gridConfig.isMobile ? 16 : 24),
+                    x, y, width, rotate,
                     relevance: item.tagHits / maxHits,
                     driftDuration: 10 + seededRandom('DR' + id.slice(2, 10)) * 8,
                     driftDelay: seededRandom('DL' + id.slice(6, 14)) * 5,
@@ -111,7 +135,7 @@ const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCou
 
             return next;
         });
-    }, [albumImages, maxCount, gridConfig]);
+    }, [albumImages, maxCount, isMobile]);
 
     // Clean up fully faded sprites after transition
     useEffect(() => {
@@ -133,13 +157,6 @@ const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCou
 
     if (spriteList.length === 0) return null;
 
-    const { cols, rows } = gridConfig;
-    // Grid spans most of the viewport with margins
-    const marginX = 4; // % from edges
-    const marginY = 12; // % from top (below header + trait bar area)
-    const cellW = (100 - marginX * 2) / cols;
-    const cellH = (100 - marginY - 5) / rows; // 5% bottom margin
-
     const handleClick = (img: ImageNode, e: React.MouseEvent) => {
         if (!onSelect) return;
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -149,18 +166,15 @@ const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCou
     return (
         <div className="fixed inset-0 overflow-hidden" style={{ zIndex: 11, pointerEvents: 'none' }}>
             {spriteList.map(([id, sprite]) => {
-                const blurAmount = 2 + (1 - sprite.relevance) * 4; // 2-6px range
-                const x = marginX + (sprite.col + 0.5 + sprite.jitterX) * cellW;
-                const y = marginY + (sprite.row + 0.5 + sprite.jitterY) * cellH;
+                const blurAmount = 2 + (1 - sprite.relevance) * 4;
                 return (
                     <div key={id}
-                        className="absolute rounded-lg overflow-hidden cursor-pointer"
+                        className="absolute cursor-pointer"
                         style={{
-                            left: `${x}%`,
-                            top: `${y}%`,
-                            width: sprite.size,
-                            height: sprite.size,
-                            transform: 'translate(-50%, -50%)',
+                            left: `${sprite.x}%`,
+                            top: `${sprite.y}%`,
+                            width: sprite.width,
+                            transform: `translate(-50%, -50%) rotate(${sprite.rotate}deg)`,
                             opacity: sprite.fading ? 0 : 0.35 + sprite.relevance * 0.35,
                             filter: `blur(${blurAmount}px)`,
                             transition: 'opacity 600ms ease, filter 600ms ease',
@@ -168,9 +182,13 @@ const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCou
                             pointerEvents: sprite.fading ? 'none' : 'auto',
                         }}
                         onClick={(e) => handleClick(sprite.albumItem.image, e)}>
-                        <img src={getThumbnailUrl(sprite.albumItem.image.id)} alt=""
-                            className="w-full h-full object-cover"
-                            draggable={false} />
+                        {/* White print border — natural aspect ratio */}
+                        <div className="bg-white p-1 rounded-sm"
+                            style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+                            <img src={getThumbnailUrl(sprite.albumItem.image.id)} alt=""
+                                className="w-full rounded-sm"
+                                draggable={false} />
+                        </div>
                     </div>
                 );
             })}
