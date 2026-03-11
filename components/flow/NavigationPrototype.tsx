@@ -140,10 +140,10 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         };
     }, [anchor]);
 
-    // Sprite background count based on trait count
+    // Sprite background count based on trait count — start loading from first trait
     const spriteCount = useMemo(() => {
-        if (selectedTraits.size < 3) return 0;
-        return Math.min(20, 4 + (selectedTraits.size - 2) * 6);
+        if (selectedTraits.size === 0) return 0;
+        return Math.min(20, 2 + selectedTraits.size * 3);
     }, [selectedTraits.size]);
 
     // --- Event handlers ---
