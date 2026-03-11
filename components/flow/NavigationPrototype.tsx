@@ -26,7 +26,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const heroTouchY = useRef<number | null>(null);
+    const scrollTouchRef = useRef<{ startY: number; lastY: number; lastTime: number; velocity: number } | null>(null);
+    const scrollMomentumRef = useRef<number>(0);
 
     // Album zoom-through depth (0→1, from WaterfallAlbum mobile touch)
     const [albumDepth, setAlbumDepth] = useState(0);
@@ -148,6 +149,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     // --- Event handlers ---
 
     const handleSelectFromIdle = useCallback((image: ImageNode, rect: DOMRect) => {
+        cancelAnimationFrame(scrollMomentumRef.current);
         const label = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         setTrail((t: TrailPoint[]) => [...t, { id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp }]);
         setAnchorId(image.id);
@@ -166,6 +168,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     }, []);
 
     const handleAlbumSelect = useCallback((img: ImageNode, rect: DOMRect) => {
+        cancelAnimationFrame(scrollMomentumRef.current);
         const label = new Date(img.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         setTrail((t: TrailPoint[]) => [...t, { id: img.id, palette: img.palette, label, timestamp: img.captureTimestamp }]);
         setAnchorId(img.id);
@@ -292,8 +295,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     onScrollDepth={setAlbumDepth} />
             )}
 
-            {/* Hero tap zone — sits below sprites (z-11) so sprite clicks take priority.
-                If no sprite intercepts, this handles scroll-to-traits / dismiss-traits. */}
+            {/* Hero scroll zone — captures touch/wheel on the hero area and forwards
+                to scrollRef with momentum. Sits below sprites (z-10) so sprite taps
+                take priority. Tapping scrolls to traits or back to hero. */}
             {showScrollContainer && anchor && (
                 <div className="fixed inset-0 cursor-pointer" style={{ zIndex: 10 }}
                     onClick={() => {
@@ -309,22 +313,42 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         if (scrollRef.current) scrollRef.current.scrollTop += e.deltaY;
                     }}
                     onTouchStart={(e) => {
-                        heroTouchY.current = e.touches[0].clientY;
+                        cancelAnimationFrame(scrollMomentumRef.current);
+                        const y = e.touches[0].clientY;
+                        scrollTouchRef.current = { startY: y, lastY: y, lastTime: Date.now(), velocity: 0 };
                     }}
                     onTouchMove={(e) => {
-                        if (heroTouchY.current === null || !scrollRef.current) return;
-                        const dy = heroTouchY.current - e.touches[0].clientY;
-                        heroTouchY.current = e.touches[0].clientY;
+                        const touch = scrollTouchRef.current;
+                        if (!touch || !scrollRef.current) return;
+                        const y = e.touches[0].clientY;
+                        const now = Date.now();
+                        const dy = touch.lastY - y;
+                        const dt = now - touch.lastTime;
+                        if (dt > 0) touch.velocity = dy / dt;
+                        touch.lastY = y;
+                        touch.lastTime = now;
                         scrollRef.current.scrollTop += dy;
                     }}
                     onTouchEnd={() => {
-                        heroTouchY.current = null;
+                        const touch = scrollTouchRef.current;
+                        if (!touch || !scrollRef.current) return;
+                        let v = touch.velocity;
+                        const el = scrollRef.current;
+                        const decay = 0.95;
+                        const animate = () => {
+                            if (Math.abs(v) < 0.1) return;
+                            v *= decay;
+                            el.scrollTop += v * 16;
+                            scrollMomentumRef.current = requestAnimationFrame(animate);
+                        };
+                        scrollMomentumRef.current = requestAnimationFrame(animate);
                     }} />
             )}
 
             {/* TRAIT SELECTOR — scroll container for exploring, fixed bar for album */}
             {showScrollContainer && anchor && (
-                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto pointer-events-none">
+                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto pointer-events-none"
+                    style={{ WebkitOverflowScrolling: 'touch' }}>
                     {/* Spacer: pointer-events-none so sprites/images underneath get clicks */}
                     <div style={{ minHeight: '100vh' }} />
 
