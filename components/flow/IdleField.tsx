@@ -12,7 +12,8 @@ interface IdleFieldProps {
 }
 
 const SKELETON_COUNT = 36;
-const PHOTO_COUNT = 8;
+const PHOTO_COUNT = 10;
+const SPRITE_COUNT = 26;
 
 function buildGrid(count: number, canvasW: number, canvasH: number) {
     const cols = Math.ceil(Math.sqrt(count * (canvasW / canvasH)));
@@ -88,38 +89,63 @@ const IdleField: React.FC<IdleFieldProps> = ({ images, onSelect, canvasW, canvas
         });
     }, [hasImages, canvasW, canvasH]);
 
-    // Pick divergent images for photo cards, rest become sprites
-    const { photoIndices, nodes } = useMemo(() => {
-        if (!hasImages) return { photoIndices: new Set<number>(), nodes: [] as { image: ImageNode; x: number; y: number; gridIndex: number }[] };
-        const count = Math.min(images.length, 36);
+    // Place photos on a sparse grid, then fill sprites in remaining space
+    const nodes = useMemo(() => {
+        if (!hasImages) return [] as { image: ImageNode; x: number; y: number; isPhoto: boolean }[];
 
-        // Shuffle to pick a random subset
-        const indices = images.map((_, i) => i);
-        for (let i = indices.length - 1; i > 0 && indices.length - 1 - i < count; i--) {
-            const j = Math.floor(seededRandom(sessionSeed + i) * (i + 1));
-            [indices[i], indices[j]] = [indices[j], indices[i]];
-        }
-        const sampled = indices.slice(indices.length - count);
+        // Pick divergent images for photos
+        const divergentIndices = pickDivergent(images, PHOTO_COUNT, sessionSeed);
+        const photoImages = [...divergentIndices].map(i => images[i]);
+        const photoIdSet = new Set(photoImages.map(img => img.id));
 
-        // Pick divergent images from the sampled set
-        const sampledImages = sampled.map(i => images[i]);
-        const divergentInSample = pickDivergent(sampledImages, PHOTO_COUNT, sessionSeed);
-        const photoSet = new Set<number>();
-        let si = 0;
-        for (const idx of sampled) {
-            if (divergentInSample.has(si)) photoSet.add(idx);
-            si++;
-        }
-
-        const { cols, cellW, cellH } = buildGrid(count, canvasW, canvasH);
-        const nodeList = sampled.map((imgIdx: number, i: number) => ({
-            image: images[imgIdx],
-            x: cellW * ((i % cols) + 1) + (seededRandom(images[imgIdx].id + 'ix') - 0.5) * cellW * 0.4,
-            y: cellH * (Math.floor(i / cols) + 1) + (seededRandom(images[imgIdx].id + 'iy') - 0.5) * cellH * 0.3,
-            gridIndex: i,
+        // Place photos on their own grid with generous spacing
+        const photoGrid = buildGrid(PHOTO_COUNT, canvasW, canvasH);
+        const photoNodes = photoImages.map((img, i) => ({
+            image: img,
+            x: photoGrid.cellW * ((i % photoGrid.cols) + 1) + (seededRandom(img.id + 'px') - 0.5) * photoGrid.cellW * 0.25,
+            y: photoGrid.cellH * (Math.floor(i / photoGrid.cols) + 1) + (seededRandom(img.id + 'py') - 0.5) * photoGrid.cellH * 0.2,
+            isPhoto: true,
         }));
 
-        return { photoIndices: photoSet, nodes: nodeList };
+        // Pick random sprites from remaining images
+        const spritePool = images.filter(img => !photoIdSet.has(img.id));
+        const spriteCount = Math.min(spritePool.length, SPRITE_COUNT);
+        const spriteIndices = spritePool.map((_, i) => i);
+        for (let i = spriteIndices.length - 1; i > 0 && spriteIndices.length - 1 - i < spriteCount; i--) {
+            const j = Math.floor(seededRandom(sessionSeed + 's' + i) * (i + 1));
+            [spriteIndices[i], spriteIndices[j]] = [spriteIndices[j], spriteIndices[i]];
+        }
+        const sprites = spriteIndices.slice(spriteIndices.length - spriteCount).map(i => spritePool[i]);
+
+        // Place sprites on a denser grid, nudging away from photos
+        const totalSprites = sprites.length;
+        const spriteGrid = buildGrid(totalSprites, canvasW, canvasH);
+        const minDist = Math.min(canvasW, canvasH) * 0.10; // keep sprites this far from photo centers
+
+        const spriteNodes = sprites.map((img, i) => {
+            let x = spriteGrid.cellW * ((i % spriteGrid.cols) + 1) + (seededRandom(img.id + 'sx') - 0.5) * spriteGrid.cellW * 0.5;
+            let y = spriteGrid.cellH * (Math.floor(i / spriteGrid.cols) + 1) + (seededRandom(img.id + 'sy') - 0.5) * spriteGrid.cellH * 0.4;
+
+            // Push away from nearby photos
+            for (const pn of photoNodes) {
+                const dx = x - pn.x;
+                const dy = y - pn.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < minDist && dist > 0) {
+                    const push = (minDist - dist);
+                    x += (dx / dist) * push;
+                    y += (dy / dist) * push;
+                }
+            }
+
+            // Clamp to viewport
+            x = Math.max(30, Math.min(canvasW - 30, x));
+            y = Math.max(30, Math.min(canvasH - 30, y));
+
+            return { image: img, x, y, isPhoto: false };
+        });
+
+        return [...photoNodes, ...spriteNodes];
     }, [images, canvasW, canvasH, sessionSeed, hasImages]);
 
     const isMobile = useMemo(() =>
@@ -142,8 +168,7 @@ const IdleField: React.FC<IdleFieldProps> = ({ images, onSelect, canvasW, canvas
             ))}
 
             {/* Real nodes — photos or sprites */}
-            {nodes.map(({ image, x, y }) => {
-                const isPhoto = photoIndices.has(images.indexOf(image));
+            {nodes.map(({ image, x, y, isPhoto }) => {
                 const breatheDur = 5 + seededRandom(image.id + 'bd') * 6;
                 const breatheDel = seededRandom(image.id + 'bl') * 4;
                 const revealDelay = isPhoto ? seededRandom(image.id + 'rd') * 400 : 0;
