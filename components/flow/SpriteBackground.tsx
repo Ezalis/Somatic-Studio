@@ -26,7 +26,7 @@ interface SpriteData {
 // Poisson-disc-like scatter: divide viewport into loose zones and place
 // one image per zone with large random offsets. Uses the full screen
 // including corners and edges.
-function scatterPositions(count: number, isMobile: boolean) {
+function _scatterPositions(count: number, isMobile: boolean) {
     // More columns on desktop to spread wider, fewer rows to use vertical space
     const cols = isMobile ? 3 : 5;
     const rows = Math.max(2, Math.ceil(count / cols));

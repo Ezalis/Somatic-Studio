@@ -10,7 +10,6 @@ export function seededRandom(seed: string): number {
     return ((hash & 0x7fffffff) % 1000) / 1000;
 }
 
-// TODO: Unify with useRelevanceScoring (issue #20)
 export function scoreRelevance(image: ImageNode, anchor: ImageNode): ScoredImage {
     if (image.id === anchor.id) return { image, score: 1, sharedTags: [], sharedCamera: false, sharedLens: false, sharedSeason: false, isBridge: false, isTemporalNeighbor: false };
     let score = 0;
