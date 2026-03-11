@@ -8,6 +8,7 @@ interface SpriteBackgroundProps {
     albumImages: AlbumImage[];
     maxCount: number;
     onSelect?: (img: ImageNode, rect: DOMRect) => void;
+    unblur?: boolean;
 }
 
 interface SpriteData {
@@ -45,7 +46,7 @@ function scatterPositions(count: number, isMobile: boolean) {
     return { positions, cellW, cellH };
 }
 
-const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCount, onSelect }) => {
+const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCount, onSelect, unblur }) => {
     const [sprites, setSprites] = useState<Map<string, SpriteData>>(new Map());
 
     const isMobile = useMemo(() =>
@@ -166,7 +167,8 @@ const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCou
     return (
         <div className="fixed inset-0 overflow-hidden" style={{ zIndex: 11, pointerEvents: 'none' }}>
             {spriteList.map(([id, sprite]) => {
-                const blurAmount = 2 + (1 - sprite.relevance) * 4;
+                const blurAmount = unblur ? 0 : 2 + (1 - sprite.relevance) * 4;
+                const opacity = sprite.fading ? 0 : unblur ? 0.7 + sprite.relevance * 0.25 : 0.35 + sprite.relevance * 0.35;
                 return (
                     <div key={id}
                         className="absolute cursor-pointer"
@@ -175,8 +177,8 @@ const SpriteBackground: React.FC<SpriteBackgroundProps> = ({ albumImages, maxCou
                             top: `${sprite.y}%`,
                             width: sprite.width,
                             transform: `translate(-50%, -50%) rotate(${sprite.rotate}deg)`,
-                            opacity: sprite.fading ? 0 : 0.35 + sprite.relevance * 0.35,
-                            filter: `blur(${blurAmount}px)`,
+                            opacity,
+                            filter: blurAmount > 0 ? `blur(${blurAmount}px)` : undefined,
                             transition: 'opacity 600ms ease, filter 600ms ease',
                             animation: `drift ${sprite.driftDuration}s ease-in-out ${sprite.driftDelay}s infinite`,
                             pointerEvents: sprite.fading ? 'none' : 'auto',
