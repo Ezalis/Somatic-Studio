@@ -57,6 +57,8 @@ function scatterPositions(count: number, seed: string, bounds: { xMin: number; x
 const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount, onSelect, gentleReveal, isAlbumPhase }) => {
     const isPartial = traitCount >= 3 && traitCount < 6;
     const visible = traitCount >= 3;
+    const isMobile = useMemo(() =>
+        typeof window !== 'undefined' && window.innerWidth < 768, []);
 
     const nodes = useMemo((): WaterfallNode[] => {
         if (albumImages.length === 0) return [];
@@ -99,6 +101,13 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     // Pre-compute scattered positions for each tier
     const tierPositions = useMemo(() => {
         if (!tiers) return null;
+        if (isMobile) {
+            return {
+                tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 5, xMax: 80, yMin: 5, yMax: 35 }),
+                tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 3, xMax: 90, yMin: 25, yMax: 65 }, 0.7),
+                tier3: scatterPositions(tiers.tier3.length, 't3', { xMin: 5, xMax: 92, yMin: 55, yMax: 92 }),
+            };
+        }
         return {
             // Tier 1: center zone starting near top, well-spaced (large cards need room)
             tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 10, xMax: 70, yMin: 10, yMax: 75 }),
@@ -107,7 +116,7 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
             // Tier 3: everywhere
             tier3: scatterPositions(tiers.tier3.length, 't3', { xMin: 2, xMax: 95, yMin: 5, yMax: 90 }),
         };
-    }, [tiers]);
+    }, [tiers, isMobile]);
 
     if (!visible) return null;
 
@@ -119,11 +128,14 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     // Album phase: photos scattered on a surface
     if (isAlbumPhase && tiers && tierPositions) {
         return (
-            <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 15 }}>
+            <div className={isMobile ? "relative pointer-events-none" : "fixed inset-0 pointer-events-none"}
+                style={isMobile ? { zIndex: 15, minHeight: '300vh' } : { zIndex: 15 }}>
                 {/* Tier 3: Sprites — scattered, lowest layer */}
                 {tiers.tier3.map((node, index) => {
                     const pos = tierPositions.tier3[index];
-                    const spriteSize = 35 + seededRandom(node.image.id + 't3sz') * 25;
+                    const spriteSize = isMobile
+                        ? 28 + seededRandom(node.image.id + 't3sz') * 15
+                        : 35 + seededRandom(node.image.id + 't3sz') * 25;
                     return (
                         <div key={node.image.id}
                             className="absolute pointer-events-auto cursor-pointer"
@@ -143,7 +155,9 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                 {tiers.tier2.map((node, index) => {
                     const pos = tierPositions.tier2[index];
                     const rotate = (seededRandom(node.image.id + 't2r') - 0.5) * 8;
-                    const cardWidth = 140 + seededRandom(node.image.id + 't2w') * 40;
+                    const cardWidth = isMobile
+                        ? 100 + seededRandom(node.image.id + 't2w') * 24
+                        : 140 + seededRandom(node.image.id + 't2w') * 40;
                     return (
                         <div key={node.image.id}
                             className="absolute pointer-events-auto cursor-pointer"
@@ -170,7 +184,9 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                 {tiers.tier1.map((node, index) => {
                     const pos = tierPositions.tier1[index];
                     const rotate = (seededRandom(node.image.id + 't1r') - 0.5) * 6;
-                    const cardWidth = 260 + seededRandom(node.image.id + 't1w') * 60;
+                    const cardWidth = isMobile
+                        ? 160 + seededRandom(node.image.id + 't1w') * 30
+                        : 260 + seededRandom(node.image.id + 't1w') * 60;
                     return (
                         <div key={node.image.id}
                             className="absolute pointer-events-auto cursor-pointer"
