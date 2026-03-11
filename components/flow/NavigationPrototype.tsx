@@ -266,8 +266,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
                 <div className="fixed inset-0 pt-12 z-10">
                     <HeroSection image={anchor}
-                        blur={flowPhase === 'album' && albumDepth > 0.7
-                            ? 16 * Math.max(0, 1 - (albumDepth - 0.7) / 0.3)
+                        blur={flowPhase === 'album' && albumDepth > 0.9
+                            ? 16 * Math.max(0, 1 - (albumDepth - 0.9) / 0.1)
                             : heroBlur}
                         heroRevealed={flowPhase !== 'blooming'} />
                 </div>
@@ -276,7 +276,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {/* Sprite background — smooth pool transitions, convergence rings show trait relevance */}
             {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
                 <div style={flowPhase === 'album' && albumDepth > 0.7
-                    ? { opacity: Math.max(0, 1 - (albumDepth - 0.7) / 0.3), transition: 'opacity 0.1s' }
+                    ? { opacity: Math.max(0, 1 - (albumDepth - 0.7) / 0.2), transition: 'opacity 0.1s' }
                     : undefined}>
                     <SpriteBackground albumImages={albumPool} maxCount={spriteCount}
                         onSelect={handleAlbumSelect}
