@@ -285,15 +285,29 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     onSelect={handleAlbumSelect} isAlbumPhase />
             )}
 
+            {/* Hero tap zone — sits below sprites (z-11) so sprite clicks take priority.
+                If no sprite intercepts, this handles scroll-to-traits / dismiss-traits. */}
+            {showScrollContainer && anchor && (
+                <div className="fixed inset-0 cursor-pointer" style={{ zIndex: 10 }}
+                    onClick={() => {
+                        const el = scrollRef.current;
+                        if (!el) return;
+                        if (el.scrollTop > window.innerHeight * 0.3) {
+                            el.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else {
+                            el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                        }
+                    }} />
+            )}
+
             {/* TRAIT SELECTOR — scroll container for exploring, fixed bar for album */}
             {showScrollContainer && anchor && (
-                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto">
-                    {/* Spacer: first screen is transparent — clicking scrolls to traits */}
-                    <div style={{ minHeight: '100vh', cursor: 'pointer' }}
-                        onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })} />
+                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto pointer-events-none">
+                    {/* Spacer: pointer-events-none so sprites/images underneath get clicks */}
+                    <div style={{ minHeight: '100vh' }} />
 
                     {/* Trait section scrolls up over the hero */}
-                    <div id="trait-section" style={{ position: 'relative', minHeight: '60vh' }}>
+                    <div id="trait-section" style={{ position: 'relative', minHeight: '60vh', pointerEvents: 'auto' }}>
                         <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
                             selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
                             albumImages={albumPool} />
