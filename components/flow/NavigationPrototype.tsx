@@ -276,10 +276,15 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {/* Sprite background — smooth pool transitions, convergence rings show trait relevance */}
             {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
                 <div style={flowPhase === 'album' && albumDepth > 0.7
-                    ? {
-                        opacity: Math.max(0, 1 - (albumDepth - 0.7) / 0.2),
-                        ...(albumDepth >= 0.9 ? { visibility: 'hidden' as const } : {}),
-                    }
+                    ? (() => {
+                        const t = Math.min(1, (albumDepth - 0.7) / 0.2);
+                        return {
+                            opacity: 1 - t,
+                            transform: `scale(${1 + t * 0.5})`,
+                            transformOrigin: 'center center',
+                            ...(t > 0.85 ? { visibility: 'hidden' as const } : {}),
+                        };
+                    })()
                     : undefined}>
                     <SpriteBackground albumImages={albumPool} maxCount={spriteCount}
                         onSelect={handleAlbumSelect}
