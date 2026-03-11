@@ -268,7 +268,12 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {(flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
                 <div className="fixed inset-0 pt-12 z-10">
                     <HeroSection image={anchor} blur={heroBlur}
-                        heroRevealed={flowPhase !== 'blooming'} />
+                        heroRevealed={flowPhase !== 'blooming'}
+                        onImageClick={() => {
+                            if (scrollRef.current) {
+                                scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+                            }
+                        }} />
                 </div>
             )}
 
