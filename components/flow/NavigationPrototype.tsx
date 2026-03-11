@@ -26,8 +26,6 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const scrollTouchRef = useRef<{ startY: number; lastY: number; lastTime: number; velocity: number } | null>(null);
-    const scrollMomentumRef = useRef<number>(0);
 
     // Album zoom-through depth (0→1, from WaterfallAlbum mobile touch)
     const [albumDepth, setAlbumDepth] = useState(0);
@@ -149,7 +147,6 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     // --- Event handlers ---
 
     const handleSelectFromIdle = useCallback((image: ImageNode, rect: DOMRect) => {
-        cancelAnimationFrame(scrollMomentumRef.current);
         const label = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         setTrail((t: TrailPoint[]) => [...t, { id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp }]);
         setAnchorId(image.id);
@@ -168,7 +165,6 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     }, []);
 
     const handleAlbumSelect = useCallback((img: ImageNode, rect: DOMRect) => {
-        cancelAnimationFrame(scrollMomentumRef.current);
         const label = new Date(img.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         setTrail((t: TrailPoint[]) => [...t, { id: img.id, palette: img.palette, label, timestamp: img.captureTimestamp }]);
         setAnchorId(img.id);
@@ -295,65 +291,39 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     onScrollDepth={setAlbumDepth} />
             )}
 
-            {/* Hero scroll zone — captures touch/wheel on the hero area and forwards
-                to scrollRef with momentum. Sits below sprites (z-10) so sprite taps
-                take priority. Tapping scrolls to traits or back to hero. */}
+            {/* TRAIT SELECTOR — native-scrolling container for exploring phases.
+                The scroll container itself is pointer-events:auto for native touch
+                scroll with momentum. The spacer detects taps and forwards them to
+                sprites/hero beneath via elementFromPoint. Desktop uses onWheel. */}
             {showScrollContainer && anchor && (
-                <div className="fixed inset-0 cursor-pointer" style={{ zIndex: 10 }}
-                    onClick={() => {
-                        const el = scrollRef.current;
-                        if (!el) return;
-                        if (el.scrollTop > window.innerHeight * 0.3) {
-                            el.scrollTo({ top: 0, behavior: 'smooth' });
-                        } else {
-                            el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-                        }
-                    }}
+                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto"
                     onWheel={(e) => {
-                        if (scrollRef.current) scrollRef.current.scrollTop += e.deltaY;
-                    }}
-                    onTouchStart={(e) => {
-                        cancelAnimationFrame(scrollMomentumRef.current);
-                        const y = e.touches[0].clientY;
-                        scrollTouchRef.current = { startY: y, lastY: y, lastTime: Date.now(), velocity: 0 };
-                    }}
-                    onTouchMove={(e) => {
-                        const touch = scrollTouchRef.current;
-                        if (!touch || !scrollRef.current) return;
-                        const y = e.touches[0].clientY;
-                        const now = Date.now();
-                        const dy = touch.lastY - y;
-                        const dt = now - touch.lastTime;
-                        if (dt > 0) touch.velocity = dy / dt;
-                        touch.lastY = y;
-                        touch.lastTime = now;
-                        scrollRef.current.scrollTop += dy;
-                    }}
-                    onTouchEnd={() => {
-                        const touch = scrollTouchRef.current;
-                        if (!touch || !scrollRef.current) return;
-                        let v = touch.velocity;
-                        const el = scrollRef.current;
-                        const decay = 0.95;
-                        const animate = () => {
-                            if (Math.abs(v) < 0.1) return;
-                            v *= decay;
-                            el.scrollTop += v * 16;
-                            scrollMomentumRef.current = requestAnimationFrame(animate);
-                        };
-                        scrollMomentumRef.current = requestAnimationFrame(animate);
-                    }} />
-            )}
-
-            {/* TRAIT SELECTOR — scroll container for exploring, fixed bar for album */}
-            {showScrollContainer && anchor && (
-                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto pointer-events-none"
-                    style={{ WebkitOverflowScrolling: 'touch' }}>
-                    {/* Spacer: pointer-events-none so sprites/images underneath get clicks */}
-                    <div style={{ minHeight: '100vh' }} />
+                        // Scroll container handles wheel natively, but also allow
+                        // scrolling when cursor is over the spacer (hero area)
+                        e.currentTarget.scrollTop += e.deltaY;
+                    }}>
+                    {/* Spacer — lets native scroll work, but forwards taps to
+                        sprites/hero beneath using elementFromPoint */}
+                    <div style={{ minHeight: '100vh' }}
+                        onClick={(e) => {
+                            // Forward tap to element beneath (sprites, hero)
+                            const scrollEl = scrollRef.current;
+                            if (!scrollEl) return;
+                            if (scrollEl.scrollTop > window.innerHeight * 0.3) {
+                                scrollEl.scrollTo({ top: 0, behavior: 'smooth' });
+                            } else {
+                                // Hide scroll container momentarily to find element beneath
+                                scrollEl.style.pointerEvents = 'none';
+                                const beneath = document.elementFromPoint(e.clientX, e.clientY);
+                                scrollEl.style.pointerEvents = '';
+                                if (beneath && beneath !== scrollEl) {
+                                    (beneath as HTMLElement).click();
+                                }
+                            }
+                        }} />
 
                     {/* Trait section scrolls up over the hero */}
-                    <div id="trait-section" style={{ position: 'relative', minHeight: '60vh', pointerEvents: 'auto' }}>
+                    <div id="trait-section" style={{ position: 'relative', minHeight: '60vh' }}>
                         <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
                             selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
                             albumImages={albumPool} />
