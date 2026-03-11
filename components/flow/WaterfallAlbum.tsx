@@ -15,7 +15,7 @@ interface WaterfallAlbumProps {
 
 // Distribute items across the viewport without overlapping too much
 // Returns positions that feel like photos scattered on a surface
-function scatterPositions(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }) {
+function scatterPositions(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }, edgeBias = 0) {
     const positions: { x: number; y: number }[] = [];
     // Balanced grid that fills both axes — slightly favor columns for landscape viewports
     const aspectRatio = (bounds.xMax - bounds.xMin) / (bounds.yMax - bounds.yMin);
@@ -24,14 +24,31 @@ function scatterPositions(count: number, seed: string, bounds: { xMin: number; x
     const cellW = (bounds.xMax - bounds.xMin) / cols;
     const cellH = (bounds.yMax - bounds.yMin) / rows;
 
+    const cx = (bounds.xMin + bounds.xMax) / 2;
+    const cy = (bounds.yMin + bounds.yMax) / 2;
+
     for (let i = 0; i < count; i++) {
         const col = i % cols;
         const row = Math.floor(i / cols);
         // Large jitter (±40% of cell) for organic feel
         const jitterX = (seededRandom('X' + seed + i * 7) - 0.5) * cellW * 0.8;
         const jitterY = (seededRandom('Y' + seed + i * 13) - 0.5) * cellH * 0.8;
-        const x = Math.max(bounds.xMin, Math.min(bounds.xMax, bounds.xMin + (col + 0.5) * cellW + jitterX));
-        const y = Math.max(bounds.yMin, Math.min(bounds.yMax, bounds.yMin + (row + 0.5) * cellH + jitterY));
+        let x = bounds.xMin + (col + 0.5) * cellW + jitterX;
+        let y = bounds.yMin + (row + 0.5) * cellH + jitterY;
+
+        // Edge bias: push positions outward from center (0 = none, 1 = strong)
+        if (edgeBias > 0) {
+            const dx = x - cx;
+            const dy = y - cy;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const halfW = (bounds.xMax - bounds.xMin) / 2;
+            const push = edgeBias * halfW * 0.4;
+            x += (dx / dist) * push;
+            y += (dy / dist) * push;
+        }
+
+        x = Math.max(bounds.xMin, Math.min(bounds.xMax, x));
+        y = Math.max(bounds.yMin, Math.min(bounds.yMax, y));
         positions.push({ x, y });
     }
     return positions;
@@ -85,8 +102,8 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         return {
             // Tier 1: center zone starting near top, well-spaced (large cards need room)
             tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 10, xMax: 70, yMin: 10, yMax: 75 }),
-            // Tier 2: full viewport edge-to-edge including top area below header
-            tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 1, xMax: 92, yMin: 8, yMax: 88 }),
+            // Tier 2: full viewport edge-to-edge, biased toward outer edges to avoid tier 1 overlap
+            tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 1, xMax: 92, yMin: 8, yMax: 88 }, 0.7),
             // Tier 3: everywhere
             tier3: scatterPositions(tiers.tier3.length, 't3', { xMin: 2, xMax: 95, yMin: 5, yMax: 90 }),
         };
