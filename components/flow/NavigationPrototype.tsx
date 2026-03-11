@@ -297,6 +297,10 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         } else {
                             el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
                         }
+                    }}
+                    onWheel={(e) => {
+                        // Forward wheel events to the scroll container so scrolling over the hero works
+                        if (scrollRef.current) scrollRef.current.scrollTop += e.deltaY;
                     }} />
             )}
 
