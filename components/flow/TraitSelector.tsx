@@ -183,9 +183,9 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                     <h2 className="text-[11px] tracking-[0.2em] uppercase text-zinc-700" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Your traits
                     </h2>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1.5">
                         {Array.from({ length: maxTraits }).map((_, i) => (
-                            <div key={i} className="w-2 h-2 rounded-full bg-zinc-700" style={{ border: '1.5px solid #3f3f46' }} />
+                            <div key={i} className="w-2.5 h-2.5 rounded-full bg-zinc-700" style={{ border: '2px solid #3f3f46' }} />
                         ))}
                     </div>
                 </div>
@@ -238,17 +238,17 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                 <h2 className="text-[11px] tracking-[0.2em] uppercase text-zinc-700" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     Choose your traits
                 </h2>
-                <div className="flex items-center gap-2"
+                <div className="flex items-center gap-3"
                     style={{ animation: pulsing ? 'trait-pulse 300ms ease' : 'none' }}>
-                    <span className="text-[10px] text-zinc-600" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                        {traitCount} of {maxTraits}
+                    <span className="text-[13px] font-medium text-zinc-700" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        {traitCount} / {maxTraits}
                     </span>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1.5">
                         {Array.from({ length: maxTraits }).map((_, i) => (
-                            <div key={i} className="w-2 h-2 rounded-full transition-all duration-200"
+                            <div key={i} className="w-2.5 h-2.5 rounded-full transition-all duration-200"
                                 style={{
                                     backgroundColor: i < traitCount ? '#3f3f46' : 'transparent',
-                                    border: `1.5px solid ${i < traitCount ? '#3f3f46' : '#d4d4d8'}`,
+                                    border: `2px solid ${i < traitCount ? '#3f3f46' : '#a1a1aa'}`,
                                 }} />
                         ))}
                     </div>
