@@ -76,6 +76,7 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
         }
     } else {
         // Waterfall (hero-similar): visible from start behind other tiers, peels off 0.65→0.85
+        // Starts blurred (8px), unblurs as user scrolls into waterfall depth (0.40→0.55)
         const exit = Math.min(1, Math.max(0, (depth - 0.65) / 0.20));
         if (depth < 0.65) {
             opacity = 0.85;
@@ -86,10 +87,19 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
         }
     }
 
+    // Waterfall blur: 8px→0px over depth 0.40→0.55
+    let filter: string | undefined;
+    if (tier === 2) {
+        const unblur = Math.min(1, Math.max(0, (depth - 0.40) / 0.15));
+        const blurPx = 8 * (1 - unblur);
+        if (blurPx > 0.5) filter = `blur(${blurPx.toFixed(1)}px)`;
+    }
+
     return {
         opacity,
         transform: `scale(${scale})`,
         transformOrigin: 'center center',
+        ...(filter ? { filter } : {}),
         ...(opacity < 0.15 ? { visibility: 'hidden' as const } : {}),
     };
 }

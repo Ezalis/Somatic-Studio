@@ -60,9 +60,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         return () => el.removeEventListener('scroll', onScroll);
     }, [flowPhase]);
 
-    // Trait drawer snap: scrollend for touch, wheel debounce for mouse/trackpad.
-    // scrollend fires after all momentum stops — perfect for touch.
-    // Wheel events don't always trigger scrollend on iPad, so debounce separately.
+    // Trait drawer snap: only snaps AFTER user stops interacting.
+    // Touch: scrollend fires after momentum settles. Wheel/trackpad: 500ms debounce.
+    // Never fights the user mid-scroll — all snap logic waits for quiescence.
     useEffect(() => {
         const el = scrollRef.current;
         if (!el || !showScrollContainer) return;
@@ -70,8 +70,10 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         let animFrame = 0;
         let isSnapping = false;
         let wheelTimer: ReturnType<typeof setTimeout> | null = null;
+        let wheelActive = false;
 
         const snapToNearest = () => {
+            if (wheelActive) return; // Still receiving wheel events, don't snap yet
             const openTarget = window.innerHeight;
             const target = el.scrollTop < openTarget * 0.4 ? 0 : openTarget;
             if (Math.abs(el.scrollTop - target) < 2) return;
@@ -90,22 +92,27 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         };
 
         const onScrollEnd = () => {
-            if (isSnapping) return;
+            if (isSnapping || wheelActive) return;
             snapToNearest();
         };
 
-        // Wheel: debounce since scrollend may not fire for mouse wheel on iPad
+        // Wheel/trackpad: mark active on every event, debounce 500ms for inertia
         const onWheel = () => {
+            wheelActive = true;
+            // Cancel any in-progress snap — user is still scrolling
+            if (isSnapping) { isSnapping = false; cancelAnimationFrame(animFrame); }
             if (wheelTimer) clearTimeout(wheelTimer);
             wheelTimer = setTimeout(() => {
+                wheelActive = false;
                 if (!isSnapping) snapToNearest();
-            }, 200);
+            }, 500);
         };
 
         const onTouchStart = () => {
             isSnapping = false;
             cancelAnimationFrame(animFrame);
             if (wheelTimer) clearTimeout(wheelTimer);
+            wheelActive = false;
         };
 
         el.addEventListener('scrollend', onScrollEnd);
@@ -394,12 +401,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 scroll with momentum. The spacer detects taps and forwards them to
                 sprites/hero beneath via elementFromPoint. Desktop uses onWheel. */}
             {showScrollContainer && anchor && (
-                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto"
-                    onWheel={(e) => {
-                        // Scroll container handles wheel natively, but also allow
-                        // scrolling when cursor is over the spacer (hero area)
-                        e.currentTarget.scrollTop += e.deltaY;
-                    }}>
+                <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto">
                     {/* Spacer — hero visible area */}
                     <div style={{ minHeight: '100vh' }}
                         onClick={(e) => {

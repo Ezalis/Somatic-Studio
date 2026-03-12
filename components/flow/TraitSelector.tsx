@@ -140,7 +140,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                     color: isActive
                         ? '#18181b'
                         : relevance != null
-                            ? `rgba(63,63,70,${0.5 + relevance * 0.5})`
+                            ? `rgba(39,39,42,${0.65 + relevance * 0.35})`
                             : '#3f3f46',
                     outline: isActive
                         ? '1.5px solid rgba(0,0,0,0.25)'
@@ -158,7 +158,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
 
     // Category section header
     const renderCategoryLabel = (cat: TagCategory | 'other') => (
-        <span className="text-[8px] tracking-[0.15em] uppercase text-zinc-400 mr-2 flex-shrink-0 self-center"
+        <span className="text-[8px] tracking-[0.15em] uppercase text-zinc-600 mr-2 flex-shrink-0 self-center"
             style={{ fontFamily: 'JetBrains Mono, monospace' }}>
             {cat === 'other' ? 'Other' : TAG_CATEGORY_LABELS[cat]}
         </span>
@@ -180,7 +180,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                   boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
               }}>
                 <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-[11px] tracking-[0.2em] uppercase text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    <h2 className="text-[11px] tracking-[0.2em] uppercase text-zinc-700" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Your traits
                     </h2>
                     <div className="flex gap-1">
@@ -235,12 +235,12 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
           }}>
             {/* Header + counter */}
             <div className="flex items-center justify-between mb-6">
-                <h2 className="text-[11px] tracking-[0.2em] uppercase text-zinc-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <h2 className="text-[11px] tracking-[0.2em] uppercase text-zinc-700" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     Choose your traits
                 </h2>
                 <div className="flex items-center gap-2"
                     style={{ animation: pulsing ? 'trait-pulse 300ms ease' : 'none' }}>
-                    <span className="text-[10px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    <span className="text-[10px] text-zinc-600" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         {traitCount} of {maxTraits}
                     </span>
                     <div className="flex gap-1">
@@ -257,7 +257,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
 
             {/* Palette row */}
             <div className="mb-5">
-                <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-600 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     Palette
                 </span>
                 <div className="flex gap-3 py-1">
@@ -290,7 +290,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
 
             {/* Image tags — grouped by category */}
             <div className="mb-5">
-                <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-600 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     This image
                 </span>
                 {tagsLoading ? (
@@ -324,7 +324,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
             {/* Discovery tags — grouped by category */}
             {tagsLoading ? (
                 <div>
-                    <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-600 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Discover nearby
                     </span>
                     <div className="space-y-2">
@@ -343,7 +343,7 @@ const TraitSelector: React.FC<TraitSelectorProps> = ({ image, scored, tagMap, ta
                 </div>
             ) : discoveryTagsByCategory.size > 0 ? (
                 <div>
-                    <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-400 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    <span className="text-[9px] tracking-[0.15em] uppercase text-zinc-600 block mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Discover nearby
                     </span>
                     <div className="space-y-2">
