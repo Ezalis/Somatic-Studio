@@ -60,20 +60,20 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         return () => el.removeEventListener('scroll', onScroll);
     }, [flowPhase]);
 
-    // Trait drawer snap: wait for ALL scrolling (including momentum) to stop, then snap.
-    // Uses native `scrollend` event — fires exactly once when scrolling fully settles.
-    // No scroll-event listener, no debounce, so it never fights momentum.
+    // Trait drawer snap: scrollend for touch, wheel debounce for mouse/trackpad.
+    // scrollend fires after all momentum stops — perfect for touch.
+    // Wheel events don't always trigger scrollend on iPad, so debounce separately.
     useEffect(() => {
         const el = scrollRef.current;
         if (!el || !showScrollContainer) return;
 
         let animFrame = 0;
         let isSnapping = false;
+        let wheelTimer: ReturnType<typeof setTimeout> | null = null;
 
         const snapToNearest = () => {
             const openTarget = window.innerHeight;
             const target = el.scrollTop < openTarget * 0.4 ? 0 : openTarget;
-            // Already at snap point — skip
             if (Math.abs(el.scrollTop - target) < 2) return;
             isSnapping = true;
             const animate = () => {
@@ -90,22 +90,33 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         };
 
         const onScrollEnd = () => {
-            if (isSnapping) return; // Our own animation triggered scrollend — ignore
+            if (isSnapping) return;
             snapToNearest();
         };
 
-        // Cancel snap animation immediately when user touches
+        // Wheel: debounce since scrollend may not fire for mouse wheel on iPad
+        const onWheel = () => {
+            if (wheelTimer) clearTimeout(wheelTimer);
+            wheelTimer = setTimeout(() => {
+                if (!isSnapping) snapToNearest();
+            }, 200);
+        };
+
         const onTouchStart = () => {
             isSnapping = false;
             cancelAnimationFrame(animFrame);
+            if (wheelTimer) clearTimeout(wheelTimer);
         };
 
         el.addEventListener('scrollend', onScrollEnd);
+        el.addEventListener('wheel', onWheel, { passive: true });
         el.addEventListener('touchstart', onTouchStart, { passive: true });
         return () => {
             el.removeEventListener('scrollend', onScrollEnd);
+            el.removeEventListener('wheel', onWheel);
             el.removeEventListener('touchstart', onTouchStart);
             cancelAnimationFrame(animFrame);
+            if (wheelTimer) clearTimeout(wheelTimer);
         };
     }, [flowPhase]);
 

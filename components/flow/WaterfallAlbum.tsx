@@ -394,9 +394,13 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                     {tiers.tier1.map((node, index) => {
                         const pos = tierPositions.tier1[index];
                         const rotate = (seededRandom(node.image.id + 't1r') - 0.5) * 6;
-                        const cardWidth = isMobile
-                            ? 160 + seededRandom(node.image.id + 't1w') * 30
-                            : 260 + seededRandom(node.image.id + 't1w') * 60;
+                        // Dynamic sizing: fewer images → bigger cards to fill the screen
+                        const t1Count = tiers.tier1.length;
+                        const baseWidth = isMobile
+                            ? (t1Count === 1 ? 280 : t1Count === 2 ? 220 : t1Count <= 3 ? 180 : 150)
+                            : (t1Count === 1 ? 480 : t1Count === 2 ? 380 : t1Count <= 3 ? 300 : 240);
+                        const jitter = seededRandom(node.image.id + 't1w') * (baseWidth * 0.15);
+                        const cardWidth = baseWidth + jitter;
                         const driftDur = 14 + seededRandom(node.image.id + 't1d') * 4;
                         const driftDel = seededRandom(node.image.id + 't1l') * 5;
                         return (
