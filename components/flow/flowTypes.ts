@@ -34,3 +34,8 @@ export interface WaterfallNode {
     driftDuration: number;
     driftDelay: number;
 }
+
+export interface WaterfallImage {
+    image: ImageNode;
+    score: number;
+}

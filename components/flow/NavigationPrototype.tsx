@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { ImageNode, Tag } from '../../types';
-import { FlowPhase, ScoredImage, TrailPoint, AlbumImage } from './flowTypes';
+import { FlowPhase, ScoredImage, TrailPoint, AlbumImage, WaterfallImage } from './flowTypes';
 import { scoreRelevance, colorDist, COLOR_THRESHOLD } from './flowHelpers';
 import BloomOverlay from './BloomOverlay';
 import HeroSection from './HeroSection';
@@ -124,6 +124,16 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         }
         return [...seen.values()].sort((a, b) => b.tagHits - a.tagHits);
     }, [anchor, scored, images, selectedTraits]);
+
+    // Hero-similar images for waterfall tier (replaces sprites in album phase zoom-through)
+    const waterfallPool = useMemo((): WaterfallImage[] => {
+        if (!anchor || scored.length === 0) return [];
+        const albumIds = new Set(albumPool.map(a => a.image.id));
+        return scored
+            .filter((s: ScoredImage) => !albumIds.has(s.image.id))
+            .slice(0, 12)
+            .map((s: ScoredImage) => ({ image: s.image, score: s.score }));
+    }, [anchor, scored, albumPool]);
 
     const surfaceStyle = useMemo((): React.CSSProperties => {
         if (!anchor?.palette?.length) return { background: '#faf9f6' };
@@ -273,25 +283,12 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 </div>
             )}
 
-            {/* Sprite background — smooth pool transitions, convergence rings show trait relevance */}
-            {(flowPhase === 'exploring' || flowPhase === 'album') && anchor && (
-                <div className="fixed inset-0" style={{
-                    zIndex: 11,
-                    ...(flowPhase === 'album' && albumDepth > 0.7
-                        ? (() => {
-                            const t = Math.min(1, (albumDepth - 0.7) / 0.2);
-                            return {
-                                opacity: 1 - t,
-                                transform: `scale(${1 + t * 0.5})`,
-                                transformOrigin: 'center center',
-                                ...(t > 0.85 ? { visibility: 'hidden' as const } : {}),
-                            };
-                        })()
-                        : {}),
-                }}>
+            {/* Sprite background — convergence rings show trait relevance (exploring phase only) */}
+            {flowPhase === 'exploring' && anchor && (
+                <div className="fixed inset-0" style={{ zIndex: 11 }}>
                     <SpriteBackground albumImages={albumPool} maxCount={spriteCount}
                         onSelect={handleAlbumSelect}
-                        unblur={flowPhase === 'album' ? albumDepth > 0.45 : heroBlur < 2} />
+                        unblur={heroBlur < 2} />
                 </div>
             )}
 
@@ -299,7 +296,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             {flowPhase === 'album' && anchor && (
                 <WaterfallAlbum albumImages={albumPool} traitCount={selectedTraits.size}
                     onSelect={handleAlbumSelect} isAlbumPhase
-                    onScrollDepth={setAlbumDepth} />
+                    onScrollDepth={setAlbumDepth}
+                    waterfallImages={waterfallPool} />
             )}
 
             {/* TRAIT SELECTOR — native-scrolling container for exploring phases.

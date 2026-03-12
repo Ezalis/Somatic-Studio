@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ImageNode } from '../../types';
-import { AlbumImage, WaterfallNode } from './flowTypes';
+import { AlbumImage, WaterfallNode, WaterfallImage } from './flowTypes';
 import { seededRandom } from './flowHelpers';
 import { getThumbnailUrl, getPreviewUrl } from '../../services/immichService';
 import MiniSprite from './MiniSprite';
@@ -12,6 +12,7 @@ interface WaterfallAlbumProps {
     gentleReveal?: boolean;
     isAlbumPhase?: boolean;
     onScrollDepth?: (depth: number) => void;
+    waterfallImages?: WaterfallImage[];
 }
 
 // Distribute items across the viewport without overlapping too much
@@ -57,7 +58,7 @@ function scatterPositions(count: number, seed: string, bounds: { xMin: number; x
 
 // Compute tier opacity/scale/visibility based on scroll depth (0→1)
 // Full zoom sequence: traits (0→0.20) → tier 0 (0.10→0.40) → tier 1 (0.25→0.60)
-//   → sprites unblur (0.50→0.75) → sprites fade + hero unblurs (0.75→1.0)
+//   → waterfall (0.45→0.85) → hero unblurs (0.85→1.0)
 function getTierStyle(tier: number, depth: number): React.CSSProperties {
     let opacity: number, scale: number;
 
@@ -66,7 +67,7 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
         const t = Math.min(1, Math.max(0, (depth - 0.10) / 0.30));
         opacity = 1 - t;
         scale = 1 + t * 0.5;
-    } else {
+    } else if (tier === 1) {
         // Tier 2 (medium photos): enters 0.15→0.35, peaks 0.35→0.45, peels off 0.45→0.65
         const enter = Math.min(1, Math.max(0, (depth - 0.15) / 0.20));
         const exit = Math.min(1, Math.max(0, (depth - 0.45) / 0.20));
@@ -80,6 +81,20 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
             opacity = 1 - exit;
             scale = 1 + exit * 0.5;
         }
+    } else {
+        // Waterfall (hero-similar): enters 0.45→0.55, peaks 0.55→0.65, peels off 0.65→0.85
+        const enter = Math.min(1, Math.max(0, (depth - 0.45) / 0.10));
+        const exit = Math.min(1, Math.max(0, (depth - 0.65) / 0.20));
+        if (depth < 0.55) {
+            opacity = enter * 0.9;
+            scale = 0.85 + enter * 0.15;
+        } else if (depth < 0.65) {
+            opacity = 0.9;
+            scale = 1;
+        } else {
+            opacity = 0.9 * (1 - exit);
+            scale = 1 + exit * 0.5;
+        }
     }
 
     return {
@@ -90,7 +105,31 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
     };
 }
 
-const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount, onSelect, gentleReveal, isAlbumPhase, onScrollDepth }) => {
+// Snap points for zoom-through depth
+// drawer open → drawer closed → tier 1 → tier 2 → waterfall → hero
+const SNAP_POINTS = [0.0, 0.10, 0.25, 0.40, 0.60, 1.0];
+
+function findSnapTarget(current: number, velocity: number): number {
+    const VELOCITY_THRESHOLD = 0.3; // px/ms threshold for directional snap
+    if (Math.abs(velocity) > VELOCITY_THRESHOLD) {
+        // Fast swipe: snap to next point in swipe direction
+        if (velocity > 0) {
+            return SNAP_POINTS.find(p => p > current + 0.02) ?? SNAP_POINTS[SNAP_POINTS.length - 1];
+        } else {
+            return [...SNAP_POINTS].reverse().find(p => p < current - 0.02) ?? SNAP_POINTS[0];
+        }
+    }
+    // Low velocity: snap to nearest
+    let nearest = SNAP_POINTS[0];
+    let minDist = Math.abs(current - nearest);
+    for (const p of SNAP_POINTS) {
+        const dist = Math.abs(current - p);
+        if (dist < minDist) { minDist = dist; nearest = p; }
+    }
+    return nearest;
+}
+
+const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount, onSelect, gentleReveal, isAlbumPhase, onScrollDepth, waterfallImages }) => {
     const isPartial = traitCount >= 3 && traitCount < 6;
     const visible = traitCount >= 3;
     const isMobile = useMemo(() =>
@@ -99,8 +138,29 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     // Scroll-depth state for zoom-through-layers effect (touch on mobile, wheel on desktop)
     const [scrollDepth, setScrollDepth] = useState(0);
     const touchRef = useRef({ startY: 0, lastY: 0, lastTime: 0, velocity: 0, isScrolling: false });
-    const momentumRef = useRef<number>(0);
+    const animRef = useRef<number>(0);
     const isScrollingRef = useRef(false);
+    const snapTargetRef = useRef<number | null>(null);
+    const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Animate smoothly toward a snap target
+    const animateToSnap = useCallback((target: number) => {
+        cancelAnimationFrame(animRef.current);
+        snapTargetRef.current = target;
+        const animate = () => {
+            setScrollDepth(current => {
+                const diff = target - current;
+                if (Math.abs(diff) < 0.003) {
+                    snapTargetRef.current = null;
+                    setTimeout(() => { isScrollingRef.current = false; }, 50);
+                    return target;
+                }
+                animRef.current = requestAnimationFrame(animate);
+                return current + diff * 0.12;
+            });
+        };
+        animRef.current = requestAnimationFrame(animate);
+    }, []);
 
     // Reset scroll depth and touch state when album phase starts
     useEffect(() => {
@@ -108,7 +168,8 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
             setScrollDepth(0);
             onScrollDepth?.(0);
             isScrollingRef.current = false;
-            cancelAnimationFrame(momentumRef.current);
+            snapTargetRef.current = null;
+            cancelAnimationFrame(animRef.current);
         }
     }, [isAlbumPhase, onScrollDepth]);
 
@@ -117,11 +178,15 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         onScrollDepth?.(scrollDepth);
     }, [scrollDepth, onScrollDepth]);
 
-    // Cleanup momentum on unmount
-    useEffect(() => () => cancelAnimationFrame(momentumRef.current), []);
+    // Cleanup on unmount
+    useEffect(() => () => {
+        cancelAnimationFrame(animRef.current);
+        if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+    }, []);
 
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        cancelAnimationFrame(momentumRef.current);
+        cancelAnimationFrame(animRef.current);
+        snapTargetRef.current = null;
         isScrollingRef.current = false;
         const y = e.touches[0].clientY;
         touchRef.current = { startY: y, lastY: y, lastTime: Date.now(), velocity: 0, isScrolling: false };
@@ -150,29 +215,32 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
 
     const handleTouchEnd = useCallback(() => {
         if (!touchRef.current.isScrolling) return;
-
-        // Apply momentum
-        let v = touchRef.current.velocity;
-        const totalDistance = window.innerHeight * 2;
-        const decay = 0.95;
-
-        const animate = () => {
-            if (Math.abs(v) < 0.005) {
-                // Clear scrolling flag after momentum settles
-                setTimeout(() => { isScrollingRef.current = false; }, 50);
-                return;
-            }
-            v *= decay;
-            setScrollDepth(d => Math.max(0, Math.min(1, d + (v * 16) / totalDistance)));
-            momentumRef.current = requestAnimationFrame(animate);
-        };
-        momentumRef.current = requestAnimationFrame(animate);
-    }, []);
+        setScrollDepth(current => {
+            const target = findSnapTarget(current, touchRef.current.velocity);
+            animateToSnap(target);
+            return current;
+        });
+    }, [animateToSnap]);
 
     const handleWheel = useCallback((e: React.WheelEvent) => {
+        // Cancel any in-flight snap animation while actively wheeling
+        cancelAnimationFrame(animRef.current);
+        snapTargetRef.current = null;
+        isScrollingRef.current = true;
+
         const totalDistance = window.innerHeight * 2;
         setScrollDepth(d => Math.max(0, Math.min(1, d + e.deltaY / totalDistance)));
-    }, []);
+
+        // Debounce: snap after 150ms of no wheel events
+        if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+        wheelTimerRef.current = setTimeout(() => {
+            setScrollDepth(current => {
+                const target = findSnapTarget(current, 0);
+                animateToSnap(target);
+                return current;
+            });
+        }, 150);
+    }, [animateToSnap]);
 
     const nodes = useMemo((): WaterfallNode[] => {
         if (albumImages.length === 0) return [];
@@ -214,11 +282,13 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     // All tiers share viewport bounds — zoom-through effect means only one is visible at a time
     const tierPositions = useMemo(() => {
         if (!tiers) return null;
+        const wfCount = waterfallImages?.length ?? 0;
         return {
             tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 10, xMax: 70, yMin: 10, yMax: 75 }),
-            tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 1, xMax: 92, yMin: 8, yMax: 88 }, 0.7),
+            tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 1, xMax: 92, yMin: 8, yMax: 88 }),
+            waterfall: scatterPositions(wfCount, 'wf', { xMin: 3, xMax: 90, yMin: 5, yMax: 90 }),
         };
-    }, [tiers]);
+    }, [tiers, waterfallImages]);
 
     if (!visible) return null;
 
@@ -234,7 +304,7 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
             <div className="fixed inset-0 pointer-events-auto"
                 style={{ zIndex: 15, ...(isMobile ? { touchAction: 'none' } : {}) }}
                 onClick={(e) => {
-                    if (scrollDepth <= 0.65 || isScrollingRef.current) return;
+                    if (scrollDepth <= 0.85 || isScrollingRef.current) return;
                     const el = e.currentTarget;
                     el.style.pointerEvents = 'none';
                     const beneath = document.elementFromPoint(e.clientX, e.clientY);
@@ -248,7 +318,49 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                 onTouchEnd={handleTouchEnd}
                 onWheel={handleWheel}>
 
-                {/* Tier 2: Smaller photo prints */}
+                {/* Waterfall: hero-similar photos — revealed as tier 2 peels away */}
+                {waterfallImages && waterfallImages.length > 0 && (
+                    <div className="absolute inset-0"
+                        style={getTierStyle(2, scrollDepth)}>
+                        {waterfallImages.map((wf, index) => {
+                            const pos = tierPositions.waterfall[index];
+                            if (!pos) return null;
+                            const rotate = (seededRandom(wf.image.id + 'wfr') - 0.5) * 10;
+                            const cardWidth = isMobile
+                                ? 60 + seededRandom(wf.image.id + 'wfw') * 30
+                                : 80 + seededRandom(wf.image.id + 'wfw') * 40;
+                            const driftDur = 10 + seededRandom(wf.image.id + 'wfd') * 8;
+                            const driftDel = seededRandom(wf.image.id + 'wfl') * 5;
+                            return (
+                                <div key={wf.image.id}
+                                    className="absolute"
+                                    style={{
+                                        left: `${pos.x}%`,
+                                        top: `${pos.y}%`,
+                                        animation: `drift ${driftDur}s ease-in-out ${driftDel}s infinite`,
+                                    }}>
+                                    <div className="pointer-events-auto cursor-pointer"
+                                        style={{
+                                            width: cardWidth,
+                                            zIndex: 1,
+                                            '--card-rotate': `${rotate}deg`,
+                                            animation: `card-scatter 700ms cubic-bezier(0.22,1,0.36,1) ${200 + index * 60}ms both`,
+                                        } as React.CSSProperties}
+                                        onClick={(e) => handleClick(wf.image, e)}>
+                                        <div className="bg-white p-1 rounded shadow-sm"
+                                            style={{ boxShadow: '0 1px 6px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)' }}>
+                                            <img src={getThumbnailUrl(wf.image.id)} alt=""
+                                                className="w-full rounded-sm"
+                                                draggable={false} />
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* Tier 2: Medium photo prints — with drift */}
                 <div className="absolute inset-0"
                     style={getTierStyle(1, scrollDepth)}>
                     {tiers.tier2.map((node, index) => {
@@ -257,30 +369,37 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                         const cardWidth = isMobile
                             ? 100 + seededRandom(node.image.id + 't2w') * 24
                             : 140 + seededRandom(node.image.id + 't2w') * 40;
+                        const driftDur = 12 + seededRandom(node.image.id + 't2d') * 6;
+                        const driftDel = seededRandom(node.image.id + 't2l') * 5;
                         return (
                             <div key={node.image.id}
-                                className="absolute pointer-events-auto cursor-pointer"
+                                className="absolute"
                                 style={{
                                     left: `${pos.x}%`,
                                     top: `${pos.y}%`,
-                                    width: cardWidth,
-                                    zIndex: 2,
-                                    '--card-rotate': `${rotate}deg`,
-                                    animation: `card-scatter 700ms cubic-bezier(0.22,1,0.36,1) ${400 + index * 80}ms both`,
-                                } as React.CSSProperties}
-                                onClick={(e) => handleClick(node.image, e)}>
-                                <div className="bg-white p-1.5 rounded shadow-md"
-                                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)' }}>
-                                    <img src={getThumbnailUrl(node.image.id)} alt=""
-                                        className="w-full rounded-sm"
-                                        draggable={false} />
+                                    animation: `drift ${driftDur}s ease-in-out ${driftDel}s infinite`,
+                                }}>
+                                <div className="pointer-events-auto cursor-pointer"
+                                    style={{
+                                        width: cardWidth,
+                                        zIndex: 2,
+                                        '--card-rotate': `${rotate}deg`,
+                                        animation: `card-scatter 700ms cubic-bezier(0.22,1,0.36,1) ${400 + index * 80}ms both`,
+                                    } as React.CSSProperties}
+                                    onClick={(e) => handleClick(node.image, e)}>
+                                    <div className="bg-white p-1.5 rounded shadow-md"
+                                        style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)' }}>
+                                        <img src={getThumbnailUrl(node.image.id)} alt=""
+                                            className="w-full rounded-sm"
+                                            draggable={false} />
+                                    </div>
                                 </div>
                             </div>
                         );
                     })}
                 </div>
 
-                {/* Tier 1: Large photo prints — most prominent, peels off first */}
+                {/* Tier 1: Large photo prints — most prominent, peels off first, with drift */}
                 <div className="absolute inset-0"
                     style={getTierStyle(0, scrollDepth)}>
                     {tiers.tier1.map((node, index) => {
@@ -289,49 +408,54 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
                         const cardWidth = isMobile
                             ? 160 + seededRandom(node.image.id + 't1w') * 30
                             : 260 + seededRandom(node.image.id + 't1w') * 60;
+                        const driftDur = 14 + seededRandom(node.image.id + 't1d') * 4;
+                        const driftDel = seededRandom(node.image.id + 't1l') * 5;
                         return (
                             <div key={node.image.id}
-                                className="absolute pointer-events-auto cursor-pointer"
+                                className="absolute"
                                 style={{
                                     left: `${pos.x}%`,
                                     top: `${pos.y}%`,
-                                    width: cardWidth,
-                                    zIndex: 3,
-                                    '--card-rotate': `${rotate}deg`,
-                                    animation: `card-scatter 800ms cubic-bezier(0.22,1,0.36,1) ${800 + index * 100}ms both`,
-                                } as React.CSSProperties}
-                                onClick={(e) => handleClick(node.image, e)}>
-                                <div className="bg-white p-2 rounded-md"
-                                    style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08)' }}>
-                                    <img src={getPreviewUrl(node.image.id)} alt=""
-                                        className="w-full rounded-sm"
-                                        draggable={false} />
+                                    animation: `drift ${driftDur}s ease-in-out ${driftDel}s infinite`,
+                                }}>
+                                <div className="pointer-events-auto cursor-pointer"
+                                    style={{
+                                        width: cardWidth,
+                                        zIndex: 3,
+                                        '--card-rotate': `${rotate}deg`,
+                                        animation: `card-scatter 800ms cubic-bezier(0.22,1,0.36,1) ${800 + index * 100}ms both`,
+                                    } as React.CSSProperties}
+                                    onClick={(e) => handleClick(node.image, e)}>
+                                    <div className="bg-white p-2 rounded-md"
+                                        style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08)' }}>
+                                        <img src={getPreviewUrl(node.image.id)} alt=""
+                                            className="w-full rounded-sm"
+                                            draggable={false} />
+                                    </div>
                                 </div>
                             </div>
                         );
                     })}
                 </div>
 
-                {/* Depth indicator — dots on right edge */}
-                {(
-                    <div className="fixed right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 pointer-events-none"
-                        style={{ zIndex: 20 }}>
-                        {[0, 1, 2, 3].map(i => {
-                            // 0=traits/tier1, 1=tier2, 2=sprites, 3=hero
-                            const active = i === 0 ? scrollDepth < 0.25
-                                : i === 1 ? scrollDepth >= 0.20 && scrollDepth < 0.55
-                                : i === 2 ? scrollDepth >= 0.50 && scrollDepth < 0.80
-                                : scrollDepth >= 0.75;
-                            return (
-                                <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-300"
-                                    style={{
-                                        backgroundColor: active ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.12)',
-                                        transform: active ? 'scale(1.3)' : 'scale(1)',
-                                    }} />
-                            );
-                        })}
-                    </div>
-                )}
+                {/* Depth indicator — dots on right edge, one per snap point */}
+                <div className="fixed right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 pointer-events-none"
+                    style={{ zIndex: 20 }}>
+                    {SNAP_POINTS.map((snap, i) => {
+                        const next = SNAP_POINTS[i + 1] ?? 1.1;
+                        const mid = (snap + next) / 2;
+                        const prev = SNAP_POINTS[i - 1] ?? -0.1;
+                        const prevMid = (prev + snap) / 2;
+                        const active = scrollDepth >= prevMid && scrollDepth < mid;
+                        return (
+                            <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-300"
+                                style={{
+                                    backgroundColor: active ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.12)',
+                                    transform: active ? 'scale(1.3)' : 'scale(1)',
+                                }} />
+                        );
+                    })}
+                </div>
             </div>
         );
     }
