@@ -60,6 +60,54 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         return () => el.removeEventListener('scroll', onScroll);
     }, [flowPhase]);
 
+    // Trait drawer snap-on-release: free movement during drag, snap after scroll settles
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el || !showScrollContainer) return;
+
+        let snapTimer: ReturnType<typeof setTimeout> | null = null;
+        let animFrame = 0;
+        let isSnapping = false;
+
+        const snapToNearest = () => {
+            const openTarget = window.innerHeight;
+            const target = el.scrollTop < openTarget * 0.4 ? 0 : openTarget;
+            isSnapping = true;
+            const animate = () => {
+                const diff = target - el.scrollTop;
+                if (Math.abs(diff) < 1) {
+                    el.scrollTop = target;
+                    isSnapping = false;
+                    return;
+                }
+                el.scrollTop += diff * 0.15;
+                animFrame = requestAnimationFrame(animate);
+            };
+            animFrame = requestAnimationFrame(animate);
+        };
+
+        const onScroll = () => {
+            if (isSnapping) return;
+            if (snapTimer) clearTimeout(snapTimer);
+            snapTimer = setTimeout(snapToNearest, 120);
+        };
+
+        const onTouchStart = () => {
+            isSnapping = false;
+            cancelAnimationFrame(animFrame);
+            if (snapTimer) clearTimeout(snapTimer);
+        };
+
+        el.addEventListener('scroll', onScroll, { passive: true });
+        el.addEventListener('touchstart', onTouchStart, { passive: true });
+        return () => {
+            el.removeEventListener('scroll', onScroll);
+            el.removeEventListener('touchstart', onTouchStart);
+            cancelAnimationFrame(animFrame);
+            if (snapTimer) clearTimeout(snapTimer);
+        };
+    }, [showScrollContainer]);
+
     const tagMap = useMemo(() => {
         const map = new Map<string, string>();
         for (const t of tags) map.set(t.id, t.label);
@@ -125,26 +173,44 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         return [...seen.values()].sort((a, b) => b.tagHits - a.tagHits);
     }, [anchor, scored, images, selectedTraits]);
 
-    // Hero-similar images for waterfall tier: ALL same-session + top scored, excluding album tiers
+    // Waterfall tier: independent pool — same session + shared tags + similar colors (loose)
+    const WATERFALL_COLOR_THRESHOLD = 120; // Looser than COLOR_THRESHOLD (80)
     const waterfallPool = useMemo((): WaterfallImage[] => {
-        if (!anchor || scored.length === 0) return [];
-        const albumIds = new Set(albumPool.map(a => a.image.id));
+        if (!anchor) return [];
+        const anchorTags = new Set([...anchor.tagIds, ...(anchor.aiTagIds || [])]);
         const pool = new Map<string, WaterfallImage>();
-        // All same-session images first
-        for (const s of scored) {
-            if (albumIds.has(s.image.id)) continue;
-            if (s.image.shootDayClusterId === anchor.shootDayClusterId) {
-                pool.set(s.image.id, { image: s.image, score: s.score });
+
+        for (const img of images) {
+            if (img.id === anchor.id) continue;
+            let score = 0;
+
+            // Same session
+            if (img.shootDayClusterId === anchor.shootDayClusterId) score += 0.5;
+
+            // Shared tags
+            const imgTags = new Set([...img.tagIds, ...(img.aiTagIds || [])]);
+            let sharedTagCount = 0;
+            for (const t of imgTags) {
+                if (anchorTags.has(t)) sharedTagCount++;
+            }
+            if (sharedTagCount > 0) score += Math.min(sharedTagCount * 0.15, 0.5);
+
+            // Color similarity (looser threshold)
+            if (anchor.palette.length > 0 && img.palette.length > 0) {
+                let colorMatches = 0;
+                for (const heroColor of anchor.palette) {
+                    const closest = Math.min(...img.palette.map((c: string) => colorDist(c, heroColor)));
+                    if (closest < WATERFALL_COLOR_THRESHOLD) colorMatches++;
+                }
+                if (colorMatches > 0) score += colorMatches * 0.08;
+            }
+
+            if (score > 0) {
+                pool.set(img.id, { image: img, score });
             }
         }
-        // Fill with top-scored until we have a good spread
-        for (const s of scored) {
-            if (albumIds.has(s.image.id) || pool.has(s.image.id)) continue;
-            pool.set(s.image.id, { image: s.image, score: s.score });
-            if (pool.size >= 30) break;
-        }
         return [...pool.values()].sort((a, b) => b.score - a.score);
-    }, [anchor, scored, albumPool]);
+    }, [anchor, images]);
 
     const surfaceStyle = useMemo((): React.CSSProperties => {
         if (!anchor?.palette?.length) return { background: '#faf9f6' };
@@ -317,14 +383,13 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 sprites/hero beneath via elementFromPoint. Desktop uses onWheel. */}
             {showScrollContainer && anchor && (
                 <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto"
-                    style={{ scrollSnapType: 'y proximity' }}
                     onWheel={(e) => {
                         // Scroll container handles wheel natively, but also allow
                         // scrolling when cursor is over the spacer (hero area)
                         e.currentTarget.scrollTop += e.deltaY;
                     }}>
-                    {/* Spacer — snaps to top (hero visible / drawer closed) */}
-                    <div style={{ minHeight: '100vh', scrollSnapAlign: 'start' }}
+                    {/* Spacer — hero visible area */}
+                    <div style={{ minHeight: '100vh' }}
                         onClick={(e) => {
                             // Forward tap to element beneath (sprites, hero)
                             const scrollEl = scrollRef.current;
@@ -342,8 +407,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                             }
                         }} />
 
-                    {/* Trait section — snaps to top (drawer open) */}
-                    <div id="trait-section" style={{ position: 'relative', minHeight: '60vh', scrollSnapAlign: 'start' }}>
+                    {/* Trait section scrolls up over the hero */}
+                    <div id="trait-section" style={{ position: 'relative', minHeight: '60vh' }}>
                         <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
                             selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
                             albumImages={albumPool} />
