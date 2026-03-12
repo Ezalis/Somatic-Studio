@@ -317,7 +317,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 sprites/hero beneath via elementFromPoint. Desktop uses onWheel. */}
             {showScrollContainer && anchor && (
                 <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto"
-                    style={{ scrollSnapType: 'y mandatory' }}
+                    style={{ scrollSnapType: 'y proximity' }}
                     onWheel={(e) => {
                         // Scroll container handles wheel natively, but also allow
                         // scrolling when cursor is over the spacer (hero area)

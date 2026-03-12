@@ -15,8 +15,9 @@ interface WaterfallAlbumProps {
     waterfallImages?: WaterfallImage[];
 }
 
-// Grid-based scatter with jitter — good for tier 1 (few large items, even spread)
-function scatterPositions(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }) {
+// Grid-based scatter — guarantees spatial coverage, jitter adds organic feel.
+// jitterScale: 0.8 = ±40% of cell (structured), 1.2 = ±60% (messy desk feel)
+function scatterPositions(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }, jitterScale = 0.8) {
     const positions: { x: number; y: number }[] = [];
     const aspectRatio = (bounds.xMax - bounds.xMin) / (bounds.yMax - bounds.yMin);
     const cols = Math.max(2, Math.round(Math.sqrt(count * aspectRatio)));
@@ -24,36 +25,23 @@ function scatterPositions(count: number, seed: string, bounds: { xMin: number; x
     const cellW = (bounds.xMax - bounds.xMin) / cols;
     const cellH = (bounds.yMax - bounds.yMin) / rows;
 
+    // Shuffle cell assignment order so items don't fill left-to-right, top-to-bottom
+    const cells: number[] = [];
+    for (let i = 0; i < count; i++) cells.push(i);
+    for (let i = cells.length - 1; i > 0; i--) {
+        const j = Math.floor(seededRandom(seed + 'shuf' + i) * (i + 1));
+        [cells[i], cells[j]] = [cells[j], cells[i]];
+    }
+
     for (let i = 0; i < count; i++) {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const jitterX = (seededRandom('X' + seed + i * 7) - 0.5) * cellW * 0.8;
-        const jitterY = (seededRandom('Y' + seed + i * 13) - 0.5) * cellH * 0.8;
+        const cell = cells[i];
+        const col = cell % cols;
+        const row = Math.floor(cell / cols);
+        // Use prime multipliers to decorrelate x/y hash sequences
+        const jitterX = (seededRandom(seed + 'X' + (i * 31 + 7)) - 0.5) * cellW * jitterScale;
+        const jitterY = (seededRandom(seed + 'Y' + (i * 37 + 13)) - 0.5) * cellH * jitterScale;
         let x = bounds.xMin + (col + 0.5) * cellW + jitterX;
         let y = bounds.yMin + (row + 0.5) * cellH + jitterY;
-        x = Math.max(bounds.xMin, Math.min(bounds.xMax, x));
-        y = Math.max(bounds.yMin, Math.min(bounds.yMax, y));
-        positions.push({ x, y });
-    }
-    return positions;
-}
-
-// Fully random scatter with min-distance repulsion — organic "photos on a desk" feel
-function organicScatter(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }, minDist = 8) {
-    const positions: { x: number; y: number }[] = [];
-    for (let i = 0; i < count; i++) {
-        let x = bounds.xMin + seededRandom(seed + 'x' + i) * (bounds.xMax - bounds.xMin);
-        let y = bounds.yMin + seededRandom(seed + 'y' + i) * (bounds.yMax - bounds.yMin);
-        // Push away from nearest neighbor if too close (single pass)
-        for (const p of positions) {
-            const dx = x - p.x, dy = y - p.y;
-            const d = Math.sqrt(dx * dx + dy * dy);
-            if (d < minDist && d > 0) {
-                const push = (minDist - d) / d;
-                x += dx * push * 0.5;
-                y += dy * push * 0.5;
-            }
-        }
         x = Math.max(bounds.xMin, Math.min(bounds.xMax, x));
         y = Math.max(bounds.yMin, Math.min(bounds.yMax, y));
         positions.push({ x, y });
@@ -286,8 +274,8 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         const wfCount = waterfallImages?.length ?? 0;
         return {
             tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 10, xMax: 70, yMin: 10, yMax: 75 }),
-            tier2: organicScatter(tiers.tier2.length, 't2', { xMin: 2, xMax: 90, yMin: 5, yMax: 88 }, 10),
-            waterfall: organicScatter(wfCount, 'wf', { xMin: 2, xMax: 92, yMin: 3, yMax: 92 }, 6),
+            tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 2, xMax: 90, yMin: 5, yMax: 88 }, 1.2),
+            waterfall: scatterPositions(wfCount, 'wf', { xMin: 2, xMax: 92, yMin: 3, yMax: 92 }, 1.0),
         };
     }, [tiers, waterfallImages]);
 
