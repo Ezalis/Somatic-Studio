@@ -60,7 +60,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         return () => el.removeEventListener('scroll', onScroll);
     }, [flowPhase]);
 
-    // Trait drawer snap-on-release: free movement during drag, snap after scroll settles
+    // Trait drawer snap-on-release: free movement during drag, snap after scroll fully settles
     useEffect(() => {
         const el = scrollRef.current;
         if (!el || !showScrollContainer) return;
@@ -68,8 +68,16 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         let snapTimer: ReturnType<typeof setTimeout> | null = null;
         let animFrame = 0;
         let isSnapping = false;
+        let isTouching = false;
+
+        const cancelSnap = () => {
+            isSnapping = false;
+            cancelAnimationFrame(animFrame);
+            if (snapTimer) clearTimeout(snapTimer);
+        };
 
         const snapToNearest = () => {
+            if (isTouching) return; // Never snap while finger is down
             const openTarget = window.innerHeight;
             const target = el.scrollTop < openTarget * 0.4 ? 0 : openTarget;
             isSnapping = true;
@@ -80,31 +88,34 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     isSnapping = false;
                     return;
                 }
-                el.scrollTop += diff * 0.15;
+                el.scrollTop += diff * 0.12;
                 animFrame = requestAnimationFrame(animate);
             };
             animFrame = requestAnimationFrame(animate);
         };
 
         const onScroll = () => {
-            if (isSnapping) return;
+            if (isSnapping || isTouching) return;
             if (snapTimer) clearTimeout(snapTimer);
-            snapTimer = setTimeout(snapToNearest, 120);
+            snapTimer = setTimeout(snapToNearest, 300);
         };
 
-        const onTouchStart = () => {
-            isSnapping = false;
-            cancelAnimationFrame(animFrame);
+        const onTouchStart = () => { isTouching = true; cancelSnap(); };
+        const onTouchEnd = () => {
+            isTouching = false;
+            // Wait for momentum to settle, then snap
             if (snapTimer) clearTimeout(snapTimer);
+            snapTimer = setTimeout(snapToNearest, 400);
         };
 
         el.addEventListener('scroll', onScroll, { passive: true });
         el.addEventListener('touchstart', onTouchStart, { passive: true });
+        el.addEventListener('touchend', onTouchEnd, { passive: true });
         return () => {
             el.removeEventListener('scroll', onScroll);
             el.removeEventListener('touchstart', onTouchStart);
-            cancelAnimationFrame(animFrame);
-            if (snapTimer) clearTimeout(snapTimer);
+            el.removeEventListener('touchend', onTouchEnd);
+            cancelSnap();
         };
     }, [flowPhase]);
 
@@ -209,7 +220,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 pool.set(img.id, { image: img, score });
             }
         }
-        return [...pool.values()].sort((a, b) => b.score - a.score);
+        return [...pool.values()].sort((a, b) => b.score - a.score).slice(0, 30);
     }, [anchor, images]);
 
     const surfaceStyle = useMemo((): React.CSSProperties => {
