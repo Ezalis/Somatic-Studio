@@ -30,8 +30,8 @@ App.tsx                       → Root component, Immich hydration, renders flow
 │       ├── BloomOverlay.tsx         → Bloom scatter transition
 │       ├── HeroSection.tsx          → Fullscreen hero with scroll-driven blur
 │       ├── TraitSelector.tsx        → Color/tag/discovery-tag picker
-│       ├── WaterfallAlbum.tsx       → Tiered album layout with zoom-through
-│       ├── SpriteBackground.tsx     → Convergence ring sprite layer
+│       ├── WaterfallAlbum.tsx       → Tiered album with 3-layer zoom-through + waterfall
+│       ├── SpriteBackground.tsx     → Convergence ring sprite layer (exploring phase)
 │       ├── IdleField.tsx            → Drifting sprite + photo card field
 │       ├── flowTypes.ts             → Flow-specific types
 │       ├── flowHelpers.ts           → Scoring, color math, seeded random
@@ -54,6 +54,8 @@ App.tsx                       → Root component, Immich hydration, renders flow
 - **FlowPhase** — State machine: `idle → blooming → hero → exploring → album`
 - **Trait** — A selected color or tag used to build the album pool; up to 6 traits per session
 - **Relevance Score** — Calculated from temporal proximity, tag overlap, color distance, and technical matches
+- **Waterfall Pool** — Independent set of hero-similar images for the deepest album tier, ranked by same session, shared tags, and color similarity
+- **Zoom-Through Depth** — Normalized 0→1 scroll depth controlling album layer peel-away, with snap points at tier boundaries
 
 ## Flow-State Navigation
 
@@ -62,8 +64,8 @@ The entire app is a single vertical scroll journey through images:
 1. **Idle** — Drifting sprites and photo cards fill the viewport; tap any to begin
 2. **Blooming** — Sprite scatters apart with staggered CSS transitions; hero preloads behind
 3. **Hero** — Fullscreen image (sticky, progressively blurs 0–16px as user scrolls past)
-4. **Exploring** — Trait selector scrolls up over blurred hero; pick colors + tags to build an album
-5. **Album** — At 6 traits: sprite background with convergence rings, zoom-through depth on mobile
+4. **Exploring** — Trait selector slides up over blurred hero with snap-on-release; convergence ring sprites appear as traits are selected
+5. **Album** — At 6 traits: three tiers of scattered photo prints with zoom-through depth interaction (Tier 1 large → Tier 2 medium → Waterfall hero-similar blurred→unblurred → Hero reveal). Each tier drifts and snaps to depth checkpoints
 6. **Loop** — Tap any album item → bloom → new hero → new traits → new album
 
 ## Data Flow

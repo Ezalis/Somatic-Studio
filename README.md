@@ -13,7 +13,7 @@
 
 Every photograph carries memory — not just pixels, but the light that afternoon, the hum of the lens, the season encoded in color. Somatic Studio treats images as nodes in a living network, connected by palette, time, subject, and technical DNA. There are no folders, no albums to scroll. You navigate by feeling.
 
-Tap any image and the system **blooms** — scattering its sprite apart to reveal a fullscreen hero. Scroll past the hero into a trait selector where you pick colors and tags that resonate. At six traits, an album materializes from the full collection, ranked by relevance. Tap any album image and the cycle begins again — a continuous loop of discovery through your photographs.
+Tap any image and the system **blooms** — scattering its sprite apart to reveal a fullscreen hero. Scroll past the hero into a trait selector where you pick colors and tags that resonate. At six traits, the album materializes as layered photo prints scattered across the viewport. Scroll deeper to zoom through three tiers of relevance — from the strongest matches down to a blurred waterfall of session-similar images — until the hero itself unblurs beneath. Tap any photo and the cycle begins again.
 
 ---
 
@@ -24,8 +24,13 @@ The entire app is a single vertical scroll journey through five phases:
 1. **Idle** — Drifting sprites and photo cards fill the viewport; tap any to begin
 2. **Blooming** — The sprite scatters apart with staggered CSS transitions; the hero preloads behind
 3. **Hero** — Fullscreen image (sticky, progressively blurs 0–16px as you scroll past)
-4. **Exploring** — Trait selector scrolls up over the blurred hero; pick colors + tags to build an album
-5. **Album** — At 6 traits: sprite background with convergence rings, tiered waterfall layout with zoom-through depth
+4. **Exploring** — Trait selector slides up over the blurred hero with snap-on-release behavior; pick colors + tags to build an album. Convergence ring sprites appear in the background as traits are selected
+5. **Album** — At 6 traits: three tiers of photo prints scattered across the viewport with a zoom-through interaction:
+   - **Tier 1** — Large prints (dynamically sized to fill the screen), highest trait matches
+   - **Tier 2** — Medium prints scattered with organic jitter, strong trait matches
+   - **Waterfall** — Small thumbnails of hero-similar images (same session, shared tags, similar colors), starts blurred and unblurs as you scroll deeper
+   - **Hero reveal** — All layers peel away to reveal the original hero, unblurred
+   - Each tier drifts subtly and snaps to depth checkpoints on touch/wheel release
 6. **Loop** — Tap any album item to bloom into a new hero, new traits, new album
 
 ## Key Concepts
@@ -37,6 +42,8 @@ The entire app is a single vertical scroll journey through five phases:
 | **FlowPhase** | State machine governing the scroll journey: `idle → blooming → hero → exploring → album` |
 | **Trait** | A selected color or tag used to filter the album pool; up to 6 traits per session |
 | **Relevance Score** | Composite of temporal proximity, tag overlap, color distance, and technical match (camera/lens) |
+| **Waterfall Pool** | Independent set of hero-similar images for the deepest album tier — ranked by same session (+0.5), shared tags (+0.15/tag), and color similarity (threshold 120) |
+| **Zoom-Through Depth** | Normalized 0→1 scroll depth controlling the album's layered peel-away effect, with snap points at key tier boundaries |
 
 ## Architecture
 
@@ -68,8 +75,8 @@ App.tsx                       → Root component, Immich hydration, renders flow
 │       ├── BloomOverlay.tsx         → Bloom scatter transition
 │       ├── HeroSection.tsx          → Fullscreen hero with scroll-driven blur
 │       ├── TraitSelector.tsx        → Color/tag/discovery-tag picker
-│       ├── WaterfallAlbum.tsx       → Tiered album layout with zoom-through
-│       ├── SpriteBackground.tsx     → Convergence ring sprite layer
+│       ├── WaterfallAlbum.tsx       → Tiered album with 3-layer zoom-through + waterfall
+│       ├── SpriteBackground.tsx     → Convergence ring sprite layer (exploring phase)
 │       ├── IdleField.tsx            → Drifting sprite + photo card field
 │       ├── flowTypes.ts             → Flow-specific types
 │       ├── flowHelpers.ts           → Scoring, color math, seeded random
