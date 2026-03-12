@@ -15,40 +15,45 @@ interface WaterfallAlbumProps {
     waterfallImages?: WaterfallImage[];
 }
 
-// Distribute items across the viewport without overlapping too much
-// Returns positions that feel like photos scattered on a surface
-function scatterPositions(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }, edgeBias = 0) {
+// Grid-based scatter with jitter — good for tier 1 (few large items, even spread)
+function scatterPositions(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }) {
     const positions: { x: number; y: number }[] = [];
-    // Balanced grid that fills both axes — slightly favor columns for landscape viewports
     const aspectRatio = (bounds.xMax - bounds.xMin) / (bounds.yMax - bounds.yMin);
     const cols = Math.max(2, Math.round(Math.sqrt(count * aspectRatio)));
     const rows = Math.max(2, Math.ceil(count / cols));
     const cellW = (bounds.xMax - bounds.xMin) / cols;
     const cellH = (bounds.yMax - bounds.yMin) / rows;
 
-    const cx = (bounds.xMin + bounds.xMax) / 2;
-    const cy = (bounds.yMin + bounds.yMax) / 2;
-
     for (let i = 0; i < count; i++) {
         const col = i % cols;
         const row = Math.floor(i / cols);
-        // Large jitter (±40% of cell) for organic feel
         const jitterX = (seededRandom('X' + seed + i * 7) - 0.5) * cellW * 0.8;
         const jitterY = (seededRandom('Y' + seed + i * 13) - 0.5) * cellH * 0.8;
         let x = bounds.xMin + (col + 0.5) * cellW + jitterX;
         let y = bounds.yMin + (row + 0.5) * cellH + jitterY;
+        x = Math.max(bounds.xMin, Math.min(bounds.xMax, x));
+        y = Math.max(bounds.yMin, Math.min(bounds.yMax, y));
+        positions.push({ x, y });
+    }
+    return positions;
+}
 
-        // Edge bias: push positions outward from center (0 = none, 1 = strong)
-        if (edgeBias > 0) {
-            const dx = x - cx;
-            const dy = y - cy;
-            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            const halfW = (bounds.xMax - bounds.xMin) / 2;
-            const push = edgeBias * halfW * 0.4;
-            x += (dx / dist) * push;
-            y += (dy / dist) * push;
+// Fully random scatter with min-distance repulsion — organic "photos on a desk" feel
+function organicScatter(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }, minDist = 8) {
+    const positions: { x: number; y: number }[] = [];
+    for (let i = 0; i < count; i++) {
+        let x = bounds.xMin + seededRandom(seed + 'x' + i) * (bounds.xMax - bounds.xMin);
+        let y = bounds.yMin + seededRandom(seed + 'y' + i) * (bounds.yMax - bounds.yMin);
+        // Push away from nearest neighbor if too close (single pass)
+        for (const p of positions) {
+            const dx = x - p.x, dy = y - p.y;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d < minDist && d > 0) {
+                const push = (minDist - d) / d;
+                x += dx * push * 0.5;
+                y += dy * push * 0.5;
+            }
         }
-
         x = Math.max(bounds.xMin, Math.min(bounds.xMax, x));
         y = Math.max(bounds.yMin, Math.min(bounds.yMax, y));
         positions.push({ x, y });
@@ -82,17 +87,13 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
             scale = 1 + exit * 0.5;
         }
     } else {
-        // Waterfall (hero-similar): enters 0.45→0.55, peaks 0.55→0.65, peels off 0.65→0.85
-        const enter = Math.min(1, Math.max(0, (depth - 0.45) / 0.10));
+        // Waterfall (hero-similar): visible from start behind other tiers, peels off 0.65→0.85
         const exit = Math.min(1, Math.max(0, (depth - 0.65) / 0.20));
-        if (depth < 0.55) {
-            opacity = enter * 0.9;
-            scale = 0.85 + enter * 0.15;
-        } else if (depth < 0.65) {
-            opacity = 0.9;
+        if (depth < 0.65) {
+            opacity = 0.85;
             scale = 1;
         } else {
-            opacity = 0.9 * (1 - exit);
+            opacity = 0.85 * (1 - exit);
             scale = 1 + exit * 0.5;
         }
     }
@@ -285,8 +286,8 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         const wfCount = waterfallImages?.length ?? 0;
         return {
             tier1: scatterPositions(tiers.tier1.length, 't1', { xMin: 10, xMax: 70, yMin: 10, yMax: 75 }),
-            tier2: scatterPositions(tiers.tier2.length, 't2', { xMin: 1, xMax: 92, yMin: 8, yMax: 88 }),
-            waterfall: scatterPositions(wfCount, 'wf', { xMin: 3, xMax: 90, yMin: 5, yMax: 90 }),
+            tier2: organicScatter(tiers.tier2.length, 't2', { xMin: 2, xMax: 90, yMin: 5, yMax: 88 }, 10),
+            waterfall: organicScatter(wfCount, 'wf', { xMin: 2, xMax: 92, yMin: 3, yMax: 92 }, 6),
         };
     }, [tiers, waterfallImages]);
 

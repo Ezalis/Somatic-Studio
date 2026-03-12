@@ -125,14 +125,25 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         return [...seen.values()].sort((a, b) => b.tagHits - a.tagHits);
     }, [anchor, scored, images, selectedTraits]);
 
-    // Hero-similar images for waterfall tier (replaces sprites in album phase zoom-through)
+    // Hero-similar images for waterfall tier: ALL same-session + top scored, excluding album tiers
     const waterfallPool = useMemo((): WaterfallImage[] => {
         if (!anchor || scored.length === 0) return [];
         const albumIds = new Set(albumPool.map(a => a.image.id));
-        return scored
-            .filter((s: ScoredImage) => !albumIds.has(s.image.id))
-            .slice(0, 12)
-            .map((s: ScoredImage) => ({ image: s.image, score: s.score }));
+        const pool = new Map<string, WaterfallImage>();
+        // All same-session images first
+        for (const s of scored) {
+            if (albumIds.has(s.image.id)) continue;
+            if (s.image.shootDayClusterId === anchor.shootDayClusterId) {
+                pool.set(s.image.id, { image: s.image, score: s.score });
+            }
+        }
+        // Fill with top-scored until we have a good spread
+        for (const s of scored) {
+            if (albumIds.has(s.image.id) || pool.has(s.image.id)) continue;
+            pool.set(s.image.id, { image: s.image, score: s.score });
+            if (pool.size >= 30) break;
+        }
+        return [...pool.values()].sort((a, b) => b.score - a.score);
     }, [anchor, scored, albumPool]);
 
     const surfaceStyle = useMemo((): React.CSSProperties => {
@@ -306,14 +317,14 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 sprites/hero beneath via elementFromPoint. Desktop uses onWheel. */}
             {showScrollContainer && anchor && (
                 <div ref={scrollRef} className="fixed inset-0 pt-12 z-20 overflow-y-auto"
+                    style={{ scrollSnapType: 'y mandatory' }}
                     onWheel={(e) => {
                         // Scroll container handles wheel natively, but also allow
                         // scrolling when cursor is over the spacer (hero area)
                         e.currentTarget.scrollTop += e.deltaY;
                     }}>
-                    {/* Spacer — lets native scroll work, but forwards taps to
-                        sprites/hero beneath using elementFromPoint */}
-                    <div style={{ minHeight: '100vh' }}
+                    {/* Spacer — snaps to top (hero visible / drawer closed) */}
+                    <div style={{ minHeight: '100vh', scrollSnapAlign: 'start' }}
                         onClick={(e) => {
                             // Forward tap to element beneath (sprites, hero)
                             const scrollEl = scrollRef.current;
@@ -331,8 +342,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                             }
                         }} />
 
-                    {/* Trait section scrolls up over the hero */}
-                    <div id="trait-section" style={{ position: 'relative', minHeight: '60vh' }}>
+                    {/* Trait section — snaps to top (drawer open) */}
+                    <div id="trait-section" style={{ position: 'relative', minHeight: '60vh', scrollSnapAlign: 'start' }}>
                         <TraitSelector image={anchor} scored={scored} tagMap={tagMap} tags={tags}
                             selectedTraits={selectedTraits} onToggleTrait={handleToggleTrait}
                             albumImages={albumPool} />
