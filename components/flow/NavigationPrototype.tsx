@@ -106,7 +106,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             cancelAnimationFrame(animFrame);
             if (snapTimer) clearTimeout(snapTimer);
         };
-    }, [showScrollContainer]);
+    }, [flowPhase]);
 
     const tagMap = useMemo(() => {
         const map = new Map<string, string>();
@@ -177,7 +177,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     const WATERFALL_COLOR_THRESHOLD = 120; // Looser than COLOR_THRESHOLD (80)
     const waterfallPool = useMemo((): WaterfallImage[] => {
         if (!anchor) return [];
-        const anchorTags = new Set([...anchor.tagIds, ...(anchor.aiTagIds || [])]);
+        const anchorTags = new Set([...(anchor.tagIds || []), ...(anchor.aiTagIds || [])]);
         const pool = new Map<string, WaterfallImage>();
 
         for (const img of images) {
@@ -188,7 +188,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             if (img.shootDayClusterId === anchor.shootDayClusterId) score += 0.5;
 
             // Shared tags
-            const imgTags = new Set([...img.tagIds, ...(img.aiTagIds || [])]);
+            const imgTags = new Set([...(img.tagIds || []), ...(img.aiTagIds || [])]);
             let sharedTagCount = 0;
             for (const t of imgTags) {
                 if (anchorTags.has(t)) sharedTagCount++;
@@ -196,7 +196,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             if (sharedTagCount > 0) score += Math.min(sharedTagCount * 0.15, 0.5);
 
             // Color similarity (looser threshold)
-            if (anchor.palette.length > 0 && img.palette.length > 0) {
+            if (anchor.palette?.length > 0 && img.palette?.length > 0) {
                 let colorMatches = 0;
                 for (const heroColor of anchor.palette) {
                     const closest = Math.min(...img.palette.map((c: string) => colorDist(c, heroColor)));
