@@ -60,26 +60,21 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         return () => el.removeEventListener('scroll', onScroll);
     }, [flowPhase]);
 
-    // Trait drawer snap-on-release: free movement during drag, snap after scroll fully settles
+    // Trait drawer snap: wait for ALL scrolling (including momentum) to stop, then snap.
+    // Uses native `scrollend` event — fires exactly once when scrolling fully settles.
+    // No scroll-event listener, no debounce, so it never fights momentum.
     useEffect(() => {
         const el = scrollRef.current;
         if (!el || !showScrollContainer) return;
 
-        let snapTimer: ReturnType<typeof setTimeout> | null = null;
         let animFrame = 0;
         let isSnapping = false;
-        let isTouching = false;
-
-        const cancelSnap = () => {
-            isSnapping = false;
-            cancelAnimationFrame(animFrame);
-            if (snapTimer) clearTimeout(snapTimer);
-        };
 
         const snapToNearest = () => {
-            if (isTouching) return; // Never snap while finger is down
             const openTarget = window.innerHeight;
             const target = el.scrollTop < openTarget * 0.4 ? 0 : openTarget;
+            // Already at snap point — skip
+            if (Math.abs(el.scrollTop - target) < 2) return;
             isSnapping = true;
             const animate = () => {
                 const diff = target - el.scrollTop;
@@ -94,28 +89,23 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             animFrame = requestAnimationFrame(animate);
         };
 
-        const onScroll = () => {
-            if (isSnapping || isTouching) return;
-            if (snapTimer) clearTimeout(snapTimer);
-            snapTimer = setTimeout(snapToNearest, 300);
+        const onScrollEnd = () => {
+            if (isSnapping) return; // Our own animation triggered scrollend — ignore
+            snapToNearest();
         };
 
-        const onTouchStart = () => { isTouching = true; cancelSnap(); };
-        const onTouchEnd = () => {
-            isTouching = false;
-            // Wait for momentum to settle, then snap
-            if (snapTimer) clearTimeout(snapTimer);
-            snapTimer = setTimeout(snapToNearest, 400);
+        // Cancel snap animation immediately when user touches
+        const onTouchStart = () => {
+            isSnapping = false;
+            cancelAnimationFrame(animFrame);
         };
 
-        el.addEventListener('scroll', onScroll, { passive: true });
+        el.addEventListener('scrollend', onScrollEnd);
         el.addEventListener('touchstart', onTouchStart, { passive: true });
-        el.addEventListener('touchend', onTouchEnd, { passive: true });
         return () => {
-            el.removeEventListener('scroll', onScroll);
+            el.removeEventListener('scrollend', onScrollEnd);
             el.removeEventListener('touchstart', onTouchStart);
-            el.removeEventListener('touchend', onTouchEnd);
-            cancelSnap();
+            cancelAnimationFrame(animFrame);
         };
     }, [flowPhase]);
 
