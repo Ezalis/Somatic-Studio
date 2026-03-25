@@ -18,6 +18,12 @@ export interface TrailPoint {
     palette: string[];
     label: string;
     timestamp: number;
+    // Loop context (populated when user leaves this hero for the next)
+    traits: string[];
+    albumPoolSize: number;
+    continuedFromId?: string;
+    cameraModel?: string;
+    lensModel?: string;
 }
 
 export interface AlbumImage {

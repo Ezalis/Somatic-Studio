@@ -8,6 +8,7 @@ import TraitSelector from './TraitSelector';
 import WaterfallAlbum from './WaterfallAlbum';
 import SpriteBackground from './SpriteBackground';
 import IdleField from './IdleField';
+import ConstellationMap from './ConstellationMap';
 import './flow.css';
 
 interface NavigationPrototypeProps {
@@ -35,6 +36,9 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
     // Pending image for bloom transition
     const [pendingImage, setPendingImage] = useState<ImageNode | null>(null);
+
+    // Constellation map overlay
+    const [constellationOpen, setConstellationOpen] = useState(false);
 
     useEffect(() => {
         const update = () => {
@@ -254,7 +258,10 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
     const handleSelectFromIdle = useCallback((image: ImageNode, rect: DOMRect) => {
         const label = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        setTrail((t: TrailPoint[]) => [...t, { id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp }]);
+        setTrail((t: TrailPoint[]) => [...t, {
+            id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp,
+            traits: [], albumPoolSize: 0, cameraModel: image.cameraModel, lensModel: image.lensModel,
+        }]);
         setAnchorId(image.id);
         setSelectedTraits(new Set());
         setHeroBlur(0);
@@ -272,7 +279,20 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
     const handleAlbumSelect = useCallback((img: ImageNode, rect: DOMRect) => {
         const label = new Date(img.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        setTrail((t: TrailPoint[]) => [...t, { id: img.id, palette: img.palette, label, timestamp: img.captureTimestamp }]);
+        setTrail((t: TrailPoint[]) => {
+            const updated = [...t];
+            if (updated.length > 0) {
+                const last = { ...updated[updated.length - 1] };
+                last.traits = [...selectedTraits];
+                last.albumPoolSize = albumPool.length;
+                last.continuedFromId = img.id;
+                updated[updated.length - 1] = last;
+            }
+            return [...updated, {
+                id: img.id, palette: img.palette, label, timestamp: img.captureTimestamp,
+                traits: [], albumPoolSize: 0, cameraModel: img.cameraModel, lensModel: img.lensModel,
+            }];
+        });
         setAnchorId(img.id);
         setSelectedTraits(new Set());
         setHeroBlur(0);
@@ -280,7 +300,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setPendingImage(img);
         setBloomSourceRect(rect);
         setFlowPhase('blooming');
-    }, []);
+    }, [selectedTraits, albumPool]);
 
     const handleToggleTrait = useCallback((key: string) => {
         const currentSize = selectedTraits.size;
@@ -347,9 +367,11 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         Somatic Studio
                     </h1>
                     {trail.length > 0 && (
-                        <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        <button onClick={() => setConstellationOpen(true)}
+                            className="text-[9px] text-zinc-400 hover:text-zinc-300 transition-colors cursor-pointer"
+                            style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                             {trail.length} visited
-                        </span>
+                        </button>
                     )}
                 </div>
                 {trail.length > 0 && (
@@ -455,6 +477,16 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     </div>
                 );
             })()}
+
+            {/* Constellation Map overlay */}
+            {constellationOpen && trail.length > 0 && (
+                <ConstellationMap
+                    trail={trail}
+                    tags={tags}
+                    isOpen={constellationOpen}
+                    onClose={() => setConstellationOpen(false)}
+                />
+            )}
         </div>
     );
 };

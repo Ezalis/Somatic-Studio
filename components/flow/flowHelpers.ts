@@ -49,3 +49,14 @@ export function colorDist(a: string, b: string): number {
 }
 
 export const COLOR_THRESHOLD = 80;
+
+export function averagePaletteDistance(a: string[], b: string[]): number {
+    if (!a.length || !b.length) return 300;
+    let total = 0;
+    for (const ca of a) {
+        let min = Infinity;
+        for (const cb of b) min = Math.min(min, colorDist(ca, cb));
+        total += min;
+    }
+    return total / a.length;
+}
