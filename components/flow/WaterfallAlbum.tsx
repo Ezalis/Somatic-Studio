@@ -50,24 +50,28 @@ function scatterPositions(count: number, seed: string, bounds: { xMin: number; x
 }
 
 // Compute tier opacity/scale/visibility based on scroll depth (0→1)
-// Full zoom sequence: traits (0→0.20) → tier 0 (0.10→0.40) → tier 1 (0.25→0.60)
-//   → waterfall (0.45→0.85) → hero unblurs (0.85→1.0)
+// Snap-aligned plateaus: tier 1 peaks at 0.08, tier 2 peaks at 0.40, waterfall peaks at 0.58
 function getTierStyle(tier: number, depth: number): React.CSSProperties {
     let opacity: number, scale: number;
 
     if (tier === 0) {
-        // Tier 1 (large photos): visible at start, peels off 0.10→0.40
-        const t = Math.min(1, Math.max(0, (depth - 0.10) / 0.30));
-        opacity = 1 - t;
-        scale = 1 + t * 0.5;
+        // Tier 1 (large photos): fully visible 0→0.15, peels off 0.15→0.35
+        if (depth < 0.15) {
+            opacity = 1;
+            scale = 1;
+        } else {
+            const t = Math.min(1, Math.max(0, (depth - 0.15) / 0.20));
+            opacity = 1 - t;
+            scale = 1 + t * 0.5;
+        }
     } else if (tier === 1) {
-        // Tier 2 (medium photos): enters 0.15→0.35, peaks 0.35→0.45, peels off 0.45→0.65
-        const enter = Math.min(1, Math.max(0, (depth - 0.15) / 0.20));
-        const exit = Math.min(1, Math.max(0, (depth - 0.45) / 0.20));
+        // Tier 2 (medium photos): enters 0.20→0.35, peaks 0.35→0.48, peels off 0.48→0.65
+        const enter = Math.min(1, Math.max(0, (depth - 0.20) / 0.15));
+        const exit = Math.min(1, Math.max(0, (depth - 0.48) / 0.17));
         if (depth < 0.35) {
             opacity = 0.15 + enter * 0.85;
             scale = 0.85 + enter * 0.15;
-        } else if (depth < 0.45) {
+        } else if (depth < 0.48) {
             opacity = 1;
             scale = 1;
         } else {
@@ -75,10 +79,10 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
             scale = 1 + exit * 0.5;
         }
     } else {
-        // Waterfall (hero-similar): visible from start behind other tiers, peels off 0.65→0.85
-        // Starts blurred (8px), unblurs as user scrolls into waterfall depth (0.40→0.55)
-        const exit = Math.min(1, Math.max(0, (depth - 0.65) / 0.20));
-        if (depth < 0.65) {
+        // Waterfall (hero-similar): visible behind other tiers, peaks 0.50→0.68, peels off 0.68→0.88
+        // Starts blurred (8px), unblurs 0.42→0.52 so it's sharp at snap point 0.58
+        const exit = Math.min(1, Math.max(0, (depth - 0.68) / 0.20));
+        if (depth < 0.68) {
             opacity = 0.85;
             scale = 1;
         } else {
@@ -87,10 +91,10 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
         }
     }
 
-    // Waterfall blur: 8px→0px over depth 0.40→0.55
+    // Waterfall blur: 8px→0px over depth 0.42→0.52 (sharp before snap point at 0.58)
     let filter: string | undefined;
     if (tier === 2) {
-        const unblur = Math.min(1, Math.max(0, (depth - 0.40) / 0.15));
+        const unblur = Math.min(1, Math.max(0, (depth - 0.42) / 0.10));
         const blurPx = 8 * (1 - unblur);
         if (blurPx > 0.5) filter = `blur(${blurPx.toFixed(1)}px)`;
     }
@@ -104,12 +108,14 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
     };
 }
 
-// Snap points for zoom-through depth
-// drawer open → drawer closed → tier 1 → tier 2 → waterfall → hero
-const SNAP_POINTS = [0.0, 0.10, 0.25, 0.40, 0.60, 1.0];
+// Snap points for zoom-through depth — aligned to visual plateaus
+// traits → tier 1 → tier 2 → waterfall → hero
+const SNAP_POINTS = [0.0, 0.08, 0.40, 0.58, 1.0];
 
-function findSnapTarget(current: number, velocity: number): number {
+function findSnapTarget(current: number, velocity: number, lastSnap?: number): number {
     const VELOCITY_THRESHOLD = 0.3; // px/ms threshold for directional snap
+    const DEAD_ZONE = 0.06; // must scroll past this distance from last snap before moving on
+
     if (Math.abs(velocity) > VELOCITY_THRESHOLD) {
         // Fast swipe: snap to next point in swipe direction
         if (velocity > 0) {
@@ -118,6 +124,12 @@ function findSnapTarget(current: number, velocity: number): number {
             return [...SNAP_POINTS].reverse().find(p => p < current - 0.02) ?? SNAP_POINTS[0];
         }
     }
+
+    // Hysteresis: if near a previous snap, stay there unless user scrolled past dead zone
+    if (lastSnap != null && Math.abs(current - lastSnap) < DEAD_ZONE) {
+        return lastSnap;
+    }
+
     // Low velocity: snap to nearest
     let nearest = SNAP_POINTS[0];
     let minDist = Math.abs(current - nearest);
@@ -140,6 +152,7 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     const animRef = useRef<number>(0);
     const isScrollingRef = useRef(false);
     const snapTargetRef = useRef<number | null>(null);
+    const lastSnapRef = useRef<number>(0);
     const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Animate smoothly toward a snap target
@@ -149,13 +162,14 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         const animate = () => {
             setScrollDepth(current => {
                 const diff = target - current;
-                if (Math.abs(diff) < 0.003) {
+                if (Math.abs(diff) < 0.005) {
                     snapTargetRef.current = null;
+                    lastSnapRef.current = target;
                     setTimeout(() => { isScrollingRef.current = false; }, 50);
                     return target;
                 }
                 animRef.current = requestAnimationFrame(animate);
-                return current + diff * 0.12;
+                return current + diff * 0.18;
             });
         };
         animRef.current = requestAnimationFrame(animate);
@@ -168,6 +182,7 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
             onScrollDepth?.(0);
             isScrollingRef.current = false;
             snapTargetRef.current = null;
+            lastSnapRef.current = 0;
             cancelAnimationFrame(animRef.current);
         }
     }, [isAlbumPhase, onScrollDepth]);
@@ -215,7 +230,7 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
     const handleTouchEnd = useCallback(() => {
         if (!touchRef.current.isScrolling) return;
         setScrollDepth(current => {
-            const target = findSnapTarget(current, touchRef.current.velocity);
+            const target = findSnapTarget(current, touchRef.current.velocity, lastSnapRef.current);
             animateToSnap(target);
             return current;
         });
@@ -230,15 +245,15 @@ const WaterfallAlbum: React.FC<WaterfallAlbumProps> = ({ albumImages, traitCount
         const totalDistance = window.innerHeight * 2;
         setScrollDepth(d => Math.max(0, Math.min(1, d + e.deltaY / totalDistance)));
 
-        // Debounce: snap after 150ms of no wheel events
+        // Debounce: snap after 200ms of no wheel events (longer to avoid trackpad inertia interrupts)
         if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
         wheelTimerRef.current = setTimeout(() => {
             setScrollDepth(current => {
-                const target = findSnapTarget(current, 0);
+                const target = findSnapTarget(current, 0, lastSnapRef.current);
                 animateToSnap(target);
                 return current;
             });
-        }, 150);
+        }, 200);
     }, [animateToSnap]);
 
     const nodes = useMemo((): WaterfallNode[] => {
