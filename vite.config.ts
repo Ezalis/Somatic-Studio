@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
-        allowedHosts: ['docker-01'],
+        allowedHosts: ['docker-01', 'somatic.home'],
         watch: { usePolling: true },
         proxy: {
           '/api/immich': {
