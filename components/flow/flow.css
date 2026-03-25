@@ -47,34 +47,3 @@
     70%  { opacity: 1; transform: scale(1.03) rotate(var(--card-rotate)) translateY(-4px); }
     100% { opacity: 1; transform: scale(1) rotate(var(--card-rotate)) translateY(0); }
 }
-
-/* Constellation Map */
-@keyframes constellation-fade-in {
-    0%   { opacity: 0; backdrop-filter: blur(0px); }
-    100% { opacity: 1; backdrop-filter: blur(16px); }
-}
-
-@keyframes constellation-fade-out {
-    0%   { opacity: 1; backdrop-filter: blur(16px); }
-    100% { opacity: 0; backdrop-filter: blur(0px); }
-}
-
-@keyframes node-appear {
-    0%   { opacity: 0; transform: scale(0.3); }
-    70%  { opacity: 1; transform: scale(1.05); }
-    100% { opacity: 1; transform: scale(1); }
-}
-
-@keyframes orbit {
-    0%   { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-@keyframes path-draw {
-    to { stroke-dashoffset: 0; }
-}
-
-@keyframes detail-expand {
-    0%   { opacity: 0; max-height: 0; }
-    100% { opacity: 1; max-height: 200px; }
-}
