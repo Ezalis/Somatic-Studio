@@ -432,8 +432,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
             {/* Fixed compact trait bar — album phase + exit transition overlay */}
             {showFixedTraitBar && anchor && (() => {
-                // Trait bar peels off at depth 0→0.20 on mobile zoom-through
-                const traitPeel = Math.min(1, Math.max(0, albumDepth / 0.20));
+                // Trait bar stays solid through tier 1 snap (0.08), peels off 0.12→0.25
+                const traitPeel = Math.min(1, Math.max(0, (albumDepth - 0.12) / 0.13));
                 const depthDriven = albumDepth > 0;
                 return (
                     <div className="fixed top-12 left-0 right-0 z-30 pointer-events-auto"

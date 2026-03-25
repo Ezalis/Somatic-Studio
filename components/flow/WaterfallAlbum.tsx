@@ -65,13 +65,13 @@ function getTierStyle(tier: number, depth: number): React.CSSProperties {
             scale = 1 + t * 0.5;
         }
     } else if (tier === 1) {
-        // Tier 2 (medium photos): enters 0.20→0.35, peaks 0.35→0.48, peels off 0.48→0.65
+        // Tier 2 (medium photos): enters 0.20→0.35, peaks 0.35→0.46, peels off 0.46→0.55
         const enter = Math.min(1, Math.max(0, (depth - 0.20) / 0.15));
-        const exit = Math.min(1, Math.max(0, (depth - 0.48) / 0.17));
+        const exit = Math.min(1, Math.max(0, (depth - 0.46) / 0.09));
         if (depth < 0.35) {
             opacity = 0.15 + enter * 0.85;
             scale = 0.85 + enter * 0.15;
-        } else if (depth < 0.48) {
+        } else if (depth < 0.46) {
             opacity = 1;
             scale = 1;
         } else {
