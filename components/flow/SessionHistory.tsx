@@ -51,53 +51,13 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
         }
     }, [onSeedLoop]);
 
-    // Organic scatter layout — absolute positioned, z-layered by affinity
-    // High-affinity images on top (larger, higher z), low-affinity behind (smaller, lower z)
-    const galleryLayout = useMemo(() => {
-        const items: { item: AffinityImage; left: number; top: number; width: number; rotate: number; zIndex: number; delay: number }[] = [];
-
-        // Tighter grid with jitter — fills space better
-        const colCount = 6;
-        const rowHeight = 90;
-        let row = 0;
-        let col = 0;
-
-        for (let i = 0; i < affinityImages.length; i++) {
-            const item = affinityImages[i];
-            const r1 = seededRandom(item.image.id);
-            const r2 = seededRandom(item.image.id + 'p');
-            const r3 = seededRandom(item.image.id + 'r');
-
-            // Smaller sizes: heroes ~16%, high-affinity ~13%, low ~10%
-            const width = item.isHero ? 16 : 9 + item.affinityScore * 8;
-
-            // Tighter grid with moderate jitter
-            const baseLeft = (col / colCount) * 100;
-            const baseTop = row * rowHeight;
-            const left = baseLeft + (r1 - 0.5) * 10; // ±5% jitter
-            const top = baseTop + (r2 - 0.5) * 25; // ±12px jitter
-
-            const rotate = (r3 - 0.5) * 8; // ±4 degrees
-
-            // Z-index: higher affinity = on top
-            const zIndex = Math.round(item.affinityScore * 10) + (item.isHero ? 5 : 0);
-
-            items.push({
-                item, width, rotate, zIndex,
-                left: Math.max(0, Math.min(100 - width, left)),
-                top: Math.max(0, top),
-                delay: 80 + i * 30,
-            });
-
-            col++;
-            if (col >= colCount) {
-                col = 0;
-                row++;
-            }
-        }
-
-        const maxTop = items.length > 0 ? Math.max(...items.map(i => i.top)) + 200 : 400;
-        return { items, totalHeight: maxTop };
+    // Gallery items with rotation for organic feel
+    const galleryItems = useMemo(() => {
+        return affinityImages.map((item, i) => ({
+            item,
+            rotate: (seededRandom(item.image.id) - 0.5) * 6, // ±3 degrees
+            delay: 80 + i * 25,
+        }));
     }, [affinityImages]);
 
     return (
@@ -149,19 +109,16 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
                         </div>
                     )}
 
-                    {/* Organic scattered gallery — z-layered by affinity */}
-                    <div className="relative" style={{ height: galleryLayout.totalHeight }}>
-                        {galleryLayout.items.map(({ item, left, top, width, rotate, zIndex, delay }) => {
+                    {/* Masonry gallery with CSS columns — fills space evenly */}
+                    <div style={{ columnCount: 4, columnGap: 10 }}>
+                        {galleryItems.map(({ item, rotate, delay }) => {
                             const isSelected = selectedId === item.image.id;
 
                             return (
                                 <div key={item.image.id}
-                                    className="absolute"
+                                    className="mb-2.5"
                                     style={{
-                                        left: `${left}%`,
-                                        top,
-                                        width: `${width}%`,
-                                        zIndex: isSelected ? 30 : zIndex,
+                                        breakInside: 'avoid',
                                         ['--card-rotate' as string]: `${rotate}deg`,
                                         animation: `history-image-appear 500ms cubic-bezier(0.22,1,0.36,1) ${delay}ms both`,
                                     }}>
