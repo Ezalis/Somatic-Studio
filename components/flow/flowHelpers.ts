@@ -1,5 +1,5 @@
 import { ImageNode } from '../../types';
-import { ScoredImage } from './flowTypes';
+import { ScoredImage, TrailPoint, AffinityImage, AffinityLayer, FloatingTag, SessionArc, ArcPattern } from './flowTypes';
 
 export function seededRandom(seed: string): number {
     let hash = 0;
@@ -49,3 +49,199 @@ export function colorDist(a: string, b: string): number {
 }
 
 export const COLOR_THRESHOLD = 80;
+
+// --- Session History Helpers ---
+
+export function averagePaletteDistance(a: string[], b: string[]): number {
+    if (!a.length || !b.length) return 300;
+    let total = 0;
+    for (const ca of a) {
+        let min = Infinity;
+        for (const cb of b) min = Math.min(min, colorDist(ca, cb));
+        total += min;
+    }
+    return total / a.length;
+}
+
+export function getColorTemperature(palette: string[]): 'warm' | 'cool' | 'neutral' {
+    if (!palette.length) return 'neutral';
+    let rTotal = 0, bTotal = 0;
+    for (const hex of palette) {
+        const [r, , b] = hexToRgb(hex);
+        rTotal += r; bTotal += b;
+    }
+    const avgR = rTotal / palette.length;
+    const avgB = bTotal / palette.length;
+    if (avgR > avgB + 30) return 'warm';
+    if (avgB > avgR + 30) return 'cool';
+    return 'neutral';
+}
+
+export function computeSessionAffinities(
+    trail: TrailPoint[],
+    allImages: ImageNode[],
+): { images: AffinityImage[]; floatingTags: FloatingTag[] } {
+    if (trail.length === 0) return { images: [], floatingTags: [] };
+
+    const heroIds = new Set(trail.map(t => t.id));
+
+    // Count loop appearances per image
+    const loopCounts = new Map<string, number>();
+    for (const point of trail) {
+        loopCounts.set(point.id, (loopCounts.get(point.id) || 0) + 1);
+        for (const assetId of point.albumPool) {
+            loopCounts.set(assetId, (loopCounts.get(assetId) || 0) + 1);
+        }
+    }
+
+    // Trait frequency across all loops
+    const traitFreq = new Map<string, number>();
+    for (const point of trail) {
+        for (const t of point.traits) {
+            traitFreq.set(t, (traitFreq.get(t) || 0) + 1);
+        }
+    }
+
+    // Floating tags: traits appearing in 2+ loops
+    const floatingTags: FloatingTag[] = [];
+    for (const [key, count] of traitFreq) {
+        if (count >= 2) {
+            const isColor = key.startsWith('color:');
+            floatingTags.push({
+                key,
+                label: isColor ? key.slice(6) : key.slice(4),
+                count,
+                isColor,
+                colorValue: isColor ? key.slice(6) : undefined,
+            });
+        }
+    }
+    floatingTags.sort((a, b) => b.count - a.count);
+
+    // Center palette from heroes
+    const colorFreq = new Map<string, number>();
+    for (const point of trail) {
+        for (const c of point.palette) colorFreq.set(c, (colorFreq.get(c) || 0) + 1);
+    }
+    const centerPalette = [...colorFreq.entries()]
+        .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c]) => c);
+
+    // Build image lookup
+    const imageMap = new Map<string, ImageNode>();
+    for (const img of allImages) imageMap.set(img.id, img);
+
+    // Score every session image
+    const results: AffinityImage[] = [];
+    for (const id of loopCounts.keys()) {
+        const image = imageMap.get(id);
+        if (!image) continue;
+
+        const loops = loopCounts.get(id) || 0;
+        const imageTags = new Set([...image.tagIds, ...(image.aiTagIds || [])]);
+        let traitOverlap = 0;
+        for (const [trait] of traitFreq) {
+            if (trait.startsWith('tag:') && imageTags.has(trait.slice(4))) traitOverlap++;
+            if (trait.startsWith('color:') && image.palette.length > 0) {
+                const closest = Math.min(...image.palette.map(c => colorDist(c, trait.slice(6))));
+                if (closest < COLOR_THRESHOLD) traitOverlap++;
+            }
+        }
+
+        const paletteDist = centerPalette.length > 0 && image.palette.length > 0
+            ? averagePaletteDistance(image.palette, centerPalette) : 200;
+        const colorProximity = Math.max(0, 1 - paletteDist / 300);
+
+        const maxLoops = Math.max(...loopCounts.values(), 1);
+        const maxTraits = Math.max(traitFreq.size, 1);
+        const affinityScore = 0.45 * (loops / maxLoops) + 0.30 * (traitOverlap / maxTraits) + 0.25 * colorProximity;
+
+        let layer: AffinityLayer;
+        if (loops >= 2 || (heroIds.has(id) && affinityScore > 0.4)) layer = 'gravity';
+        else if (affinityScore > 0.25) layer = 'range';
+        else layer = 'detour';
+
+        results.push({ image, affinityScore, layer, loopCount: loops, isHero: heroIds.has(id) });
+    }
+
+    results.sort((a, b) => {
+        const order = { gravity: 0, range: 1, detour: 2 };
+        if (order[a.layer] !== order[b.layer]) return order[a.layer] - order[b.layer];
+        if (a.isHero !== b.isHero) return a.isHero ? -1 : 1;
+        return b.affinityScore - a.affinityScore;
+    });
+
+    return { images: results, floatingTags };
+}
+
+export function detectSessionArc(trail: TrailPoint[]): SessionArc {
+    if (trail.length === 0) {
+        return { pattern: 'wander', narrative: '', secondaryLine: '', tempSequence: [] };
+    }
+
+    const tempSequence = trail.map(p => getColorTemperature(p.palette));
+
+    // Trait frequency
+    const traitFreq = new Map<string, number>();
+    for (const point of trail) {
+        for (const t of point.traits) traitFreq.set(t, (traitFreq.get(t) || 0) + 1);
+    }
+    const sorted = [...traitFreq.entries()].sort((a, b) => b[1] - a[1]);
+    const dominant = sorted[0];
+    const secondary = sorted[1];
+
+    const dominantLabel = dominant ? (dominant[0].startsWith('color:') ? dominant[0].slice(6) : dominant[0].slice(4)) : '';
+    const secondaryLabel = secondary ? (secondary[0].startsWith('color:') ? secondary[0].slice(6) : secondary[0].slice(4)) : '';
+
+    const n = trail.length;
+    let pattern: ArcPattern;
+    let narrative: string;
+    let secondaryLine: string;
+
+    // Detect pattern
+    const dominantRatio = dominant ? dominant[1] / n : 0;
+    const firstTemp = tempSequence[0];
+    const lastTemp = tempSequence[n - 1];
+    const allSameTemp = tempSequence.every(t => t === firstTemp);
+    const isMonotonic = tempSequence.every((t, i) => {
+        if (i === 0) return true;
+        const order = { warm: 0, neutral: 1, cool: 2 };
+        return order[t] >= order[tempSequence[i - 1]];
+    }) || tempSequence.every((t, i) => {
+        if (i === 0) return true;
+        const order = { warm: 0, neutral: 1, cool: 2 };
+        return order[t] <= order[tempSequence[i - 1]];
+    });
+
+    if (dominantRatio >= 0.9 && allSameTemp) {
+        pattern = 'deep-dive';
+        narrative = `You went deep. ${n} loops, all drawn to ${dominantLabel}.`;
+        secondaryLine = secondaryLabel ? `${secondaryLabel} was your lens.` : '';
+    } else if (firstTemp === lastTemp && n >= 3 && !allSameTemp) {
+        pattern = 'circle-back';
+        const middleTemps = tempSequence.slice(1, -1);
+        const detourTemp = middleTemps.find(t => t !== firstTemp);
+        const detourTrait = detourTemp === 'cool' ? 'cool tones' : detourTemp === 'warm' ? 'warm tones' : 'neutral tones';
+        narrative = `You circled back. ${dominantLabel || firstTemp} was the thread through ${n} loops.`;
+        secondaryLine = `The ${detourTrait} ${middleTemps.length === 1 ? 'was a single detour' : 'were a detour'}.`;
+    } else if (isMonotonic && !allSameTemp && n >= 3) {
+        pattern = 'drift';
+        const startLabel = firstTemp;
+        const endLabel = lastTemp;
+        narrative = `You drifted from ${startLabel} to ${endLabel}.`;
+        secondaryLine = dominantLabel ? `What started in ${dominantLabel} ended somewhere new.` : '';
+    } else {
+        pattern = 'wander';
+        const clusters = new Set(tempSequence).size;
+        narrative = `You wandered. ${n} loops across ${clusters} territories.`;
+        secondaryLine = 'No single pull dominated.';
+    }
+
+    return {
+        pattern,
+        narrative,
+        secondaryLine,
+        tempSequence,
+        dominantTrait: dominantLabel,
+        detourTrait: pattern === 'circle-back' ? 'cool' : undefined,
+    };
+}

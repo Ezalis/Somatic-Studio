@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { ImageNode, Tag } from '../../types';
-import { FlowPhase, ScoredImage, TrailPoint, AlbumImage, WaterfallImage } from './flowTypes';
+import { FlowPhase, ScoredImage, TrailPoint, AlbumImage, WaterfallImage, HistoryTab } from './flowTypes';
 import { scoreRelevance, colorDist, COLOR_THRESHOLD } from './flowHelpers';
 import BloomOverlay from './BloomOverlay';
 import HeroSection from './HeroSection';
@@ -8,6 +8,7 @@ import TraitSelector from './TraitSelector';
 import WaterfallAlbum from './WaterfallAlbum';
 import SpriteBackground from './SpriteBackground';
 import IdleField from './IdleField';
+import SessionHistory from './SessionHistory';
 import './flow.css';
 
 interface NavigationPrototypeProps {
@@ -35,6 +36,10 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
     // Pending image for bloom transition
     const [pendingImage, setPendingImage] = useState<ImageNode | null>(null);
+
+    // History mode
+    const [mode, setMode] = useState<'explore' | 'history'>('explore');
+    const [historyTab, setHistoryTab] = useState<HistoryTab>('gravity');
 
     useEffect(() => {
         const update = () => {
@@ -254,7 +259,11 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
     const handleSelectFromIdle = useCallback((image: ImageNode, rect: DOMRect) => {
         const label = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        setTrail((t: TrailPoint[]) => [...t, { id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp }]);
+        setTrail((t: TrailPoint[]) => [...t, {
+            id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp,
+            traits: [], albumPoolSize: 0, albumPool: [],
+            cameraModel: image.cameraModel, lensModel: image.lensModel,
+        }]);
         setAnchorId(image.id);
         setSelectedTraits(new Set());
         setHeroBlur(0);
@@ -272,7 +281,22 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
     const handleAlbumSelect = useCallback((img: ImageNode, rect: DOMRect) => {
         const label = new Date(img.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        setTrail((t: TrailPoint[]) => [...t, { id: img.id, palette: img.palette, label, timestamp: img.captureTimestamp }]);
+        setTrail((t: TrailPoint[]) => {
+            const updated = [...t];
+            if (updated.length > 0) {
+                const last = { ...updated[updated.length - 1] };
+                last.traits = [...selectedTraits];
+                last.albumPoolSize = albumPool.length;
+                last.albumPool = albumPool.map(a => a.image.id);
+                last.continuedFromId = img.id;
+                updated[updated.length - 1] = last;
+            }
+            return [...updated, {
+                id: img.id, palette: img.palette, label, timestamp: img.captureTimestamp,
+                traits: [], albumPoolSize: 0, albumPool: [],
+                cameraModel: img.cameraModel, lensModel: img.lensModel,
+            }];
+        });
         setAnchorId(img.id);
         setSelectedTraits(new Set());
         setHeroBlur(0);
@@ -280,7 +304,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setPendingImage(img);
         setBloomSourceRect(rect);
         setFlowPhase('blooming');
-    }, []);
+    }, [selectedTraits, albumPool]);
 
     const handleToggleTrait = useCallback((key: string) => {
         const currentSize = selectedTraits.size;
@@ -324,7 +348,35 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setHeroBlur(0);
         setTraitLeaving(false);
         setFlowPhase('idle');
+        setMode('explore');
     }, []);
+
+    const handleSeedFromHistory = useCallback((image: ImageNode, rect: DOMRect) => {
+        setMode('explore');
+        setTrail((t: TrailPoint[]) => {
+            const updated = [...t];
+            if (updated.length > 0) {
+                const last = { ...updated[updated.length - 1] };
+                last.traits = [...selectedTraits];
+                last.albumPoolSize = albumPool.length;
+                last.albumPool = albumPool.map(a => a.image.id);
+                updated[updated.length - 1] = last;
+            }
+            const label = new Date(image.captureTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            return [...updated, {
+                id: image.id, palette: image.palette, label, timestamp: image.captureTimestamp,
+                traits: [], albumPoolSize: 0, albumPool: [],
+                cameraModel: image.cameraModel, lensModel: image.lensModel,
+            }];
+        });
+        setAnchorId(image.id);
+        setSelectedTraits(new Set());
+        setHeroBlur(0);
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+        setPendingImage(image);
+        setBloomSourceRect(rect);
+        setFlowPhase('blooming');
+    }, [selectedTraits, albumPool]);
 
     // Whether to show the scroll container (exploring phases)
     const showScrollContainer = flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring';
@@ -340,16 +392,33 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 }} />
 
             {/* Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3">
+            <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3"
+                style={mode === 'history' ? { background: 'rgba(13,13,13,0.8)', backdropFilter: 'blur(8px)' } : {}}>
                 <div className="flex items-center gap-3">
                     <h1 className="text-[10px] tracking-[0.25em] uppercase text-zinc-500"
                         style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                         Somatic Studio
                     </h1>
                     {trail.length > 0 && (
-                        <span className="text-[9px] text-zinc-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                            {trail.length} visited
-                        </span>
+                        <div className="flex items-center gap-0.5 rounded-full p-0.5"
+                            style={{ background: 'rgba(255,255,255,0.05)', fontFamily: 'JetBrains Mono, monospace' }}>
+                            <button onClick={() => setMode('explore')}
+                                className="px-2.5 py-1 rounded-full text-[9px] transition-all cursor-pointer"
+                                style={{
+                                    background: mode === 'explore' ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                    color: mode === 'explore' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
+                                }}>
+                                explore
+                            </button>
+                            <button onClick={() => setMode('history')}
+                                className="px-2.5 py-1 rounded-full text-[9px] transition-all cursor-pointer"
+                                style={{
+                                    background: mode === 'history' ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                    color: mode === 'history' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
+                                }}>
+                                history
+                            </button>
+                        </div>
                     )}
                 </div>
                 {trail.length > 0 && (
@@ -455,6 +524,17 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     </div>
                 );
             })()}
+
+            {/* Session History overlay */}
+            {mode === 'history' && trail.length > 0 && (
+                <SessionHistory
+                    trail={trail}
+                    images={images}
+                    activeTab={historyTab}
+                    onTabChange={setHistoryTab}
+                    onSeedLoop={handleSeedFromHistory}
+                />
+            )}
         </div>
     );
 };

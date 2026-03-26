@@ -18,7 +18,44 @@ export interface TrailPoint {
     palette: string[];
     label: string;
     timestamp: number;
+    traits: string[];
+    albumPoolSize: number;
+    albumPool: string[];
+    continuedFromId?: string;
+    cameraModel?: string;
+    lensModel?: string;
 }
+
+export type AffinityLayer = 'gravity' | 'range' | 'detour';
+
+export interface AffinityImage {
+    image: ImageNode;
+    affinityScore: number;
+    layer: AffinityLayer;
+    loopCount: number;
+    isHero: boolean;
+}
+
+export interface FloatingTag {
+    key: string;
+    label: string;
+    count: number;
+    isColor: boolean;
+    colorValue?: string;
+}
+
+export type ArcPattern = 'circle-back' | 'deep-dive' | 'wander' | 'drift';
+
+export interface SessionArc {
+    pattern: ArcPattern;
+    narrative: string;
+    secondaryLine: string;
+    tempSequence: ('warm' | 'cool' | 'neutral')[];
+    dominantTrait?: string;
+    detourTrait?: string;
+}
+
+export type HistoryTab = 'gravity' | 'arc';
 
 export interface AlbumImage {
     image: ImageNode;
