@@ -54,9 +54,6 @@ export interface SessionArc {
     dominantTrait?: string;
     detourTrait?: string;
 }
-
-export type HistoryTab = 'gravity' | 'arc';
-
 export interface AlbumImage {
     image: ImageNode;
     tagHits: number;

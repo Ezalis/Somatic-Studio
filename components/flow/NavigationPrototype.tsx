@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { ImageNode, Tag } from '../../types';
-import { FlowPhase, ScoredImage, TrailPoint, AlbumImage, WaterfallImage, HistoryTab } from './flowTypes';
+import { FlowPhase, ScoredImage, TrailPoint, AlbumImage, WaterfallImage } from './flowTypes';
 import { scoreRelevance, colorDist, COLOR_THRESHOLD } from './flowHelpers';
 import BloomOverlay from './BloomOverlay';
 import HeroSection from './HeroSection';
@@ -39,7 +39,6 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
 
     // History mode
     const [mode, setMode] = useState<'explore' | 'history'>('explore');
-    const [historyTab, setHistoryTab] = useState<HistoryTab>('gravity');
 
     useEffect(() => {
         const update = () => {
@@ -531,8 +530,6 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 <SessionHistory
                     trail={trail}
                     images={images}
-                    activeTab={historyTab}
-                    onTabChange={setHistoryTab}
                     onSeedLoop={handleSeedFromHistory}
                 />
             )}

@@ -61,7 +61,7 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
     }
 
     return (
-        <div className="px-5 pt-4 pb-20 max-w-lg">
+        <div className="pb-8">
             {/* Pattern label */}
             <div className="mb-5">
                 <span className="text-[11px] uppercase tracking-[0.15em]"
@@ -106,7 +106,7 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
             <div className="mb-10">
                 <span className="text-[11px] uppercase tracking-[0.15em] mb-5 block"
                     style={{ ...mono, color: '#71717a' }}>
-                    your loops
+                    your selected images and tags
                 </span>
 
                 {trail.map((point, i) => {

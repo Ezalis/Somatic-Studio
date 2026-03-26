@@ -230,10 +230,26 @@ export function detectSessionArc(trail: TrailPoint[]): SessionArc {
         narrative = `You drifted from ${startLabel} to ${endLabel}.`;
         secondaryLine = dominantLabel ? `What started in ${dominantLabel} ended somewhere new.` : '';
     } else {
-        pattern = 'wander';
-        const clusters = new Set(tempSequence).size;
-        narrative = `You wandered. ${n} loops across ${clusters} territories.`;
-        secondaryLine = 'No single pull dominated.';
+        // Check if a tag dominates even when color temp pattern is flat
+        const dominantTag = sorted.find(([k]) => k.startsWith('tag:'));
+        const dominantTagLabel = dominantTag ? dominantTag[0].slice(4) : '';
+        const dominantTagRatio = dominantTag ? dominantTag[1] / n : 0;
+
+        if (dominantTagLabel && dominantTagRatio >= 0.5) {
+            // Tag-anchored narrative — more meaningful than "you wandered"
+            pattern = 'deep-dive';
+            narrative = `${dominantTagLabel.replace(/-/g, ' ')} pulled you through ${dominantTag![1]} of ${n} loops.`;
+            secondaryLine = secondaryLabel
+                ? `Your palette stayed ${firstTemp} throughout.`
+                : '';
+        } else {
+            pattern = 'wander';
+            const clusters = new Set(tempSequence).size;
+            narrative = `You wandered. ${n} loops across ${clusters === 1 ? 'similar' : clusters} territories.`;
+            secondaryLine = dominantTagLabel
+                ? `${dominantTagLabel.replace(/-/g, ' ')} appeared most often.`
+                : 'No single pull dominated.';
+        }
     }
 
     return {

@@ -1,66 +1,167 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useMemo, useState, useRef, useCallback } from 'react';
 import { ImageNode } from '../../types';
-import { TrailPoint, HistoryTab } from './flowTypes';
-import GravityView from './GravityView';
+import { TrailPoint, AffinityImage } from './flowTypes';
+import { computeSessionAffinities, seededRandom } from './flowHelpers';
+import { getThumbnailUrl } from '../../services/immichService';
 import ArcView from './ArcView';
 
 interface SessionHistoryProps {
     trail: TrailPoint[];
     images: ImageNode[];
-    activeTab: HistoryTab;
-    onTabChange: (tab: HistoryTab) => void;
     onSeedLoop: (image: ImageNode, rect: DOMRect) => void;
 }
 
 const mono = { fontFamily: 'JetBrains Mono, monospace' };
 
-const SessionHistory: React.FC<SessionHistoryProps> = ({
-    trail, images, activeTab, onTabChange, onSeedLoop,
-}) => {
-    const scrollRef = useRef<HTMLDivElement>(null);
+const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLoop }) => {
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const selectedRef = useRef<HTMLButtonElement>(null);
 
-    useEffect(() => {
-        if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    }, [activeTab]);
+    const { images: affinityImages, floatingTags } = useMemo(
+        () => computeSessionAffinities(trail, images),
+        [trail, images],
+    );
+
+    // Signal chips: tags + colors that generated the gallery (frequency >= 2)
+    const signalChips = useMemo(() => {
+        return floatingTags.slice(0, 6);
+    }, [floatingTags]);
+
+    const handleTap = useCallback((id: string) => {
+        setSelectedId(prev => prev === id ? null : id);
+    }, []);
+
+    const handleSeed = useCallback((item: AffinityImage) => {
+        if (selectedRef.current) {
+            onSeedLoop(item.image, selectedRef.current.getBoundingClientRect());
+        }
+    }, [onSeedLoop]);
+
+    // Waterfall layout for gallery
+    const galleryLayout = useMemo(() => {
+        const cols = 4;
+        const gap = 10;
+        const colHeights = new Array(cols).fill(0);
+        const items: { item: AffinityImage; col: number; y: number; h: number }[] = [];
+
+        for (const item of affinityImages) {
+            let minCol = 0;
+            for (let c = 1; c < cols; c++) {
+                if (colHeights[c] < colHeights[minCol]) minCol = c;
+            }
+            // Varied heights based on seeded random (simulates natural aspect ratios)
+            const baseH = 120 + seededRandom(item.image.id + 'gh') * 100;
+            const h = item.isHero ? baseH * 1.2 : baseH;
+
+            items.push({ item, col: minCol, y: colHeights[minCol], h });
+            colHeights[minCol] += h + 8 + gap; // 8 for card padding
+        }
+
+        return { items, totalHeight: Math.max(...colHeights, 400) };
+    }, [affinityImages]);
 
     return (
-        <div className="fixed inset-0 z-[55]"
+        <div className="fixed inset-0 z-[55] pt-12 overflow-y-auto"
             style={{ background: '#faf9f6', animation: 'history-fade-in 400ms ease-out forwards' }}>
 
-            {/* Sub-tab bar */}
-            <div className="fixed top-12 left-0 right-0 z-[56] flex items-center gap-1 px-4 py-2"
-                style={{ background: 'rgba(250,249,246,0.85)', backdropFilter: 'blur(8px)' }}>
-                <button
-                    onClick={() => onTabChange('gravity')}
-                    className="px-3 py-1.5 rounded-full text-[10px] transition-all cursor-pointer"
-                    style={{
-                        ...mono,
-                        background: activeTab === 'gravity' ? 'rgba(0,0,0,0.08)' : 'transparent',
-                        color: activeTab === 'gravity' ? '#18181b' : '#a1a1aa',
-                        borderBottom: activeTab === 'gravity' ? '1.5px solid #18181b' : '1.5px solid transparent',
-                    }}>
-                    gravity
-                </button>
-                <button
-                    onClick={() => onTabChange('arc')}
-                    className="px-3 py-1.5 rounded-full text-[10px] transition-all cursor-pointer"
-                    style={{
-                        ...mono,
-                        background: activeTab === 'arc' ? 'rgba(0,0,0,0.08)' : 'transparent',
-                        color: activeTab === 'arc' ? '#18181b' : '#a1a1aa',
-                        borderBottom: activeTab === 'arc' ? '1.5px solid #18181b' : '1.5px solid transparent',
-                    }}>
-                    arc
-                </button>
-            </div>
+            {/* Two-column layout */}
+            <div className="flex gap-6 px-5 pt-4 pb-20" style={{ minHeight: '100vh' }}>
 
-            {/* Scrollable content */}
-            <div ref={scrollRef} className="absolute inset-0 overflow-y-auto overflow-x-hidden pt-24">
-                {activeTab === 'gravity' ? (
-                    <GravityView trail={trail} images={images} onSeedLoop={onSeedLoop} />
-                ) : (
+                {/* LEFT COLUMN: Arc narrative + selected images/tags + threads */}
+                <div className="flex-shrink-0" style={{ width: 'min(35%, 400px)' }}>
                     <ArcView trail={trail} images={images} />
-                )}
+                </div>
+
+                {/* RIGHT COLUMN: Session gallery waterfall */}
+                <div className="flex-1 min-w-0">
+                    <div className="mb-3">
+                        <span className="text-[11px] uppercase tracking-[0.15em]"
+                            style={{ ...mono, color: '#71717a' }}>
+                            session gallery
+                        </span>
+                    </div>
+
+                    {/* Signal chips — what generated this gallery */}
+                    {signalChips.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-4">
+                            {signalChips.map(chip => (
+                                <div key={chip.key}
+                                    className="px-2.5 py-1 rounded-full flex items-center gap-1.5"
+                                    style={{
+                                        background: 'rgba(0,0,0,0.04)',
+                                        border: '1px solid rgba(0,0,0,0.08)',
+                                    }}>
+                                    {chip.isColor && (
+                                        <div className="w-2.5 h-2.5 rounded-full"
+                                            style={{ background: chip.colorValue }} />
+                                    )}
+                                    <span className="text-[9px]" style={{ ...mono, color: '#3f3f46' }}>
+                                        {chip.isColor ? '' : `#${chip.label}`}
+                                    </span>
+                                    <span className="text-[8px]" style={{ ...mono, color: '#a1a1aa' }}>
+                                        {chip.count}/{trail.length}
+                                    </span>
+                                </div>
+                            ))}
+                            <span className="text-[8px] self-center" style={{ ...mono, color: '#a1a1aa' }}>
+                                ← signals
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Dense waterfall gallery */}
+                    <div className="relative" style={{ height: galleryLayout.totalHeight }}>
+                        {galleryLayout.items.map(({ item, col, y }) => {
+                            const isSelected = selectedId === item.image.id;
+
+                            return (
+                                <div key={item.image.id}
+                                    className="absolute"
+                                    style={{
+                                        left: `calc(${col * 25}% + ${col * 2.5}px)`,
+                                        top: y,
+                                        width: `calc(25% - 7.5px)`,
+                                        zIndex: isSelected ? 20 : 1,
+                                    }}>
+                                    <button
+                                        ref={isSelected ? selectedRef : undefined}
+                                        onClick={() => handleTap(item.image.id)}
+                                        className="bg-white p-1 rounded cursor-pointer transition-shadow duration-200 w-full"
+                                        style={{
+                                            boxShadow: isSelected
+                                                ? `0 0 0 2px ${item.image.palette[0] || '#888'}60, 0 4px 16px rgba(0,0,0,0.12)`
+                                                : '0 1px 4px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                                            display: 'block',
+                                        }}>
+                                        <img
+                                            src={getThumbnailUrl(item.image.id)}
+                                            alt=""
+                                            className="w-full h-auto rounded-sm"
+                                            loading="lazy"
+                                        />
+                                    </button>
+
+                                    {isSelected && (
+                                        <div className="mt-1.5 flex justify-center"
+                                            style={{ animation: 'seed-prompt-in 200ms ease-out forwards' }}>
+                                            <button
+                                                onClick={() => handleSeed(item)}
+                                                className="px-2.5 py-1 rounded-full text-[8px] cursor-pointer transition-colors"
+                                                style={{
+                                                    ...mono,
+                                                    background: 'rgba(0,0,0,0.06)',
+                                                    color: '#3f3f46',
+                                                    border: '1px solid rgba(0,0,0,0.1)',
+                                                }}>
+                                                explore from here
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
         </div>
     );
