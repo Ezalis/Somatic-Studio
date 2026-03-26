@@ -37,32 +37,53 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
         }
     }, [onSeedLoop]);
 
-    // Scattered waterfall layout — 3 columns with jitter and rotation
+    // Organic scatter layout — absolute positioned, z-layered by affinity
+    // High-affinity images on top (larger, higher z), low-affinity behind (smaller, lower z)
     const galleryLayout = useMemo(() => {
-        const cols = 3;
-        const gap = 14;
-        const colHeights = new Array(cols).fill(0);
-        const items: { item: AffinityImage; col: number; y: number; rotate: number; xJitter: number; widthPct: number }[] = [];
+        const items: { item: AffinityImage; left: number; top: number; width: number; rotate: number; zIndex: number; delay: number }[] = [];
 
-        for (const item of affinityImages) {
-            let minCol = 0;
-            for (let c = 1; c < cols; c++) {
-                if (colHeights[c] < colHeights[minCol]) minCol = c;
+        // Grid-based placement with heavy jitter for organic feel
+        const colCount = 5;
+        const rowHeight = 130;
+        let row = 0;
+        let col = 0;
+
+        for (let i = 0; i < affinityImages.length; i++) {
+            const item = affinityImages[i];
+            const r1 = seededRandom(item.image.id);
+            const r2 = seededRandom(item.image.id + 'p');
+            const r3 = seededRandom(item.image.id + 'r');
+
+            // Size: heroes ~18%, high-affinity ~15%, low ~11% of gallery width
+            const width = item.isHero ? 18 : 10 + item.affinityScore * 10;
+
+            // Position on a loose grid with large jitter
+            const baseLeft = (col / colCount) * 100;
+            const baseTop = row * rowHeight;
+            const left = baseLeft + (r1 - 0.5) * 15; // ±7.5% jitter
+            const top = baseTop + (r2 - 0.5) * 40; // ±20px jitter
+
+            const rotate = (r3 - 0.5) * 8; // ±4 degrees
+
+            // Z-index: higher affinity = on top
+            const zIndex = Math.round(item.affinityScore * 10) + (item.isHero ? 5 : 0);
+
+            items.push({
+                item, width, rotate, zIndex,
+                left: Math.max(0, Math.min(100 - width, left)),
+                top: Math.max(0, top),
+                delay: 80 + i * 30,
+            });
+
+            col++;
+            if (col >= colCount) {
+                col = 0;
+                row++;
             }
-
-            const r = seededRandom(item.image.id);
-            const rotate = (r - 0.5) * 5; // ±2.5 degrees
-            const xJitter = (seededRandom(item.image.id + 'jx') - 0.5) * 12; // ±6px horizontal jitter
-            // Varied column widths — heroes wider
-            const widthPct = item.isHero ? 36 : 28 + seededRandom(item.image.id + 'w') * 6;
-
-            items.push({ item, col: minCol, y: colHeights[minCol], rotate, xJitter, widthPct });
-            // Estimate height for layout (actual height comes from natural image aspect)
-            const estH = 120 + seededRandom(item.image.id + 'eh') * 80;
-            colHeights[minCol] += estH + gap;
         }
 
-        return { items, totalHeight: Math.max(...colHeights, 400), cols };
+        const maxTop = items.length > 0 ? Math.max(...items.map(i => i.top)) + 200 : 400;
+        return { items, totalHeight: maxTop };
     }, [affinityImages]);
 
     return (
@@ -114,22 +135,21 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
                         </div>
                     )}
 
-                    {/* Scattered gallery */}
+                    {/* Organic scattered gallery — z-layered by affinity */}
                     <div className="relative" style={{ height: galleryLayout.totalHeight }}>
-                        {galleryLayout.items.map(({ item, col, y, rotate, xJitter, widthPct }, idx) => {
+                        {galleryLayout.items.map(({ item, left, top, width, rotate, zIndex, delay }) => {
                             const isSelected = selectedId === item.image.id;
-                            const colPct = 100 / galleryLayout.cols;
 
                             return (
                                 <div key={item.image.id}
                                     className="absolute"
                                     style={{
-                                        left: `calc(${col * colPct}% + ${xJitter}px)`,
-                                        top: y,
-                                        width: `${widthPct}%`,
-                                        zIndex: isSelected ? 20 : 1,
+                                        left: `${left}%`,
+                                        top,
+                                        width: `${width}%`,
+                                        zIndex: isSelected ? 30 : zIndex,
                                         ['--card-rotate' as string]: `${rotate}deg`,
-                                        animation: `history-image-appear 500ms cubic-bezier(0.22,1,0.36,1) ${100 + idx * 40}ms both`,
+                                        animation: `history-image-appear 500ms cubic-bezier(0.22,1,0.36,1) ${delay}ms both`,
                                     }}>
                                     <button
                                         ref={isSelected ? selectedRef : undefined}
@@ -138,8 +158,8 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
                                         style={{
                                             transform: `rotate(${rotate}deg)`,
                                             boxShadow: isSelected
-                                                ? `0 0 0 2px ${item.image.palette[0] || '#888'}60, 0 4px 16px rgba(0,0,0,0.12)`
-                                                : '0 2px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
+                                                ? `0 0 0 2px ${item.image.palette[0] || '#888'}60, 0 4px 16px rgba(0,0,0,0.15)`
+                                                : '0 2px 8px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)',
                                             display: 'block',
                                         }}>
                                         <img
