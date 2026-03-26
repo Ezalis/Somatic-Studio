@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useCallback } from 'react';
 import { ImageNode } from '../../types';
 import { TrailPoint, AffinityImage } from './flowTypes';
 import { computeSessionAffinities, seededRandom, scatterPositions } from './flowHelpers';
@@ -13,43 +13,12 @@ interface SessionHistoryProps {
 
 const mono = { fontFamily: 'JetBrains Mono, monospace' };
 
-// Gentler tier visibility for history gallery — all layers always partially visible,
-// scroll adjusts which layer is most prominent. No snapping, no peel-off.
-function historyTierStyle(tier: number, depth: number): React.CSSProperties {
-    // depth 0→1: gravity focused → range focused → detour focused
-    // Each tier has a "peak" depth where it's most prominent
-    const peaks = [0, 0.45, 0.85]; // gravity peaks at 0, range at 0.45, detour at 0.85
-    const dist = Math.abs(depth - peaks[tier]);
-
-    // Opacity: 1.0 at peak, fades gently with distance but never below 0.2
-    const opacity = Math.max(0.2, 1 - dist * 1.2);
-
-    // Scale: slightly larger at peak (1.0), slightly smaller when not focused (0.92)
-    const scale = 0.92 + 0.08 * Math.max(0, 1 - dist * 2);
-
-    // Z-index: focused tier gets highest z
-    // Tier 0 starts on top, tier 2 on bottom. Scroll shifts focus.
-    const baseZ = (2 - tier) * 3; // gravity=6, range=3, detour=0
-    const focusBonus = dist < 0.3 ? 10 : 0;
-
-    // Blur: unfocused tiers get slight blur
-    const blur = dist > 0.4 ? Math.min(3, (dist - 0.4) * 6) : 0;
-
-    return {
-        opacity,
-        transform: `scale(${scale})`,
-        transformOrigin: 'center center',
-        zIndex: baseZ + focusBonus,
-        ...(blur > 0.5 ? { filter: `blur(${blur.toFixed(1)}px)` } : {}),
-        transition: 'opacity 0.3s ease, transform 0.3s ease, filter 0.3s ease',
-    };
-}
+// Static tier z-layers: gravity on top, range middle, detour behind
+const TIER_Z: Record<number, number> = { 0: 6, 1: 3, 2: 1 };
 
 const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLoop }) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [galleryDepth, setGalleryDepth] = useState(0);
     const selectedRef = useRef<HTMLButtonElement>(null);
-    const galleryRef = useRef<HTMLDivElement>(null);
 
     const { images: affinityImages } = useMemo(
         () => computeSessionAffinities(trail, images),
@@ -94,45 +63,6 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
         [detourImages.length],
     );
 
-    // Wheel-driven depth (same mechanic as WaterfallAlbum)
-    useEffect(() => {
-        const el = galleryRef.current;
-        if (!el) return;
-
-        const onWheel = (e: WheelEvent) => {
-            e.preventDefault();
-            setGalleryDepth(prev => {
-                const delta = e.deltaY / 3000; // Slower scroll for gentle depth transition
-                return Math.max(0, Math.min(1, prev + delta));
-            });
-        };
-
-        // Touch handling
-        let touchStartY = 0;
-        let touchStartDepth = 0;
-
-        const onTouchStart = (e: TouchEvent) => {
-            touchStartY = e.touches[0].clientY;
-            touchStartDepth = galleryDepth;
-        };
-
-        const onTouchMove = (e: TouchEvent) => {
-            e.preventDefault();
-            const dy = touchStartY - e.touches[0].clientY;
-            const delta = dy / (window.innerHeight * 0.8);
-            setGalleryDepth(Math.max(0, Math.min(1, touchStartDepth + delta)));
-        };
-
-        el.addEventListener('wheel', onWheel, { passive: false });
-        el.addEventListener('touchstart', onTouchStart, { passive: true });
-        el.addEventListener('touchmove', onTouchMove, { passive: false });
-        return () => {
-            el.removeEventListener('wheel', onWheel);
-            el.removeEventListener('touchstart', onTouchStart);
-            el.removeEventListener('touchmove', onTouchMove);
-        };
-    }, [galleryDepth]);
-
     const handleTap = useCallback((id: string) => {
         setSelectedId(prev => prev === id ? null : id);
     }, []);
@@ -149,10 +79,8 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
         tier: number,
         baseSize: { min: number; max: number },
     ) => {
-        const tierStyle = historyTierStyle(tier, galleryDepth);
-
         return (
-            <div className="absolute inset-0 pointer-events-none" style={tierStyle}>
+            <div className="absolute inset-0" style={{ zIndex: TIER_Z[tier] }}>
                 {items.map((item, i) => {
                     const pos = positions[i];
                     if (!pos) return null;
@@ -165,13 +93,13 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
 
                     return (
                         <div key={item.image.id}
-                            className="absolute pointer-events-auto"
+                            className="absolute"
                             style={{
                                 left: `${pos.x}%`,
                                 top: `${pos.y}%`,
                                 width: size,
                                 transform: `translate(-50%, -50%) rotate(${rotate}deg)`,
-                                zIndex: isSelected ? 30 : Math.round(item.affinityScore * 10),
+                                zIndex: isSelected ? 30 : TIER_Z[tier] + Math.round(item.affinityScore * 5),
                             }}>
                             <button
                                 ref={isSelected ? selectedRef : undefined}
@@ -264,10 +192,8 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
                         )}
                     </div>
 
-                    {/* Scroll-through gallery viewport */}
-                    <div ref={galleryRef}
-                        className="flex-1 relative overflow-hidden"
-                        style={{ cursor: 'grab' }}>
+                    {/* Gallery viewport — static layered scatter */}
+                    <div className="flex-1 relative overflow-hidden">
 
                         {/* Tier 2 (detour) — behind, blurred initially */}
                         {renderTier(detourImages, detourPositions, 2, { min: 80, max: 130 })}
@@ -278,13 +204,6 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
                         {/* Tier 0 (gravity) — on top, large */}
                         {renderTier(gravityImages, gravityPositions, 0, { min: 160, max: 280 })}
 
-                        {/* Depth indicator */}
-                        {affinityImages.length > 0 && (
-                            <div className="absolute bottom-3 right-3 text-[8px]"
-                                style={{ ...mono, color: '#a1a1aa' }}>
-                                {galleryDepth < 0.2 ? 'gravity' : galleryDepth < 0.5 ? 'range' : 'detour'}
-                            </div>
-                        )}
                     </div>
                 </div>
             </div>
