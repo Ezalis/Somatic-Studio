@@ -70,15 +70,15 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
                 </span>
             </div>
 
-            {/* Color temperature bar */}
-            <div className="flex items-center gap-1.5 mb-5">
+            {/* Color temperature bar — wraps to new line */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-5">
                 {arc.tempSequence.map((temp, i) => (
                     <React.Fragment key={i}>
                         {i > 0 && (
                             <span className="text-[11px] px-0.5" style={{ color: '#a1a1aa' }}>→</span>
                         )}
-                        <div className="flex-1 h-8 rounded-lg flex items-center justify-center"
-                            style={{ background: TEMP_COLORS[temp], minWidth: 60 }}>
+                        <div className="h-7 rounded-lg flex items-center justify-center px-4"
+                            style={{ background: TEMP_COLORS[temp] }}>
                             <span className="text-[10px] font-medium" style={{ ...mono, color: '#27272a' }}>
                                 {temp}
                             </span>
@@ -99,11 +99,45 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
                 )}
             </div>
 
+            {/* Session threads — above selected images */}
+            {traitSummary.length > 0 && (
+                <>
+                    <div className="h-px mb-6" style={{ background: 'rgba(0,0,0,0.08)' }} />
+                    <div className="mb-8">
+                        <span className="text-[11px] uppercase tracking-[0.15em] mb-4 block"
+                            style={{ ...mono, color: '#71717a' }}>
+                            session threads
+                        </span>
+
+                        {traitSummary.map(trait => (
+                            <div key={trait.key} className="flex items-center gap-3 mb-2">
+                                <div className="w-3 h-3 rounded-full flex-shrink-0"
+                                    style={{
+                                        background: trait.isColor ? trait.label : '#71717a',
+                                        opacity: 0.6,
+                                    }} />
+                                <div className="h-0.5 rounded-full overflow-hidden" style={{ width: 120, background: 'rgba(0,0,0,0.06)' }}>
+                                    <div className="h-full rounded-full"
+                                        style={{
+                                            width: `${trait.ratio * 100}%`,
+                                            background: trait.isColor ? trait.label : '#71717a',
+                                            opacity: 0.5,
+                                        }} />
+                                </div>
+                                <span className="text-[9px] flex-shrink-0" style={{ ...mono, color: '#71717a' }}>
+                                    {trait.isColor ? '' : `#${trait.label}`} {trait.count}/{trail.length}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
+
             {/* Divider */}
             <div className="h-px mb-6" style={{ background: 'rgba(0,0,0,0.08)' }} />
 
             {/* Per-loop breakdown */}
-            <div className="mb-10">
+            <div className="mb-8">
                 <span className="text-[11px] uppercase tracking-[0.15em] mb-5 block"
                     style={{ ...mono, color: '#71717a' }}>
                     your selected images and tags
@@ -115,7 +149,6 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
 
                     return (
                         <div key={point.id + i} className="flex items-start gap-4 mb-6">
-                            {/* Hero thumbnail — natural aspect ratio in white card */}
                             <div className="flex-shrink-0 bg-white p-1 rounded"
                                 style={{
                                     boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
@@ -128,7 +161,6 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
                             </div>
 
                             <div className="flex-1 min-w-0">
-                                {/* Date + temp */}
                                 <div className="flex items-center gap-2 mb-1.5">
                                     <span className="text-[11px]" style={{ ...mono, color: '#3f3f46' }}>
                                         {point.label}
@@ -140,7 +172,6 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
                                     </span>
                                 </div>
 
-                                {/* Traits — match TraitSelector chip style */}
                                 {point.traits.length > 0 ? (
                                     <div className="flex flex-wrap gap-1.5">
                                         {point.traits.slice(0, 6).map(t => {
@@ -176,40 +207,6 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
                     );
                 })}
             </div>
-
-            {/* Session threads — compact */}
-            {traitSummary.length > 0 && (
-                <>
-                    <div className="h-px mb-6" style={{ background: 'rgba(0,0,0,0.08)' }} />
-                    <div>
-                        <span className="text-[11px] uppercase tracking-[0.15em] mb-4 block"
-                            style={{ ...mono, color: '#71717a' }}>
-                            session threads
-                        </span>
-
-                        {traitSummary.map(trait => (
-                            <div key={trait.key} className="flex items-center gap-3 mb-2">
-                                <div className="w-3 h-3 rounded-full flex-shrink-0"
-                                    style={{
-                                        background: trait.isColor ? trait.label : '#71717a',
-                                        opacity: 0.6,
-                                    }} />
-                                <div className="h-0.5 rounded-full overflow-hidden" style={{ width: 120, background: 'rgba(0,0,0,0.06)' }}>
-                                    <div className="h-full rounded-full"
-                                        style={{
-                                            width: `${trait.ratio * 100}%`,
-                                            background: trait.isColor ? trait.label : '#71717a',
-                                            opacity: 0.5,
-                                        }} />
-                                </div>
-                                <span className="text-[9px] flex-shrink-0" style={{ ...mono, color: '#71717a' }}>
-                                    {trait.isColor ? '' : `#${trait.label}`} {trait.count}/{trail.length}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                </>
-            )}
         </div>
     );
 };

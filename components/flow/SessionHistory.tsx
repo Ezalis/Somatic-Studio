@@ -17,15 +17,29 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const selectedRef = useRef<HTMLButtonElement>(null);
 
-    const { images: affinityImages, floatingTags } = useMemo(
+    const { images: affinityImages } = useMemo(
         () => computeSessionAffinities(trail, images),
         [trail, images],
     );
 
-    // Signal chips: tags + colors that generated the gallery (frequency >= 2)
+    // Signal chips: all session traits with frequency, sorted by count
     const signalChips = useMemo(() => {
-        return floatingTags.slice(0, 6);
-    }, [floatingTags]);
+        // Include all traits (floatingTags only has freq >= 2), so compute from trail directly
+        const freq = new Map<string, number>();
+        for (const point of trail) {
+            for (const t of point.traits) freq.set(t, (freq.get(t) || 0) + 1);
+        }
+        return [...freq.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([key, count]) => ({
+                key,
+                label: key.startsWith('color:') ? key.slice(6) : key.slice(4),
+                isColor: key.startsWith('color:'),
+                colorValue: key.startsWith('color:') ? key.slice(6) : undefined,
+                count,
+            }));
+    }, [trail]);
 
     const handleTap = useCallback((id: string) => {
         setSelectedId(prev => prev === id ? null : id);
@@ -42,9 +56,9 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
     const galleryLayout = useMemo(() => {
         const items: { item: AffinityImage; left: number; top: number; width: number; rotate: number; zIndex: number; delay: number }[] = [];
 
-        // Grid-based placement with heavy jitter for organic feel
-        const colCount = 5;
-        const rowHeight = 130;
+        // Tighter grid with jitter — fills space better
+        const colCount = 6;
+        const rowHeight = 90;
         let row = 0;
         let col = 0;
 
@@ -54,14 +68,14 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
             const r2 = seededRandom(item.image.id + 'p');
             const r3 = seededRandom(item.image.id + 'r');
 
-            // Size: heroes ~18%, high-affinity ~15%, low ~11% of gallery width
-            const width = item.isHero ? 18 : 10 + item.affinityScore * 10;
+            // Smaller sizes: heroes ~16%, high-affinity ~13%, low ~10%
+            const width = item.isHero ? 16 : 9 + item.affinityScore * 8;
 
-            // Position on a loose grid with large jitter
+            // Tighter grid with moderate jitter
             const baseLeft = (col / colCount) * 100;
             const baseTop = row * rowHeight;
-            const left = baseLeft + (r1 - 0.5) * 15; // ±7.5% jitter
-            const top = baseTop + (r2 - 0.5) * 40; // ±20px jitter
+            const left = baseLeft + (r1 - 0.5) * 10; // ±5% jitter
+            const top = baseTop + (r2 - 0.5) * 25; // ±12px jitter
 
             const rotate = (r3 - 0.5) * 8; // ±4 degrees
 
