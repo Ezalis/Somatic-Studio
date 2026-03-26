@@ -37,27 +37,32 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
         }
     }, [onSeedLoop]);
 
-    // Waterfall layout for gallery
+    // Scattered waterfall layout — 3 columns with jitter and rotation
     const galleryLayout = useMemo(() => {
-        const cols = 4;
-        const gap = 10;
+        const cols = 3;
+        const gap = 14;
         const colHeights = new Array(cols).fill(0);
-        const items: { item: AffinityImage; col: number; y: number; h: number }[] = [];
+        const items: { item: AffinityImage; col: number; y: number; rotate: number; xJitter: number; widthPct: number }[] = [];
 
         for (const item of affinityImages) {
             let minCol = 0;
             for (let c = 1; c < cols; c++) {
                 if (colHeights[c] < colHeights[minCol]) minCol = c;
             }
-            // Varied heights based on seeded random (simulates natural aspect ratios)
-            const baseH = 120 + seededRandom(item.image.id + 'gh') * 100;
-            const h = item.isHero ? baseH * 1.2 : baseH;
 
-            items.push({ item, col: minCol, y: colHeights[minCol], h });
-            colHeights[minCol] += h + 8 + gap; // 8 for card padding
+            const r = seededRandom(item.image.id);
+            const rotate = (r - 0.5) * 5; // ±2.5 degrees
+            const xJitter = (seededRandom(item.image.id + 'jx') - 0.5) * 12; // ±6px horizontal jitter
+            // Varied column widths — heroes wider
+            const widthPct = item.isHero ? 36 : 28 + seededRandom(item.image.id + 'w') * 6;
+
+            items.push({ item, col: minCol, y: colHeights[minCol], rotate, xJitter, widthPct });
+            // Estimate height for layout (actual height comes from natural image aspect)
+            const estH = 120 + seededRandom(item.image.id + 'eh') * 80;
+            colHeights[minCol] += estH + gap;
         }
 
-        return { items, totalHeight: Math.max(...colHeights, 400) };
+        return { items, totalHeight: Math.max(...colHeights, 400), cols };
     }, [affinityImages]);
 
     return (
@@ -109,28 +114,32 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
                         </div>
                     )}
 
-                    {/* Dense waterfall gallery */}
+                    {/* Scattered gallery */}
                     <div className="relative" style={{ height: galleryLayout.totalHeight }}>
-                        {galleryLayout.items.map(({ item, col, y }) => {
+                        {galleryLayout.items.map(({ item, col, y, rotate, xJitter, widthPct }, idx) => {
                             const isSelected = selectedId === item.image.id;
+                            const colPct = 100 / galleryLayout.cols;
 
                             return (
                                 <div key={item.image.id}
                                     className="absolute"
                                     style={{
-                                        left: `calc(${col * 25}% + ${col * 2.5}px)`,
+                                        left: `calc(${col * colPct}% + ${xJitter}px)`,
                                         top: y,
-                                        width: `calc(25% - 7.5px)`,
+                                        width: `${widthPct}%`,
                                         zIndex: isSelected ? 20 : 1,
+                                        ['--card-rotate' as string]: `${rotate}deg`,
+                                        animation: `history-image-appear 500ms cubic-bezier(0.22,1,0.36,1) ${100 + idx * 40}ms both`,
                                     }}>
                                     <button
                                         ref={isSelected ? selectedRef : undefined}
                                         onClick={() => handleTap(item.image.id)}
-                                        className="bg-white p-1 rounded cursor-pointer transition-shadow duration-200 w-full"
+                                        className="bg-white p-1.5 rounded cursor-pointer transition-shadow duration-200 w-full"
                                         style={{
+                                            transform: `rotate(${rotate}deg)`,
                                             boxShadow: isSelected
                                                 ? `0 0 0 2px ${item.image.palette[0] || '#888'}60, 0 4px 16px rgba(0,0,0,0.12)`
-                                                : '0 1px 4px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                                                : '0 2px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
                                             display: 'block',
                                         }}>
                                         <img

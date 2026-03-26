@@ -160,6 +160,9 @@ export function computeSessionAffinities(
         else if (affinityScore > 0.25) layer = 'range';
         else layer = 'detour';
 
+        // Only include images with meaningful affinity (skip low-relevance noise)
+        if (affinityScore < 0.15 && !heroIds.has(id)) continue;
+
         results.push({ image, affinityScore, layer, loopCount: loops, isHero: heroIds.has(id) });
     }
 
@@ -170,7 +173,8 @@ export function computeSessionAffinities(
         return b.affinityScore - a.affinityScore;
     });
 
-    return { images: results, floatingTags };
+    // Cap to top 30 images to keep gallery focused
+    return { images: results.slice(0, 30), floatingTags };
 }
 
 export function detectSessionArc(trail: TrailPoint[]): SessionArc {
