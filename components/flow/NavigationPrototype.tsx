@@ -392,8 +392,7 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 }} />
 
             {/* Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3"
-                style={mode === 'history' ? { background: 'rgba(13,13,13,0.8)', backdropFilter: 'blur(8px)' } : {}}>
+            <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
                     <h1 className="text-[10px] tracking-[0.25em] uppercase text-zinc-500"
                         style={{ fontFamily: 'JetBrains Mono, monospace' }}>
@@ -401,22 +400,22 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     </h1>
                     {trail.length > 0 && (
                         <div className="flex items-center gap-1 rounded-full px-1 py-0.5"
-                            style={{ background: 'rgba(255,255,255,0.06)', fontFamily: 'JetBrains Mono, monospace' }}>
+                            style={{ background: 'rgba(0,0,0,0.04)', fontFamily: 'JetBrains Mono, monospace' }}>
                             <button onClick={() => setMode('explore')}
                                 className="px-3 py-1 rounded-full text-[10px] transition-all cursor-pointer"
                                 style={{
-                                    background: mode === 'explore' ? 'rgba(255,255,255,0.14)' : 'transparent',
-                                    color: mode === 'explore' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
-                                    borderBottom: mode === 'explore' ? '1.5px solid rgba(255,255,255,0.5)' : '1.5px solid transparent',
+                                    background: mode === 'explore' ? 'rgba(0,0,0,0.08)' : 'transparent',
+                                    color: mode === 'explore' ? '#18181b' : '#a1a1aa',
+                                    borderBottom: mode === 'explore' ? '1.5px solid #18181b' : '1.5px solid transparent',
                                 }}>
                                 explore
                             </button>
                             <button onClick={() => setMode('history')}
                                 className="px-3 py-1 rounded-full text-[10px] transition-all cursor-pointer"
                                 style={{
-                                    background: mode === 'history' ? 'rgba(255,255,255,0.14)' : 'transparent',
-                                    color: mode === 'history' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
-                                    borderBottom: mode === 'history' ? '1.5px solid rgba(255,255,255,0.5)' : '1.5px solid transparent',
+                                    background: mode === 'history' ? 'rgba(0,0,0,0.08)' : 'transparent',
+                                    color: mode === 'history' ? '#18181b' : '#a1a1aa',
+                                    borderBottom: mode === 'history' ? '1.5px solid #18181b' : '1.5px solid transparent',
                                 }}>
                                 history
                             </button>

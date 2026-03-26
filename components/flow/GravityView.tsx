@@ -2,7 +2,7 @@ import React, { useMemo, useState, useRef, useCallback } from 'react';
 import { ImageNode } from '../../types';
 import { TrailPoint, AffinityImage, AffinityLayer } from './flowTypes';
 import { computeSessionAffinities, seededRandom, getColorTemperature } from './flowHelpers';
-import { getThumbnailUrl, getPreviewUrl } from '../../services/immichService';
+import { getThumbnailUrl } from '../../services/immichService';
 
 interface GravityViewProps {
     trail: TrailPoint[];
@@ -10,13 +10,10 @@ interface GravityViewProps {
     onSeedLoop: (image: ImageNode, rect: DOMRect) => void;
 }
 
-// Organic layout: images positioned with randomized horizontal offsets,
-// varied widths, natural aspect ratios (no cropping), slight rotation.
-// Heroes are centered and large, album images scatter to the sides.
 interface PlacedImage {
     item: AffinityImage;
-    left: number;     // percentage of viewport width (0-100)
-    width: number;    // percentage of viewport width
+    left: number;
+    width: number;
     rotate: number;
     delay: number;
 }
@@ -33,28 +30,25 @@ function placeImages(items: AffinityImage[], layer: AffinityLayer): PlacedImage[
         let left: number;
 
         if (item.isHero) {
-            // Heroes: large, roughly centered with slight offset
-            width = layer === 'gravity' ? 52 : layer === 'range' ? 40 : 32;
-            left = 15 + r2 * 30; // 15-45% from left
+            // Heroes: moderate size, roughly centered
+            width = layer === 'gravity' ? 35 : layer === 'range' ? 28 : 24;
+            left = 10 + r2 * 45;
         } else {
-            // Album images: varied sizes, wider scatter
-            const baseW = layer === 'gravity' ? 35 : layer === 'range' ? 28 : 22;
-            width = baseW * (0.7 + item.affinityScore * 0.6);
-            // Alternate sides with randomness
+            // Album images: smaller, wider scatter
+            const baseW = layer === 'gravity' ? 25 : layer === 'range' ? 20 : 16;
+            width = baseW * (0.8 + item.affinityScore * 0.4);
             if (idx % 2 === 0) {
-                left = 5 + r2 * 35; // left side
+                left = 3 + r2 * 40;
             } else {
-                left = 50 + r2 * 35; // right side
+                left = 52 + r2 * 35;
             }
         }
 
-        // Clamp so image doesn't overflow
-        if (left + width > 95) left = 95 - width;
+        if (left + width > 96) left = 96 - width;
         if (left < 2) left = 2;
 
-        const rotate = (r - 0.5) * 6; // ±3 degrees
-        const delay = 100 + idx * 45;
-
+        const rotate = (r - 0.5) * 6;
+        const delay = 80 + idx * 35;
         placed.push({ item, left, width, rotate, delay });
         idx++;
     }
@@ -71,6 +65,7 @@ const SECTION_LABELS: Record<AffinityLayer, string> = {
 const GravityView: React.FC<GravityViewProps> = ({ trail, images, onSeedLoop }) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const selectedRef = useRef<HTMLButtonElement>(null);
+    const mono = { fontFamily: 'JetBrains Mono, monospace' };
 
     const { images: affinityImages, floatingTags } = useMemo(
         () => computeSessionAffinities(trail, images),
@@ -81,7 +76,7 @@ const GravityView: React.FC<GravityViewProps> = ({ trail, images, onSeedLoop }) 
     const rangeItems = useMemo(() => affinityImages.filter(a => a.layer === 'range'), [affinityImages]);
     const detourItems = useMemo(() => affinityImages.filter(a => a.layer === 'detour'), [affinityImages]);
 
-    // Palette dots: top 8 most frequent colors across hero palettes
+    // Palette dots
     const paletteDots = useMemo(() => {
         const freq = new Map<string, number>();
         for (const point of trail) {
@@ -90,7 +85,7 @@ const GravityView: React.FC<GravityViewProps> = ({ trail, images, onSeedLoop }) 
         return [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c]) => c);
     }, [trail]);
 
-    // Bridge info: find the continuedFromId that linked warm→cool or vice versa
+    // Bridge info
     const bridgeInfo = useMemo(() => {
         for (let i = 0; i < trail.length - 1; i++) {
             const curr = getColorTemperature(trail[i].palette);
@@ -113,8 +108,6 @@ const GravityView: React.FC<GravityViewProps> = ({ trail, images, onSeedLoop }) 
         }
     }, [onSeedLoop]);
 
-    const mono = { fontFamily: 'JetBrains Mono, monospace' };
-
     const renderSection = (
         items: AffinityImage[],
         layer: AffinityLayer,
@@ -124,80 +117,67 @@ const GravityView: React.FC<GravityViewProps> = ({ trail, images, onSeedLoop }) 
         if (items.length === 0) return null;
         const placed = placeImages(items, layer);
 
-        const glowColor = layer === 'gravity'
-            ? 'rgba(200, 140, 40, 0.025)'
-            : layer === 'detour'
-                ? 'rgba(50, 120, 80, 0.025)'
-                : 'transparent';
-
         return (
-            <div className="relative mb-8">
+            <div className="relative mb-6">
                 {/* Section label */}
-                <div className="px-5 mb-4">
-                    <span className="text-[11px] text-zinc-500" style={{ ...mono, fontWeight: 500 }}>
+                <div className="px-5 mb-3">
+                    <span className="text-[11px] tracking-[0.12em] uppercase"
+                        style={{ ...mono, color: '#52525b' }}>
                         {SECTION_LABELS[layer]}
                     </span>
                 </div>
 
-                {/* Glow zone */}
-                <div className="absolute inset-x-2 top-8 bottom-0 rounded-2xl"
-                    style={{ background: glowColor }} />
-
-                {/* Floating tags (gravity section only) */}
+                {/* Floating tags — light theme, match TraitSelector pill style */}
                 {showTags && floatingTags.map((tag, ti) => (
-                    <div key={tag.key} className="relative mx-auto mb-3"
+                    <div key={tag.key} className="relative mx-auto mb-2"
                         style={{
                             width: 'fit-content',
-                            marginLeft: `${15 + seededRandom(tag.key + 'mx') * 50}%`,
-                            animation: `float-tag-appear 400ms ease-out ${baseDelay + 200 + ti * 80}ms both`,
+                            marginLeft: `${12 + seededRandom(tag.key + 'mx') * 55}%`,
+                            animation: `float-tag-appear 400ms ease-out ${baseDelay + 150 + ti * 60}ms both`,
                         }}>
-                        <div className="px-3 py-1.5 rounded-full flex items-center gap-2"
+                        <div className="px-3 py-1 rounded-full flex items-center gap-2"
                             style={{
-                                background: tag.isColor ? `${tag.colorValue}18` : 'rgba(255,255,255,0.06)',
-                                border: `1px solid ${tag.isColor ? tag.colorValue + '40' : 'rgba(255,255,255,0.1)'}`,
+                                background: 'rgba(0,0,0,0.04)',
+                                border: '1px solid rgba(0,0,0,0.08)',
                             }}>
                             {tag.isColor && (
-                                <div className="w-3 h-3 rounded-full" style={{ background: tag.colorValue }} />
+                                <div className="w-2.5 h-2.5 rounded-full" style={{ background: tag.colorValue }} />
                             )}
-                            <span className="text-[10px]" style={{
-                                ...mono,
-                                color: tag.isColor ? tag.colorValue : 'rgba(255,255,255,0.5)',
-                            }}>
+                            <span className="text-[9px]" style={{ ...mono, color: '#3f3f46' }}>
                                 {tag.isColor ? tag.label : `#${tag.label}`}
                             </span>
                             <div className="flex gap-0.5">
                                 {Array.from({ length: tag.count }).map((_, i) => (
                                     <div key={i} className="w-1.5 h-1.5 rounded-full"
-                                        style={{ background: tag.isColor ? tag.colorValue : 'rgba(255,255,255,0.4)' }} />
+                                        style={{ background: tag.isColor ? tag.colorValue : '#71717a' }} />
                                 ))}
                             </div>
                         </div>
                     </div>
                 ))}
 
-                {/* Scattered palette dots (gravity section only) */}
+                {/* Scattered palette dots */}
                 {showTags && paletteDots.map((color, i) => (
                     <div key={color + i} className="absolute rounded-full"
                         style={{
                             width: 6 + seededRandom(color + 'ds') * 4,
                             height: 6 + seededRandom(color + 'ds') * 4,
                             background: color,
-                            opacity: 0.35,
+                            opacity: 0.3,
                             left: `${10 + seededRandom(color + 'dx') * 80}%`,
-                            top: `${20 + seededRandom(color + 'dy') * 60}%`,
+                            top: `${15 + seededRandom(color + 'dy') * 65}%`,
                         }} />
                 ))}
 
-                {/* Images — organic scatter with natural aspect ratios */}
+                {/* Images — white card wrappers, natural aspect ratios */}
                 <div className="relative">
                     {placed.map((p) => {
                         const { item, left, width, rotate, delay } = p;
                         const isSelected = selectedId === item.image.id;
-                        const usePreview = layer === 'gravity' && item.isHero;
 
                         return (
                             <div key={item.image.id}
-                                className="relative mb-3"
+                                className="relative mb-2"
                                 style={{
                                     marginLeft: `${left}%`,
                                     width: `${width}%`,
@@ -208,21 +188,19 @@ const GravityView: React.FC<GravityViewProps> = ({ trail, images, onSeedLoop }) 
                                 <button
                                     ref={isSelected ? selectedRef : undefined}
                                     onClick={() => handleTap(item.image.id)}
-                                    className="w-full cursor-pointer rounded-md overflow-hidden transition-shadow duration-300"
+                                    className="bg-white p-1.5 rounded cursor-pointer transition-shadow duration-300"
                                     style={{
                                         transform: `rotate(${rotate}deg)`,
-                                        boxShadow: item.isHero
-                                            ? `0 0 24px ${item.image.palette[0] || '#555'}30, 0 4px 16px rgba(0,0,0,0.4)`
-                                            : '0 4px 12px rgba(0,0,0,0.3)',
-                                        ...(isSelected ? {
-                                            boxShadow: `0 0 0 2px ${item.image.palette[0] || '#aaa'}80, 0 4px 24px rgba(0,0,0,0.5)`,
-                                        } : {}),
+                                        boxShadow: isSelected
+                                            ? `0 0 0 2px ${item.image.palette[0] || '#888'}60, 0 4px 16px rgba(0,0,0,0.15)`
+                                            : '0 2px 8px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)',
+                                        display: 'block',
+                                        width: '100%',
                                     }}>
-                                    {/* Natural aspect ratio — no height constraint, no object-cover crop */}
                                     <img
-                                        src={usePreview ? getPreviewUrl(item.image.id) : getThumbnailUrl(item.image.id)}
+                                        src={getThumbnailUrl(item.image.id)}
                                         alt=""
-                                        className="w-full h-auto"
+                                        className="w-full h-auto rounded-sm"
                                         loading="lazy"
                                     />
                                 </button>
@@ -232,8 +210,13 @@ const GravityView: React.FC<GravityViewProps> = ({ trail, images, onSeedLoop }) 
                                         style={{ animation: 'seed-prompt-in 200ms ease-out forwards' }}>
                                         <button
                                             onClick={() => handleSeed(item)}
-                                            className="px-3 py-1.5 rounded-full text-[10px] text-zinc-300 bg-white/10 hover:bg-white/15 transition-colors cursor-pointer border border-white/10"
-                                            style={mono}>
+                                            className="px-3 py-1.5 rounded-full text-[9px] cursor-pointer transition-colors"
+                                            style={{
+                                                ...mono,
+                                                background: 'rgba(0,0,0,0.06)',
+                                                color: '#3f3f46',
+                                                border: '1px solid rgba(0,0,0,0.1)',
+                                            }}>
                                             explore from here
                                         </button>
                                     </div>
@@ -249,7 +232,7 @@ const GravityView: React.FC<GravityViewProps> = ({ trail, images, onSeedLoop }) 
     if (affinityImages.length === 0) {
         return (
             <div className="flex items-center justify-center h-64">
-                <p className="text-zinc-600 text-[11px]" style={mono}>
+                <p className="text-[11px]" style={{ ...mono, color: '#a1a1aa' }}>
                     explore a few loops to see your gravity
                 </p>
             </div>
@@ -258,52 +241,40 @@ const GravityView: React.FC<GravityViewProps> = ({ trail, images, onSeedLoop }) 
 
     return (
         <div className="pb-20">
-            {/* Gravity section */}
             {renderSection(gravityItems, 'gravity', true, 0)}
 
-            {/* Bridge zone (if temperature shift detected) */}
+            {/* Bridge zone */}
             {bridgeInfo && (
-                <div className="relative py-8 px-5 mb-4">
-                    <div className="flex items-center justify-center gap-3 mb-3">
-                        {/* Color shift dots */}
+                <div className="relative py-6 px-5 mb-4">
+                    <div className="flex items-center justify-center gap-3 mb-2">
                         <div className="flex gap-1">
-                            {[0.4, 0.25, 0.12].map((op, i) => (
+                            {[0.5, 0.3, 0.15].map((op, i) => (
                                 <div key={i} className="w-1.5 h-1.5 rounded-full"
-                                    style={{ background: bridgeInfo.fromTemp === 'warm' ? '#c88a28' : '#4a9068', opacity: op }} />
+                                    style={{ background: bridgeInfo.fromTemp === 'warm' ? '#92400e' : '#166534', opacity: op }} />
                             ))}
                         </div>
-
-                        {/* Bridge image (if we have one) */}
                         {bridgeInfo.image && (
-                            <div className="w-28 rounded-md overflow-hidden"
-                                style={{
-                                    transform: 'rotate(1deg)',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                }}>
+                            <div className="bg-white p-1 rounded"
+                                style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.10)', width: 80 }}>
                                 <img src={getThumbnailUrl(bridgeInfo.image.id)} alt=""
-                                    className="w-full h-auto" loading="lazy" />
+                                    className="w-full h-auto rounded-sm" loading="lazy" />
                             </div>
                         )}
-
                         <div className="flex gap-1">
-                            {[0.12, 0.25, 0.4].map((op, i) => (
+                            {[0.15, 0.3, 0.5].map((op, i) => (
                                 <div key={i} className="w-1.5 h-1.5 rounded-full"
-                                    style={{ background: bridgeInfo.toTemp === 'cool' ? '#4a9068' : '#c88a28', opacity: op }} />
+                                    style={{ background: bridgeInfo.toTemp === 'cool' ? '#166534' : '#92400e', opacity: op }} />
                             ))}
                         </div>
                     </div>
-                    <p className="text-center text-[9px] text-zinc-600" style={mono}>
+                    <p className="text-center text-[9px]" style={{ ...mono, color: '#a1a1aa' }}>
                         bridged {bridgeInfo.fromTemp} ↔ {bridgeInfo.toTemp}
                     </p>
                 </div>
             )}
 
-            {/* Range section */}
-            {renderSection(rangeItems, 'range', false, 400)}
-
-            {/* Detour section */}
-            {renderSection(detourItems, 'detour', false, 700)}
+            {renderSection(rangeItems, 'range', false, 300)}
+            {renderSection(detourItems, 'detour', false, 500)}
         </div>
     );
 };
