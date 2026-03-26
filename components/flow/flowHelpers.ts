@@ -1,5 +1,5 @@
 import { ImageNode } from '../../types';
-import { ScoredImage } from './flowTypes';
+import { ScoredImage, TrailPoint, AffinityImage, AffinityLayer } from './flowTypes';
 
 export function seededRandom(seed: string): number {
     let hash = 0;
@@ -49,3 +49,124 @@ export function colorDist(a: string, b: string): number {
 }
 
 export const COLOR_THRESHOLD = 80;
+
+export function averagePaletteDistance(a: string[], b: string[]): number {
+    if (!a.length || !b.length) return 300;
+    let total = 0;
+    for (const ca of a) {
+        let min = Infinity;
+        for (const cb of b) min = Math.min(min, colorDist(ca, cb));
+        total += min;
+    }
+    return total / a.length;
+}
+
+/**
+ * Compute session affinities: score every image that appeared in the session,
+ * assign to gravity/range/detour layers based on cross-loop frequency,
+ * trait overlap, and color proximity to the session's center palette.
+ */
+export function computeSessionAffinities(trail: TrailPoint[], allImages: ImageNode[]): AffinityImage[] {
+    if (trail.length === 0) return [];
+
+    // Collect hero IDs
+    const heroIds = new Set(trail.map(t => t.id));
+
+    // Count how many loops each image appeared in
+    const loopCounts = new Map<string, number>();
+    for (const point of trail) {
+        // Hero counts as appearing in its own loop
+        loopCounts.set(point.id, (loopCounts.get(point.id) || 0) + 1);
+        for (const assetId of point.albumPool) {
+            loopCounts.set(assetId, (loopCounts.get(assetId) || 0) + 1);
+        }
+    }
+
+    // Gather all unique traits across the session
+    const allTraits = new Set<string>();
+    for (const point of trail) {
+        for (const t of point.traits) allTraits.add(t);
+    }
+
+    // Compute the session's "center palette" — most frequent palette colors across heroes
+    const colorFreq = new Map<string, number>();
+    for (const point of trail) {
+        for (const c of point.palette) {
+            colorFreq.set(c, (colorFreq.get(c) || 0) + 1);
+        }
+    }
+    const centerPalette = [...colorFreq.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([c]) => c);
+
+    // Build image lookup
+    const imageMap = new Map<string, ImageNode>();
+    for (const img of allImages) imageMap.set(img.id, img);
+
+    // Score every image that appeared in the session
+    const results: AffinityImage[] = [];
+    const sessionImageIds = new Set(loopCounts.keys());
+
+    for (const id of sessionImageIds) {
+        const image = imageMap.get(id);
+        if (!image) continue;
+
+        const loops = loopCounts.get(id) || 0;
+
+        // Trait overlap: how many session traits match this image's tags/colors
+        const imageTags = new Set([...image.tagIds, ...(image.aiTagIds || [])]);
+        let traitOverlap = 0;
+        for (const trait of allTraits) {
+            if (trait.startsWith('tag:') && imageTags.has(trait.slice(4))) traitOverlap++;
+            if (trait.startsWith('color:') && image.palette.length > 0) {
+                const traitColor = trait.slice(6);
+                const closest = Math.min(...image.palette.map(c => colorDist(c, traitColor)));
+                if (closest < COLOR_THRESHOLD) traitOverlap++;
+            }
+        }
+
+        // Color proximity to center palette
+        const paletteDist = centerPalette.length > 0 && image.palette.length > 0
+            ? averagePaletteDistance(image.palette, centerPalette)
+            : 200;
+        const colorProximity = Math.max(0, 1 - paletteDist / 300);
+
+        // Composite score (0-1)
+        const maxLoops = Math.max(...loopCounts.values(), 1);
+        const maxTraits = Math.max(allTraits.size, 1);
+        const affinityScore = (
+            0.45 * (loops / maxLoops) +
+            0.30 * (traitOverlap / maxTraits) +
+            0.25 * colorProximity
+        );
+
+        // Layer assignment
+        let layer: AffinityLayer;
+        if (loops >= 2 || (heroIds.has(id) && affinityScore > 0.4)) {
+            layer = 'gravity';
+        } else if (affinityScore > 0.25) {
+            layer = 'range';
+        } else {
+            layer = 'detour';
+        }
+
+        results.push({
+            image,
+            affinityScore,
+            layer,
+            loopCount: loops,
+            isHero: heroIds.has(id),
+        });
+    }
+
+    // Sort within each layer: highest affinity first, heroes float up
+    results.sort((a, b) => {
+        const layerOrder = { gravity: 0, range: 1, detour: 2 };
+        if (layerOrder[a.layer] !== layerOrder[b.layer]) return layerOrder[a.layer] - layerOrder[b.layer];
+        if (a.isHero !== b.isHero) return a.isHero ? -1 : 1;
+        return b.affinityScore - a.affinityScore;
+    });
+
+    return results;
+}
