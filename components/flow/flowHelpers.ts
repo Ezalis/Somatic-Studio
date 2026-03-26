@@ -1,3 +1,4 @@
+import React from 'react';
 import { ImageNode } from '../../types';
 import { ScoredImage, TrailPoint, AffinityImage, AffinityLayer, FloatingTag, SessionArc, ArcPattern } from './flowTypes';
 
@@ -49,6 +50,76 @@ export function colorDist(a: string, b: string): number {
 }
 
 export const COLOR_THRESHOLD = 80;
+
+// --- Shared Layout Helpers ---
+
+// Grid-based scatter — guarantees spatial coverage, jitter adds organic feel.
+// jitterScale: 0.8 = ±40% of cell (structured), 1.2 = ±60% (messy desk feel)
+export function scatterPositions(count: number, seed: string, bounds: { xMin: number; xMax: number; yMin: number; yMax: number }, jitterScale = 0.8) {
+    const positions: { x: number; y: number }[] = [];
+    const aspectRatio = (bounds.xMax - bounds.xMin) / (bounds.yMax - bounds.yMin);
+    const cols = Math.max(2, Math.round(Math.sqrt(count * aspectRatio)));
+    const rows = Math.max(2, Math.ceil(count / cols));
+    const cellW = (bounds.xMax - bounds.xMin) / cols;
+    const cellH = (bounds.yMax - bounds.yMin) / rows;
+
+    const cells: number[] = [];
+    for (let i = 0; i < count; i++) cells.push(i);
+    for (let i = cells.length - 1; i > 0; i--) {
+        const j = Math.floor(seededRandom(seed + 'shuf' + i) * (i + 1));
+        [cells[i], cells[j]] = [cells[j], cells[i]];
+    }
+
+    for (let i = 0; i < count; i++) {
+        const cell = cells[i];
+        const col = cell % cols;
+        const row = Math.floor(cell / cols);
+        const jitterX = (seededRandom(seed + 'X' + (i * 31 + 7)) - 0.5) * cellW * jitterScale;
+        const jitterY = (seededRandom(seed + 'Y' + (i * 37 + 13)) - 0.5) * cellH * jitterScale;
+        let x = bounds.xMin + (col + 0.5) * cellW + jitterX;
+        let y = bounds.yMin + (row + 0.5) * cellH + jitterY;
+        x = Math.max(bounds.xMin, Math.min(bounds.xMax, x));
+        y = Math.max(bounds.yMin, Math.min(bounds.yMax, y));
+        positions.push({ x, y });
+    }
+    return positions;
+}
+
+// Compute tier opacity/scale/blur based on scroll depth (0→1)
+export function getTierStyle(tier: number, depth: number): React.CSSProperties {
+    let opacity: number, scale: number;
+
+    if (tier === 0) {
+        if (depth < 0.15) { opacity = 1; scale = 1; }
+        else {
+            const t = Math.min(1, Math.max(0, (depth - 0.15) / 0.20));
+            opacity = 1 - t; scale = 1 + t * 0.5;
+        }
+    } else if (tier === 1) {
+        const enter = Math.min(1, Math.max(0, (depth - 0.20) / 0.15));
+        const exit = Math.min(1, Math.max(0, (depth - 0.46) / 0.09));
+        if (depth < 0.35) { opacity = 0.15 + enter * 0.85; scale = 0.85 + enter * 0.15; }
+        else if (depth < 0.46) { opacity = 1; scale = 1; }
+        else { opacity = 1 - exit; scale = 1 + exit * 0.5; }
+    } else {
+        const exit = Math.min(1, Math.max(0, (depth - 0.68) / 0.20));
+        if (depth < 0.68) { opacity = 0.85; scale = 1; }
+        else { opacity = 0.85 * (1 - exit); scale = 1 + exit * 0.5; }
+    }
+
+    let filter: string | undefined;
+    if (tier === 2) {
+        const unblur = Math.min(1, Math.max(0, (depth - 0.42) / 0.10));
+        const blurPx = 8 * (1 - unblur);
+        if (blurPx > 0.5) filter = `blur(${blurPx.toFixed(1)}px)`;
+    }
+
+    return {
+        opacity, transform: `scale(${scale})`, transformOrigin: 'center center',
+        ...(filter ? { filter } : {}),
+        ...(opacity < 0.15 ? { visibility: 'hidden' as const } : {}),
+    };
+}
 
 // --- Session History Helpers ---
 
