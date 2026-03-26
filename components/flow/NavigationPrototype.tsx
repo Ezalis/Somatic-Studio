@@ -400,21 +400,23 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         Somatic Studio
                     </h1>
                     {trail.length > 0 && (
-                        <div className="flex items-center gap-0.5 rounded-full p-0.5"
-                            style={{ background: 'rgba(255,255,255,0.05)', fontFamily: 'JetBrains Mono, monospace' }}>
+                        <div className="flex items-center gap-1 rounded-full px-1 py-0.5"
+                            style={{ background: 'rgba(255,255,255,0.06)', fontFamily: 'JetBrains Mono, monospace' }}>
                             <button onClick={() => setMode('explore')}
-                                className="px-2.5 py-1 rounded-full text-[9px] transition-all cursor-pointer"
+                                className="px-3 py-1 rounded-full text-[10px] transition-all cursor-pointer"
                                 style={{
-                                    background: mode === 'explore' ? 'rgba(255,255,255,0.1)' : 'transparent',
-                                    color: mode === 'explore' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
+                                    background: mode === 'explore' ? 'rgba(255,255,255,0.14)' : 'transparent',
+                                    color: mode === 'explore' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
+                                    borderBottom: mode === 'explore' ? '1.5px solid rgba(255,255,255,0.5)' : '1.5px solid transparent',
                                 }}>
                                 explore
                             </button>
                             <button onClick={() => setMode('history')}
-                                className="px-2.5 py-1 rounded-full text-[9px] transition-all cursor-pointer"
+                                className="px-3 py-1 rounded-full text-[10px] transition-all cursor-pointer"
                                 style={{
-                                    background: mode === 'history' ? 'rgba(255,255,255,0.1)' : 'transparent',
-                                    color: mode === 'history' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
+                                    background: mode === 'history' ? 'rgba(255,255,255,0.14)' : 'transparent',
+                                    color: mode === 'history' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
+                                    borderBottom: mode === 'history' ? '1.5px solid rgba(255,255,255,0.5)' : '1.5px solid transparent',
                                 }}>
                                 history
                             </button>

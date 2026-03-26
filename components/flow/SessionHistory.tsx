@@ -34,23 +34,23 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({
             <div className="fixed top-12 left-0 right-0 z-[56] flex items-center gap-1 px-4 py-2">
                 <button
                     onClick={() => onTabChange('gravity')}
-                    className="px-3 py-1 rounded-full text-[9px] transition-all cursor-pointer"
+                    className="px-3 py-1.5 rounded-full text-[10px] transition-all cursor-pointer"
                     style={{
                         ...mono,
-                        background: activeTab === 'gravity' ? 'rgba(255,255,255,0.1)' : 'transparent',
-                        color: activeTab === 'gravity' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
-                        border: activeTab === 'gravity' ? '1px solid rgba(255,255,255,0.15)' : '1px solid transparent',
+                        background: activeTab === 'gravity' ? 'rgba(255,255,255,0.14)' : 'transparent',
+                        color: activeTab === 'gravity' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
+                        borderBottom: activeTab === 'gravity' ? '1.5px solid rgba(255,255,255,0.5)' : '1.5px solid transparent',
                     }}>
                     gravity
                 </button>
                 <button
                     onClick={() => onTabChange('arc')}
-                    className="px-3 py-1 rounded-full text-[9px] transition-all cursor-pointer"
+                    className="px-3 py-1.5 rounded-full text-[10px] transition-all cursor-pointer"
                     style={{
                         ...mono,
-                        background: activeTab === 'arc' ? 'rgba(255,255,255,0.1)' : 'transparent',
-                        color: activeTab === 'arc' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
-                        border: activeTab === 'arc' ? '1px solid rgba(255,255,255,0.15)' : '1px solid transparent',
+                        background: activeTab === 'arc' ? 'rgba(255,255,255,0.14)' : 'transparent',
+                        color: activeTab === 'arc' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
+                        borderBottom: activeTab === 'arc' ? '1.5px solid rgba(255,255,255,0.5)' : '1.5px solid transparent',
                     }}>
                     arc
                 </button>

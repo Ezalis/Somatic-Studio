@@ -72,7 +72,7 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
         <div className="px-5 pt-4 pb-20">
             {/* Pattern label */}
             <div className="mb-6">
-                <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-600" style={mono}>
+                <span className="text-[11px] uppercase tracking-[0.2em] text-zinc-600" style={mono}>
                     {PATTERN_LABELS[arc.pattern]}
                 </span>
             </div>
@@ -84,9 +84,9 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
                         {i > 0 && (
                             <span className="text-zinc-600 text-[10px] px-0.5">→</span>
                         )}
-                        <div className="flex-1 h-6 rounded-md flex items-center justify-center"
+                        <div className="flex-1 h-8 rounded-md flex items-center justify-center"
                             style={{ background: TEMP_COLORS[temp], minWidth: 60 }}>
-                            <span className="text-[8px] font-medium" style={{ ...mono, color: 'rgba(0,0,0,0.6)' }}>
+                            <span className="text-[10px] font-medium" style={{ ...mono, color: 'rgba(0,0,0,0.6)' }}>
                                 {temp}
                             </span>
                         </div>
@@ -96,11 +96,11 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
 
             {/* Narrative */}
             <div className="mb-8">
-                <p className="text-[13px] text-zinc-400 leading-relaxed" style={mono}>
+                <p className="text-[16px] text-zinc-400 leading-relaxed" style={mono}>
                     {arc.narrative}
                 </p>
                 {arc.secondaryLine && (
-                    <p className="text-[11px] text-zinc-500 mt-2 leading-relaxed" style={mono}>
+                    <p className="text-[13px] text-zinc-500 mt-2 leading-relaxed" style={mono}>
                         {arc.secondaryLine}
                     </p>
                 )}
@@ -111,7 +111,7 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
 
             {/* Per-loop breakdown */}
             <div className="mb-8">
-                <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-600 mb-4 block" style={mono}>
+                <span className="text-[11px] uppercase tracking-[0.2em] text-zinc-600 mb-4 block" style={mono}>
                     your loops
                 </span>
 
@@ -121,23 +121,24 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
 
                     return (
                         <div key={point.id + i} className="flex items-start gap-3 mb-4">
-                            {/* Hero thumbnail */}
-                            <div className="flex-shrink-0 w-12 h-12 rounded overflow-hidden"
+                            {/* Hero thumbnail — natural aspect ratio */}
+                            <div className="flex-shrink-0 w-16 rounded-md overflow-hidden"
                                 style={{
                                     border: `1px solid ${point.palette[0] || '#333'}40`,
+                                    maxHeight: 80,
                                 }}>
                                 {heroImage && (
                                     <img src={getThumbnailUrl(point.id)} alt=""
-                                        className="w-full h-full object-cover" loading="lazy" />
+                                        className="w-full h-auto" loading="lazy" />
                                 )}
                             </div>
 
                             <div className="flex-1 min-w-0">
                                 {/* Date + temp */}
                                 <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-[9px] text-zinc-500" style={mono}>{point.label}</span>
-                                    <div className="w-2 h-2 rounded-full" style={{ background: TEMP_COLORS[temp] }} />
-                                    <span className="text-[8px] text-zinc-600" style={mono}>{temp}</span>
+                                    <span className="text-[11px] text-zinc-500" style={mono}>{point.label}</span>
+                                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: TEMP_COLORS[temp] }} />
+                                    <span className="text-[10px] text-zinc-600" style={mono}>{temp}</span>
                                 </div>
 
                                 {/* Traits */}
@@ -147,7 +148,7 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
                                             const isColor = t.startsWith('color:');
                                             const val = isColor ? t.slice(6) : t.slice(4);
                                             return (
-                                                <span key={t} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[7px]"
+                                                <span key={t} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px]"
                                                     style={{
                                                         ...mono,
                                                         background: isColor ? `${val}18` : 'rgba(255,255,255,0.05)',
@@ -161,14 +162,14 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
                                         })}
                                     </div>
                                 ) : (
-                                    <span className="text-[8px] text-zinc-700" style={mono}>
+                                    <span className="text-[10px] text-zinc-700" style={mono}>
                                         {i === trail.length - 1 ? 'current loop' : 'no traits recorded'}
                                     </span>
                                 )}
 
                                 {/* Album count */}
                                 {point.albumPoolSize > 0 && (
-                                    <span className="text-[7px] text-zinc-700 mt-1 block" style={mono}>
+                                    <span className="text-[9px] text-zinc-700 mt-1 block" style={mono}>
                                         {point.albumPoolSize} images surfaced
                                     </span>
                                 )}
@@ -184,7 +185,7 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
             {/* Session threads summary */}
             {traitSummary.length > 0 && (
                 <div>
-                    <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-600 mb-4 block" style={mono}>
+                    <span className="text-[11px] uppercase tracking-[0.2em] text-zinc-600 mb-4 block" style={mono}>
                         session threads
                     </span>
 
@@ -208,7 +209,7 @@ const ArcView: React.FC<ArcViewProps> = ({ trail, images }) => {
                             </div>
 
                             {/* Label */}
-                            <span className="text-[8px] text-zinc-500 flex-shrink-0 w-24 text-right" style={mono}>
+                            <span className="text-[10px] text-zinc-500 flex-shrink-0 w-28 text-right" style={mono}>
                                 {trait.isColor ? '' : `#${trait.label}`} {trait.count}/{trail.length}
                             </span>
                         </div>
