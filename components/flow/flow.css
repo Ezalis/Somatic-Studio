@@ -47,25 +47,3 @@
     70%  { opacity: 1; transform: scale(1.03) rotate(var(--card-rotate)) translateY(-4px); }
     100% { opacity: 1; transform: scale(1) rotate(var(--card-rotate)) translateY(0); }
 }
-
-/* Session Reveal */
-@keyframes reveal-fade-in {
-    0%   { opacity: 0; }
-    100% { opacity: 1; }
-}
-
-@keyframes reveal-fade-out {
-    0%   { opacity: 1; }
-    100% { opacity: 0; }
-}
-
-@keyframes reveal-image-appear {
-    0%   { opacity: 0; transform: scale(0.7) rotate(var(--card-rotate, 0deg)) translateY(16px); filter: blur(4px); }
-    70%  { opacity: 1; transform: scale(1.02) rotate(var(--card-rotate, 0deg)) translateY(-2px); filter: blur(0); }
-    100% { opacity: 1; transform: scale(1) rotate(var(--card-rotate, 0deg)) translateY(0); filter: blur(0); }
-}
-
-@keyframes seed-prompt-in {
-    0%   { opacity: 0; transform: translateY(4px); }
-    100% { opacity: 1; transform: translateY(0); }
-}
