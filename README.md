@@ -1,11 +1,13 @@
 # Somatic Studio
 
-> A photography asset management and discovery system — a living web of memory, color, and light. Navigate by feeling, not folders.
+> A living web of memory, color, and light — navigate photographs by feeling, not folders.
 
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)
 ![TypeScript 5.8](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![Tailwind CSS v4](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
 ![Vite 6](https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
 
 ---
 
@@ -33,6 +35,16 @@ The entire app is a single vertical scroll journey through five phases:
    - Each tier drifts subtly and snaps to depth checkpoints on touch/wheel release
 6. **Loop** — Tap any album item to bloom into a new hero, new traits, new album
 
+### Three Views
+
+After your first hero selection, three tabs appear in the header:
+
+**Explore** — The primary flow-state navigation described above.
+
+**History** — Your session trail rendered as an affinity-layered gallery. Images that appeared across many loops (gravity) sit at the front; range and detour images recede behind. The arc narrative identifies the shape of your exploration: circle-back, deep-dive, wander, or drift. Past sessions are listed and loadable.
+
+**Resonance** — Collective patterns across all visitors. Images sized by how often they've been explored. Indigo ring = convergent pull (people consistently respond the same way). Amber ring = divergent tension (responses split sharply). Sessions are anonymous — no identity, just the shape of each exploration.
+
 ## Key Concepts
 
 | Concept | Definition |
@@ -41,9 +53,14 @@ The entire app is a single vertical scroll journey through five phases:
 | **MiniSprite** | A procedurally-generated SVG glyph unique to each image, derived from its palette and metadata |
 | **FlowPhase** | State machine governing the scroll journey: `idle → blooming → hero → exploring → album` |
 | **Trait** | A selected color or tag used to filter the album pool; up to 6 traits per session |
+| **TrailPoint** | One step in a session: hero image, palette, traits selected, album pool at that step |
+| **SessionArc** | Detected exploration pattern across the full trail: circle-back, deep-dive, wander, drift |
+| **PersistedSession** | Full trail stored in IndexedDB — survives reloads, resumable within 30 min, pruned after 90 days |
 | **Relevance Score** | Composite of temporal proximity, tag overlap, color distance, and technical match (camera/lens) |
 | **Waterfall Pool** | Independent set of hero-similar images for the deepest album tier — ranked by same session (+0.5), shared tags (+0.15/tag), and color similarity (threshold 120) |
 | **Zoom-Through Depth** | Normalized 0→1 scroll depth controlling the album's layered peel-away effect, with snap points at key tier boundaries |
+| **Resonance** | Server-side aggregate of session summaries — tracks convergence (images that pull people the same way) vs. divergence (images that split responses) |
+| **AffinityLayer** | In the history gallery: gravity (appeared in most loops), range (moderate overlap), detour (peripheral) |
 
 ## Architecture
 
@@ -59,37 +76,40 @@ The entire app is a single vertical scroll journey through five phases:
 | Linting | ESLint + typescript-eslint (errors-only config) |
 | Testing | Vitest (jsdom environment) |
 | Fonts | `@fontsource` (Inter, JetBrains Mono, Caveat) |
-| Storage | IndexedDB (client-side palette cache + user tag edits) |
+| Client storage | IndexedDB — palettes, tag mappings, full session trails |
+| Server storage | SQLite (via `better-sqlite3`) — session summaries for resonance |
+| API server | Node.js + Express (`server/`) |
+| AI tagging | Ollama (llava:7b + llama3.1:8b) running locally on MacBook Air |
 
 ### File Structure
 
 ```
-index.html                    → SPA shell, inline styles
-index.css                     → Tailwind entry (@import "tailwindcss")
-index.tsx                     → React entry, fontsource imports
-App.tsx                       → Root component, Immich hydration, renders flow navigation
-├── components/
-│   └── flow/                     → Flow-state navigation (the entire UI)
-│       ├── NavigationPrototype.tsx  → Orchestrator (state machine, scroll layout)
-│       ├── MiniSprite.tsx           → SVG sprite with bloom animation
-│       ├── BloomOverlay.tsx         → Bloom scatter transition
-│       ├── HeroSection.tsx          → Fullscreen hero with scroll-driven blur
-│       ├── TraitSelector.tsx        → Color/tag/discovery-tag picker
-│       ├── WaterfallAlbum.tsx       → Tiered album with 3-layer zoom-through + waterfall
-│       ├── SpriteBackground.tsx     → Convergence ring sprite layer (exploring phase)
-│       ├── IdleField.tsx            → Drifting sprite + photo card field
-│       ├── flowTypes.ts             → Flow-specific types
-│       ├── flowHelpers.ts           → Scoring, color math, seeded random
-│       ├── index.ts                 → Barrel export
-│       └── flow.css                 → Keyframe animations
+index.html / index.css / index.tsx   → SPA shell, Tailwind entry, React entry
+App.tsx                              → Root: Immich hydration, DB init, renders flow navigation
+├── components/flow/
+│   ├── NavigationPrototype.tsx  → Orchestrator (state machine, tabs, session persistence)
+│   ├── IdleField.tsx            → Drifting sprites + photo cards (idle phase)
+│   ├── BloomOverlay.tsx         → Radial bloom scatter transition
+│   ├── HeroSection.tsx          → Fullscreen hero with scroll-driven blur
+│   ├── TraitSelector.tsx        → Color + tag trait picker
+│   ├── WaterfallAlbum.tsx       → Three-tier zoom-through album (scroll depth 0→1)
+│   ├── SpriteBackground.tsx     → Convergence ring sprites (exploring phase)
+│   ├── MiniSprite.tsx           → Procedural SVG glyphs per image
+│   ├── SessionHistory.tsx       → Affinity-layered gallery + arc narrative + past sessions
+│   ├── ArcView.tsx              → Arc pattern detection + narrative text
+│   ├── ResonanceView.tsx        → Collective exploration patterns (convergence/divergence)
+│   ├── flowTypes.ts             → Shared types (TrailPoint, PersistedSession, etc.)
+│   ├── flowHelpers.ts           → Scoring, color math, arc detection, scatter positions
+│   └── flow.css                 → Keyframe animations
 ├── services/
-│   ├── immichService.ts      → Immich API: album discovery, asset loading, tag reading
-│   ├── dataService.ts        → Color palette extraction, color math utilities
-│   └── resourceService.ts    → IndexedDB persistence (palette cache, user tag edits)
-├── scripts/
-│   └── migrate-legacy-tags.mjs → One-time migration of Gemini AI tags into Immich
-├── types.ts                  → Data models (ImageNode, Tag)
-└── vite.config.ts            → Tailwind plugin, Immich proxy, Docker polling
+│   ├── immichService.ts      → Immich API client (assets, EXIF, tags, thumbnails)
+│   ├── dataService.ts        → Color math, palette extraction, EXIF formatting
+│   └── resourceService.ts    → IndexedDB: tags, palettes, sessions (v5 schema)
+├── server/
+│   ├── index.js              → Resonance API: POST /sessions, GET /data
+│   └── Dockerfile            → Standalone Node container
+├── types.ts                  → ImageNode, Tag
+└── vite.config.ts            → Tailwind, Immich + resonance proxy, Docker hot-reload
 ```
 
 ### Data Flow
@@ -115,11 +135,30 @@ sequenceDiagram
     Note over App: On hero select: priority-enrich anchor + top 24 neighbors
 ```
 
+### Session Persistence
+
+Two-layer persistence for exploration sessions:
+
+- **Client (IndexedDB)** — Full `TrailPoint[]` trail saved on every hero selection. Survives page reloads. Resume banner appears within 30 minutes of last activity. Past sessions browsable in the history tab. Auto-pruned after 90 days.
+- **Server (SQLite)** — Session summary (image IDs, traits per step, arc pattern) POSTed to `server/` API when trail reaches 2+ heroes. Powers the resonance view's aggregate data.
+
+### AI Tagging Pipeline
+
+```
+MacBook Air (Ollama, local)
+  Pass 1: llava:7b → rich text descriptions per image
+  Pass 2: llama3.1:8b → shared taxonomy (55 tags, 5 categories) + per-image assignment
+  Post-process: filter broad (>50%) and rare (<2%) tags
+  Pass 3: sync to Immich as SomaticStudio/{Category}/{Tag}
+```
+
+55 production tags: mood (15), lighting (10), subject (10), setting (10), style (10). All local inference — no cloud dependency.
+
 ### Image Proxy
 
 All Immich API calls route through `/api/immich/*`, which rewrites to Immich's `/api/*` and injects the API key server-side. The browser never sees the key.
 
-- **Dev:** Vite proxy configured in `vite.config.ts`
+- **Dev:** Vite proxy → Immich + resonance API
 - **Prod:** Nginx proxy with upstream keepalive (16 connections) and 7-day browser cache on image responses
 
 ## Getting Started
@@ -159,23 +198,27 @@ On first load, the app discovers the `SomaticStudio` album, fetches EXIF metadat
 
 ## Deployment
 
-Docker containers run on `docker-01` (192.168.50.66):
+Four Docker containers run on `docker-01`:
 
-| Environment | Port | Server |
-|-------------|------|--------|
-| Production | 3100 | Nginx serving Vite build output |
-| Development | 3001 | Vite dev server with hot reload |
+| Container | Port | Purpose |
+|-----------|------|---------|
+| `somatic-prod` | 3100 | Nginx serving Vite build + API proxy |
+| `somatic-dev` | 3001 | Vite dev server with hot reload |
+| `resonance-api-prod` | — | Resonance API (prod, no external port) |
+| `resonance-api-dev` | — | Resonance API (dev, internal only) |
+
+SQLite data persists at `~/somatic-studio-data/resonance/` on docker-01, shared between dev and prod.
 
 ```bash
-# Update production
-ssh user@docker-01 \
+# Deploy dev
+ssh thensomethingnew@docker-01 \
+  "cd ~/somatic-studio-src && git pull && \
+   cd ~/compose-stacks/somatic-studio && docker compose --profile dev up -d --build"
+
+# Deploy prod
+ssh thensomethingnew@docker-01 \
   "cd ~/somatic-studio-src && git pull origin main && \
    cd ~/compose-stacks/somatic-studio && docker compose --profile prod up -d --build"
-
-# Update dev
-ssh user@docker-01 \
-  "cd ~/somatic-studio-src && git fetch origin && git checkout BRANCH && git pull && \
-   cd ~/compose-stacks/somatic-studio && docker compose --profile dev up -d --build"
 ```
 
 Docker infrastructure lives in the DockerAdmin repo at `compose-templates/somatic-studio/`.
@@ -186,18 +229,22 @@ Tracked on [GitHub Projects](https://github.com/users/Ezalis/projects/1) with mi
 
 ### Completed
 
-- [x] **M1: Structural Foundation** — Scoring engine, physics simulation, UI component extraction, ESLint, Vitest, package-lock.json
-- [x] **M2: Flow State Navigation (core)** — Flow-state prototype built and decomposed (#19), promoted to primary app as v1.0 (#20)
-- [x] Immich integration (replaced local gallery + Gemini AI)
-- [x] Nginx upstream keepalive + browser cache headers
-- [x] Docker self-hosting (dev + prod)
+- [x] **M1: Structural Foundation** — Scoring engine, physics simulation, UI component extraction, ESLint, Vitest
+- [x] **M2: Flow State Navigation** — Full flow-state prototype, v1.0 ship, Immich integration, Ollama tagging pipeline
+- [x] Session history view — affinity-layered gallery, arc narrative, ArcView
+- [x] Session persistence — IndexedDB client-side trails, resume banner, past sessions list
+- [x] Resonance system — Express/SQLite API, collective convergence/divergence view, three-tab navigation
+- [x] Mobile responsive layout
+- [x] Docker self-hosting (dev + prod, 4 containers)
 
-### In Progress — M2: Flow State Navigation (polish)
+### Next — View Depth & Animation Coherence
 
+- [ ] Scroll-driven depth for history gallery — affinity layers peel like WaterfallAlbum tiers
+- [ ] Resonance field depth — scroll through time, older sessions recede and blur
+- [ ] Arc narrative scroll-reveal — history text unfolds as you scroll
+- [ ] Cross-view continuity — hero image persists as visual anchor when switching tabs
 - [ ] Shared-attribute labels on album items (#8)
-- [ ] Keyboard navigation + URL state + browser back (#9)
-- [ ] Mobile responsive flow-state layout (#21)
-- [ ] Trail/history visualization (#22)
+- [ ] Keyboard navigation + URL state (#9)
 
 ### Future
 
