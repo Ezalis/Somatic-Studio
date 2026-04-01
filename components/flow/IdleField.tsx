@@ -215,7 +215,6 @@ const IdleField: React.FC<IdleFieldProps> = ({ images, onSelect, canvasW, canvas
                         className="absolute cursor-pointer hover:scale-110 transition-transform duration-300"
                         style={{
                             left: x - size / 2, top: y - size / 2,
-                            animation: `drift ${breatheDur}s ease-in-out ${breatheDel}s infinite`,
                             opacity: 0,
                             animationName: 'drift, album-reveal',
                             animationDuration: `${breatheDur}s, 600ms`,
