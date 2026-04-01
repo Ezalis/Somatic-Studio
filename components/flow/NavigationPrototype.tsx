@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { ImageNode, Tag } from '../../types';
-import { FlowPhase, ScoredImage, TrailPoint, AlbumImage, WaterfallImage } from './flowTypes';
+import { FlowPhase, ScoredImage, TrailPoint, AlbumImage, WaterfallImage, PersistedSession } from './flowTypes';
 import { scoreRelevance, colorDist, COLOR_THRESHOLD } from './flowHelpers';
+import { saveSession, getAllSessions } from '../../services/resourceService';
 import BloomOverlay from './BloomOverlay';
 import HeroSection from './HeroSection';
 import TraitSelector from './TraitSelector';
@@ -40,6 +41,12 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     // History mode
     const [mode, setMode] = useState<'explore' | 'history'>('explore');
 
+    // Session persistence
+    const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+    const currentSessionIdRef = useRef<string | null>(null);
+    const [pastSessions, setPastSessions] = useState<PersistedSession[]>([]);
+    const [resumeCandidate, setResumeCandidate] = useState<PersistedSession | null>(null);
+
     useEffect(() => {
         const update = () => {
             if (containerRef.current) {
@@ -49,6 +56,36 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         update();
         window.addEventListener('resize', update);
         return () => window.removeEventListener('resize', update);
+    }, []);
+
+    // Auto-save session to IndexedDB on every trail mutation
+    useEffect(() => {
+        if (trail.length === 0) return;
+        if (!currentSessionIdRef.current) {
+            currentSessionIdRef.current = crypto.randomUUID();
+            setCurrentSessionId(currentSessionIdRef.current);
+        }
+        saveSession({
+            id: currentSessionIdRef.current!,
+            startedAt: trail[0].timestamp,
+            lastActiveAt: Date.now(),
+            trail,
+            heroCount: trail.length,
+        });
+    }, [trail]);
+
+    // Load past sessions and check for resume candidate on mount
+    useEffect(() => {
+        const initSessions = async () => {
+            const sessions = await getAllSessions();
+            const last = sessions[0];
+            const THIRTY_MIN = 30 * 60 * 1000;
+            if (last && last.heroCount > 1 && Date.now() - last.lastActiveAt < THIRTY_MIN) {
+                setResumeCandidate(last);
+            }
+            setPastSessions(sessions);
+        };
+        initSessions();
     }, []);
 
     // Scroll-driven hero blur
@@ -341,6 +378,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     }, [selectedTraits, flowPhase]);
 
     const handleClear = useCallback(() => {
+        currentSessionIdRef.current = null;
+        setCurrentSessionId(null);
         setTrail([]);
         setAnchorId(null);
         setSelectedTraits(new Set());
@@ -376,6 +415,19 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         setBloomSourceRect(rect);
         setFlowPhase('blooming');
     }, [selectedTraits, albumPool]);
+
+    const handleLoadSession = useCallback((session: PersistedSession) => {
+        currentSessionIdRef.current = session.id;
+        setCurrentSessionId(session.id);
+        setTrail(session.trail);
+        const lastHero = session.trail[session.trail.length - 1];
+        setAnchorId(lastHero.id);
+        setSelectedTraits(new Set());
+        setHeroBlur(0);
+        setFlowPhase('exploring');
+        setMode('history');
+        setPastSessions(prev => prev.filter(s => s.id !== session.id));
+    }, []);
 
     // Whether to show the scroll container (exploring phases)
     const showScrollContainer = flowPhase === 'blooming' || flowPhase === 'hero' || flowPhase === 'exploring';
@@ -525,12 +577,39 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                 );
             })()}
 
+            {/* Resume banner — shown on idle when a recent session is available */}
+            {flowPhase === 'idle' && resumeCandidate && (
+                <div className="fixed bottom-8 left-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-full"
+                    style={{
+                        transform: 'translateX(-50%)',
+                        background: 'rgba(255,255,255,0.9)',
+                        border: '1px solid rgba(0,0,0,0.08)',
+                        boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+                        fontFamily: 'JetBrains Mono, monospace',
+                        animation: 'history-fade-in 400ms ease-out forwards',
+                    }}>
+                    <span className="text-[9px] text-zinc-500 tracking-wide">
+                        resume session from {new Date(resumeCandidate.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}?
+                    </span>
+                    <button onClick={() => { handleLoadSession(resumeCandidate); setResumeCandidate(null); }}
+                        className="text-[9px] text-zinc-700 hover:text-zinc-900 transition-colors cursor-pointer tracking-widest uppercase">
+                        resume
+                    </button>
+                    <button onClick={() => setResumeCandidate(null)}
+                        className="text-[9px] text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer">
+                        ✕
+                    </button>
+                </div>
+            )}
+
             {/* Session History overlay */}
             {mode === 'history' && trail.length > 0 && (
                 <SessionHistory
                     trail={trail}
                     images={images}
                     onSeedLoop={handleSeedFromHistory}
+                    pastSessions={pastSessions.filter(s => s.id !== currentSessionId)}
+                    onLoadSession={handleLoadSession}
                 />
             )}
         </div>

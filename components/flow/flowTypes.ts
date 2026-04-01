@@ -54,6 +54,15 @@ export interface SessionArc {
     dominantTrait?: string;
     detourTrait?: string;
 }
+
+export interface PersistedSession {
+    id: string;
+    startedAt: number;
+    lastActiveAt: number;
+    trail: TrailPoint[];
+    arcPattern?: ArcPattern;
+    heroCount: number;
+}
 export interface AlbumImage {
     image: ImageNode;
     tagHits: number;

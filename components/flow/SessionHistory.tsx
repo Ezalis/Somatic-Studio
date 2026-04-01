@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useCallback } from 'react';
 import { ImageNode } from '../../types';
-import { TrailPoint, AffinityImage } from './flowTypes';
+import { TrailPoint, AffinityImage, PersistedSession } from './flowTypes';
 import { computeSessionAffinities, seededRandom, scatterPositions } from './flowHelpers';
 import { getThumbnailUrl } from '../../services/immichService';
 import ArcView from './ArcView';
@@ -9,13 +9,15 @@ interface SessionHistoryProps {
     trail: TrailPoint[];
     images: ImageNode[];
     onSeedLoop: (image: ImageNode, rect: DOMRect) => void;
+    pastSessions: PersistedSession[];
+    onLoadSession: (session: PersistedSession) => void;
 }
 
 const mono = { fontFamily: 'JetBrains Mono, monospace' };
 
 const TIER_Z: Record<number, number> = { 0: 6, 1: 3, 2: 1 };
 
-const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLoop }) => {
+const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLoop, pastSessions, onLoadSession }) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const selectedRef = useRef<HTMLButtonElement>(null);
 
@@ -169,6 +171,33 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
                 <div className="flex-shrink-0 overflow-y-auto px-5 pt-4 pb-20"
                     style={{ width: 'min(35%, 400px)' }}>
                     <ArcView trail={trail} images={images} />
+                    {pastSessions.length > 0 && (
+                        <div className="mt-6">
+                            <div className="mb-2 text-[10px] uppercase tracking-[0.15em]"
+                                style={{ ...mono, color: '#71717a' }}>
+                                past sessions
+                            </div>
+                            {pastSessions.map(session => (
+                                <div key={session.id}
+                                    className="flex items-center justify-between py-2 border-b"
+                                    style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                                    <div>
+                                        <div className="text-[10px]" style={{ ...mono, color: '#3f3f46' }}>
+                                            {new Date(session.lastActiveAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </div>
+                                        <div className="text-[9px]" style={{ ...mono, color: '#a1a1aa' }}>
+                                            {session.heroCount} images{session.arcPattern ? ` · ${session.arcPattern}` : ''}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => onLoadSession(session)}
+                                        className="text-[9px] px-2.5 py-1 rounded-full cursor-pointer transition-colors"
+                                        style={{ ...mono, background: 'rgba(0,0,0,0.05)', color: '#3f3f46', border: '1px solid rgba(0,0,0,0.08)' }}>
+                                        load
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 <div className="flex-1 min-w-0 flex flex-col">
                     {gallerySection}
@@ -179,6 +208,33 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ trail, images, onSeedLo
             <div className="md:hidden overflow-y-auto h-full">
                 <div className="px-5 pt-4 pb-8">
                     <ArcView trail={trail} images={images} />
+                    {pastSessions.length > 0 && (
+                        <div className="mt-6">
+                            <div className="mb-2 text-[10px] uppercase tracking-[0.15em]"
+                                style={{ ...mono, color: '#71717a' }}>
+                                past sessions
+                            </div>
+                            {pastSessions.map(session => (
+                                <div key={session.id}
+                                    className="flex items-center justify-between py-2 border-b"
+                                    style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                                    <div>
+                                        <div className="text-[10px]" style={{ ...mono, color: '#3f3f46' }}>
+                                            {new Date(session.lastActiveAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </div>
+                                        <div className="text-[9px]" style={{ ...mono, color: '#a1a1aa' }}>
+                                            {session.heroCount} images{session.arcPattern ? ` · ${session.arcPattern}` : ''}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => onLoadSession(session)}
+                                        className="text-[9px] px-2.5 py-1 rounded-full cursor-pointer transition-colors"
+                                        style={{ ...mono, background: 'rgba(0,0,0,0.05)', color: '#3f3f46', border: '1px solid rgba(0,0,0,0.08)' }}>
+                                        load
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 {gallerySection}
             </div>

@@ -1,13 +1,15 @@
 
 import { Tag } from '../types';
+import { PersistedSession } from '../components/flow/flowTypes';
 
 const DB_NAME = 'SomaticStudioDB';
-const DB_VERSION = 4; // Incremented for palette cache store
+const DB_VERSION = 5; // Incremented for sessions store
 const STORES = {
     DEFINITIONS: 'tag_definitions',
     MAPPINGS: 'image_mappings',      // Key: assetId, Value: tagIds[]
     AI_MAPPINGS: 'ai_image_mappings', // Key: assetId, Value: aiTagIds[]
     PALETTE_CACHE: 'palette_cache',  // Key: assetId, Value: string[] (5-color palette)
+    SESSIONS: 'sessions',            // Key: id, Value: PersistedSession
 };
 
 // --- IN-MEMORY CACHE ---
@@ -35,6 +37,10 @@ const openDB = (): Promise<IDBDatabase> => {
             }
             if (!db.objectStoreNames.contains(STORES.PALETTE_CACHE)) {
                 db.createObjectStore(STORES.PALETTE_CACHE);
+            }
+            if (!db.objectStoreNames.contains(STORES.SESSIONS)) {
+                const store = db.createObjectStore(STORES.SESSIONS, { keyPath: 'id' });
+                store.createIndex('lastActiveAt', 'lastActiveAt');
             }
         };
 
@@ -95,6 +101,8 @@ export const initDatabase = async (): Promise<void> => {
 
             tx.oncomplete = () => resolve();
         });
+
+        await pruneOldSessions();
     } catch (e) {
         console.error("DB Init Failed", e);
     }
@@ -166,6 +174,54 @@ export const saveCachedPalette = async (assetId: string, palette: string[]) => {
     const db = await openDB();
     const tx = db.transaction(STORES.PALETTE_CACHE, 'readwrite');
     tx.objectStore(STORES.PALETTE_CACHE).put(palette, assetId);
+    return new Promise<void>((resolve) => {
+        tx.oncomplete = () => resolve();
+    });
+};
+
+// --- SESSIONS ---
+
+export const saveSession = async (session: PersistedSession): Promise<void> => {
+    const db = await openDB();
+    const tx = db.transaction(STORES.SESSIONS, 'readwrite');
+    tx.objectStore(STORES.SESSIONS).put(session);
+    return new Promise<void>((resolve) => {
+        tx.oncomplete = () => resolve();
+    });
+};
+
+export const getAllSessions = async (): Promise<PersistedSession[]> => {
+    const db = await openDB();
+    return new Promise<PersistedSession[]>((resolve) => {
+        const tx = db.transaction(STORES.SESSIONS, 'readonly');
+        const store = tx.objectStore(STORES.SESSIONS);
+        const index = store.index('lastActiveAt');
+        const request = index.getAll();
+        request.onsuccess = () => {
+            const results = (request.result as PersistedSession[]).reverse();
+            resolve(results);
+        };
+    });
+};
+
+export const deleteSession = async (id: string): Promise<void> => {
+    const db = await openDB();
+    const tx = db.transaction(STORES.SESSIONS, 'readwrite');
+    tx.objectStore(STORES.SESSIONS).delete(id);
+    return new Promise<void>((resolve) => {
+        tx.oncomplete = () => resolve();
+    });
+};
+
+export const pruneOldSessions = async (): Promise<void> => {
+    const db = await openDB();
+    const cutoff = Date.now() - (90 * 24 * 60 * 60 * 1000);
+    const sessions = await getAllSessions();
+    const tx = db.transaction(STORES.SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.SESSIONS);
+    sessions.forEach(s => {
+        if (s.lastActiveAt < cutoff) store.delete(s.id);
+    });
     return new Promise<void>((resolve) => {
         tx.oncomplete = () => resolve();
     });
