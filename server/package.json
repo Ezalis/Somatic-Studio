@@ -1,0 +1,13 @@
+{
+  "name": "somatic-resonance-api",
+  "version": "1.0.0",
+  "description": "Collective session resonance API for Somatic Studio",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.6.0",
+    "express": "^4.21.2"
+  }
+}

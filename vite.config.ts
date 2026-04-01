@@ -17,6 +17,11 @@ export default defineConfig(({ mode }) => {
         allowedHosts: ['docker-01', 'somatic.home'],
         watch: { usePolling: true },
         proxy: {
+          '/api/resonance': {
+            target: env.RESONANCE_URL || 'http://resonance-api-dev:3002',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/resonance/, ''),
+          },
           '/api/immich': {
             target: env.IMMICH_URL || 'http://192.168.50.66:2283',
             changeOrigin: true,

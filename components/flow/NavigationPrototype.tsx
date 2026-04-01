@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { ImageNode, Tag } from '../../types';
 import { FlowPhase, ScoredImage, TrailPoint, AlbumImage, WaterfallImage, PersistedSession } from './flowTypes';
-import { scoreRelevance, colorDist, COLOR_THRESHOLD } from './flowHelpers';
+import { scoreRelevance, colorDist, COLOR_THRESHOLD, detectSessionArc } from './flowHelpers';
 import { saveSession, getAllSessions } from '../../services/resourceService';
+import ResonanceView from './ResonanceView';
 import BloomOverlay from './BloomOverlay';
 import HeroSection from './HeroSection';
 import TraitSelector from './TraitSelector';
@@ -38,8 +39,8 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
     // Pending image for bloom transition
     const [pendingImage, setPendingImage] = useState<ImageNode | null>(null);
 
-    // History mode
-    const [mode, setMode] = useState<'explore' | 'history'>('explore');
+    // Mode: explore | history | resonance
+    const [mode, setMode] = useState<'explore' | 'history' | 'resonance'>('explore');
 
     // Session persistence
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -56,6 +57,23 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
         update();
         window.addEventListener('resize', update);
         return () => window.removeEventListener('resize', update);
+    }, []);
+
+    // Post session summary to resonance API (fire-and-forget, silent failure ok)
+    const postToResonance = useCallback((trailPoints: TrailPoint[], sessionId: string) => {
+        const arc = trailPoints.length >= 2 ? detectSessionArc(trailPoints) : null;
+        fetch('/api/resonance/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: sessionId,
+                createdAt: trailPoints[0].timestamp,
+                arcPattern: arc?.pattern ?? null,
+                heroCount: trailPoints.length,
+                imageIds: trailPoints.map(t => t.id),
+                traitSequence: trailPoints.map(t => t.traits),
+            }),
+        }).catch(() => {});
     }, []);
 
     // Auto-save session to IndexedDB on every trail mutation
@@ -82,7 +100,12 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
             trail,
             heroCount: trail.length,
         });
-    }, [trail]);
+
+        // Also post summary to resonance API once we have a meaningful session
+        if (trail.length >= 2) {
+            postToResonance(trail, currentSessionIdRef.current!);
+        }
+    }, [trail, postToResonance]);
 
     // Load past sessions and check for resume candidate on mount
     useEffect(() => {
@@ -462,24 +485,17 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                     {trail.length > 0 && (
                         <div className="flex items-center gap-1 rounded-full px-1 py-0.5"
                             style={{ background: 'rgba(0,0,0,0.04)', fontFamily: 'JetBrains Mono, monospace' }}>
-                            <button onClick={() => setMode('explore')}
-                                className="px-3 py-1 rounded-full text-[10px] transition-all cursor-pointer"
-                                style={{
-                                    background: mode === 'explore' ? 'rgba(0,0,0,0.08)' : 'transparent',
-                                    color: mode === 'explore' ? '#18181b' : '#a1a1aa',
-                                    borderBottom: mode === 'explore' ? '1.5px solid #18181b' : '1.5px solid transparent',
-                                }}>
-                                explore
-                            </button>
-                            <button onClick={() => setMode('history')}
-                                className="px-3 py-1 rounded-full text-[10px] transition-all cursor-pointer"
-                                style={{
-                                    background: mode === 'history' ? 'rgba(0,0,0,0.08)' : 'transparent',
-                                    color: mode === 'history' ? '#18181b' : '#a1a1aa',
-                                    borderBottom: mode === 'history' ? '1.5px solid #18181b' : '1.5px solid transparent',
-                                }}>
-                                history
-                            </button>
+                            {(['explore', 'history', 'resonance'] as const).map(m => (
+                                <button key={m} onClick={() => setMode(m)}
+                                    className="px-3 py-1 rounded-full text-[10px] transition-all cursor-pointer"
+                                    style={{
+                                        background: mode === m ? 'rgba(0,0,0,0.08)' : 'transparent',
+                                        color: mode === m ? '#18181b' : '#a1a1aa',
+                                        borderBottom: mode === m ? '1.5px solid #18181b' : '1.5px solid transparent',
+                                    }}>
+                                    {m}
+                                </button>
+                            ))}
                         </div>
                     )}
                 </div>
@@ -610,6 +626,11 @@ const NavigationPrototype: React.FC<NavigationPrototypeProps> = ({ images, tags,
                         ✕
                     </button>
                 </div>
+            )}
+
+            {/* Resonance overlay */}
+            {mode === 'resonance' && trail.length > 0 && (
+                <ResonanceView />
             )}
 
             {/* Session History overlay */}
