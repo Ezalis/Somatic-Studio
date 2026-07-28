@@ -1,3 +1,15 @@
+# ⚠️ Superseded — see [somatic-field](https://github.com/Ezalis/somatic-field)
+
+**2026-07-28:** This architecture has been replaced by
+[somatic-field](https://github.com/Ezalis/somatic-field) — a static
+exploration surface over data exported from the Somatic Scrapbook pipeline
+(vault + Immich + local-VLM style layer). It now serves the same docker-01
+port and Cloudflare route this app used.
+
+This repo is preserved as the record of the v1 experience.
+
+---
+
 # Somatic Studio
 
 > A living web of memory, color, and light — navigate photographs by feeling, not folders.
